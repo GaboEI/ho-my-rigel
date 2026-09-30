@@ -689,6 +689,37 @@ describe("applyAgentConfig builtin override protection", () => {
       expect(result["my-custom-agent"]?.prompt).toBe("test custom agent from agent_definitions")
     })
 
+    test("profile overrides preserve an external agent prompt and add its permission", async () => {
+      // given
+      loadAgentDefinitionsSpy.mockReturnValue({
+        juez: {
+          name: "juez",
+          prompt: "independent acceptance prompt",
+          mode: "primary",
+        },
+      })
+      const pluginConfig = createPluginConfig()
+      pluginConfig.agent_definitions = ["/fake/path/juez.md"]
+      pluginConfig.agents = {
+        juez: {
+          permission: { edit: "deny", task: "ask" },
+        },
+      }
+
+      // when
+      const result = await applyAgentConfig({
+        config: createBaseConfig(),
+        pluginConfig,
+        ctx: { directory: "/tmp" },
+        pluginComponents: createPluginComponents(),
+      })
+
+      // then
+      expect(result.juez?.prompt).toBe("independent acceptance prompt")
+      expect(result.juez?.mode).toBe("primary")
+      expect(result.juez?.permission).toEqual({ edit: "deny", task: "ask" })
+    })
+
     test("opencode.json agents appear in output", async () => {
       // given
       readOpencodeConfigAgentsSpy.mockReturnValue({

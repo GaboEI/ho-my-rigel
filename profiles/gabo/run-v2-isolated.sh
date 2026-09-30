@@ -89,10 +89,29 @@ docker run --rm \
   omo-dev bun -e '
     import { validatePluginConfig } from "./packages/omo-opencode/src/config/validate.ts";
     import { loadAgentDefinitions } from "./packages/omo-opencode/src/features/claude-code-agent-loader/agent-definitions-loader.ts";
+    import { assembleAgentConfig } from "./packages/omo-opencode/src/plugin-handlers/agent-config-assembly.ts";
     const result = validatePluginConfig("/sandbox/project");
     const paths = result.config.agent_definitions ?? [];
-    const names = Object.keys(loadAgentDefinitions(paths, "definition-file"));
+    const agentDefinitionAgents = loadAgentDefinitions(paths, "definition-file");
+    const names = Object.keys(agentDefinitionAgents);
     if (!result.valid || !names.includes("forja") || !names.includes("juez")) process.exit(1);
+    const config = { default_agent: "forja" };
+    await assembleAgentConfig({
+      config,
+      pluginConfig: result.config,
+      builtinAgents: {},
+      sources: {
+        userAgents: {}, projectAgents: {}, opencodeGlobalAgents: {}, opencodeProjectAgents: {},
+        pluginAgents: {}, agentDefinitionAgents, opencodeConfigAgents: {}, configAgent: undefined,
+        customAgentSummaries: [],
+      },
+      currentModel: undefined,
+      useTaskSystem: false,
+      disabledAgentNames: new Set(),
+    });
+    const agents = config.agent;
+    if (agents.forja?.permission?.["*"] !== "allow") process.exit(1);
+    if (agents.juez?.permission?.edit !== "deny" || agents.juez?.permission?.task !== "ask") process.exit(1);
   '
 
 if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*credential*' | grep -q .; then

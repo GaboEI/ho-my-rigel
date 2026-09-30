@@ -100,6 +100,29 @@ function orderedCustomAgentSources(
   };
 }
 
+/**
+ * A definition file owns an external agent's identity and prompt. The OmO
+ * profile may then overlay runtime-only fields such as permission, color, or
+ * model selection without copying that prompt into a second configuration
+ * surface. Built-in agents are intentionally excluded: their overrides are
+ * resolved by their own factories.
+ */
+function applyCustomAgentProfileOverrides(
+  customAgents: Record<string, unknown>,
+  overrides: OhMyOpenCodeConfig["agents"],
+): Record<string, unknown> {
+  if (!overrides) return customAgents
+
+  return Object.fromEntries(
+    Object.entries(customAgents).map(([name, config]) => {
+      const override = overrides[name]
+      if (!config || !override) return [name, config]
+
+      return [name, migrateAgentConfig({ ...(config as Record<string, unknown>), ...override })]
+    }),
+  )
+}
+
 async function createCoreAgentConfig(
   params: AssembleAgentConfigParams,
 ): Promise<Record<string, unknown>> {
@@ -200,6 +223,11 @@ async function assembleSisyphusEnabledConfig(params: AssembleAgentConfigParams):
       )
     : {};
 
+  const customAgents = applyCustomAgentProfileOverrides(
+    orderedCustomAgentSources(filteredSources, params.disabledAgentNames),
+    params.pluginConfig.agents,
+  );
+
   params.config.agent = {
     ...agentConfig,
     ...Object.fromEntries(
@@ -207,7 +235,7 @@ async function assembleSisyphusEnabledConfig(params: AssembleAgentConfigParams):
         ([key]) => key !== "sisyphus" && key !== "hephaestus" && key !== "atlas",
       ),
     ),
-    ...orderedCustomAgentSources(filteredSources, params.disabledAgentNames),
+    ...customAgents,
     ...filteredConfigAgents,
     build: { ...migratedBuild, mode: "subagent", hidden: true },
     ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
@@ -222,10 +250,14 @@ function assembleSisyphusDisabledConfig(params: AssembleAgentConfigParams): void
         filterProtectedAgentOverrides(params.sources.configAgent, protectedBuiltinAgentNames),
       )
     : {};
+  const customAgents = applyCustomAgentProfileOverrides(
+    orderedCustomAgentSources(filteredSources, params.disabledAgentNames),
+    params.pluginConfig.agents,
+  );
 
   params.config.agent = {
     ...params.builtinAgents,
-    ...orderedCustomAgentSources(filteredSources, params.disabledAgentNames),
+    ...customAgents,
     ...filteredConfigAgents,
   };
 }

@@ -7,6 +7,27 @@
           "__OMO_PROFILE_ROOT__/opencode/agents/forja.md",
           "__OMO_PROFILE_ROOT__/opencode/agents/juez.md"
         ],
+        "agents": {
+          "forja": {
+            "mode": "primary",
+            "permission": { "*": "allow" }
+          },
+          "juez": {
+            "mode": "primary",
+            "permission": {
+              "read": "allow",
+              "grep": "allow",
+              "glob": "allow",
+              "list": "allow",
+              "webfetch": "allow",
+              "websearch": "allow",
+              "bash": "ask",
+              "edit": "deny",
+              "task": "ask",
+              "todowrite": "deny"
+            }
+          }
+        },
         "websearch": { "provider": "tavily" },
         "disabled_mcps": ["context7"],
         "browser_automation_engine": { "provider": "playwright" },

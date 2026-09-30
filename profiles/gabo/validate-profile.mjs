@@ -20,6 +20,8 @@ const expectedAgentDefinitions = [
   "__OMO_PROFILE_ROOT__/opencode/agents/juez.md",
 ]
 if (JSON.stringify(profile.agent_definitions) !== JSON.stringify(expectedAgentDefinitions)) fail("Forja and Juez definition paths must remain portable templates")
+if (profile.agents?.forja?.mode !== "primary" || profile.agents.forja.permission?.["*"] !== "allow") fail("Forja must retain its primary execution permission")
+if (profile.agents?.juez?.mode !== "primary" || profile.agents.juez.permission?.edit !== "deny" || profile.agents.juez.permission?.task !== "ask") fail("Juez must remain an independent non-executing auditor")
 if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
 if (profile.browser_automation_engine?.provider !== "playwright") fail("Playwright must be canonical")
