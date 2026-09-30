@@ -161,6 +161,10 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
   // v4: who answered a question (`answered_by`, the connector's author record as JSON). NULL on a
   // question answered without an author, and on every row answered before v4.
   ["ALTER TABLE outbox ADD COLUMN answered_by TEXT"],
+  [
+    "CREATE TABLE extension_schema (name TEXT PRIMARY KEY, version INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+    "ALTER TABLE deliveries ADD COLUMN actor_user_id TEXT",
+  ],
 ]
 
-export const GATEWAY_TABLES = ["deliveries", "receipts", "causal_roots", "causal_edges", "rate_buckets", "session_meta", "bindings", "outbox", "gateway_meta", "outbox_cursors", "completion_arms"] as const
+export const GATEWAY_TABLES = ["deliveries", "receipts", "causal_roots", "causal_edges", "rate_buckets", "session_meta", "bindings", "outbox", "gateway_meta", "outbox_cursors", "completion_arms", "extension_schema"] as const

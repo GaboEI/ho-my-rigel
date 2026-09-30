@@ -74,6 +74,7 @@ export type DeliveryRow = {
   readonly expires_at: number
   readonly binding_id: string | null
   readonly binding_revision: number | null
+  readonly actor_user_id: string | null
 }
 
 /**

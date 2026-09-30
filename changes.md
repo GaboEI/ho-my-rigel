@@ -1,3 +1,10 @@
+## 2026-09-30 - Session gateway extension contract and actor identity (Refs #9143)
+
+Core schema v5 adds `extension_schema` and nullable `deliveries.actor_user_id`, populated from
+`author.user_id` without adding a CLI flag. The exported store-extension types define registration,
+worker operations, namespaced SQL, joined relay transactions and typed refusals. The v4 migration
+preserves existing rows. This work stacks on #9222.
+
 ## 2026-10-01 - ultrawork reuses evidence per target, spawns a new reviewer per round, and scopes defects to the blast radius (#9294)
 
 The directive's Constraints bullet ("own every defect met mid-run ... never deferred as a follow-up", from #7674)
