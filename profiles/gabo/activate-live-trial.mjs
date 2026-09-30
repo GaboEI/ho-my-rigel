@@ -45,7 +45,7 @@ if (hasOpenCodeProcess()) fail("OpenCode sigue ejecutándose. Ciérralo antes de
 if (!fs.existsSync(frozenConfigFile)) fail("no se encontró la congelación pre-Rigel.")
 if (fs.existsSync(runtimeState)) fail("ya existe una prueba Rigel activa; usa rigel-rollback antes de otra activación.")
 if (fs.existsSync(omoDir)) fail("~/.omo ya existe; se preserva para evitar mezclar otra configuración OmO.")
-if (!fs.existsSync(pluginEntry.slice("file://"))) fail("no existe el entrypoint local del plugin Rigel.")
+if (!fs.existsSync(pluginEntry.slice("file://".length))) fail("no existe el entrypoint local del plugin Rigel.")
 
 const frozen = readJson(frozenConfigFile)
 const current = readJson(configFile)
