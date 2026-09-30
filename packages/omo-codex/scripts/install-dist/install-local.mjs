@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// omo-codex-install:36a2cdbddec650930467b3965504e73ddeb3d82f229071008f1296a9498fe265:249413365bf0de355352ccfffc9c04669f220c439ce18a287a5bf27105c0f72d
+// omo-codex-install:5bbf97d33532e3bed681552039d3238a283cb5edd79ddbc334559eba2b18744d:cd5d5ad3d98ad7a0d3bd663956b8f8ef240c6825a980f906df34edc828facedd
 var __esm = (fn, res, err) => () => {
   if (fn)
     try {
@@ -19846,11 +19846,15 @@ var OmoFormatOnMutationSchema = OmoFormatOnMutationLayerSchema.extend({
   timeoutMs: number2().int().positive().default(3000)
 }).strict();
 
+// packages/omo-config-core/src/schema/gateway.ts
+var OmoGatewaySectionSchema = record(string2(), unknown()).describe("Chat-surface gateway settings, owned and validated by a separately installed gateway package. omo accepts the key and never reads it.");
+
 // packages/omo-config-core/src/schema/config.ts
 var OmoOpenCodeHarnessConfigSchema = record(string2(), unknown());
 var OmoDisabledSkillsSchema = array(string2());
 var OmoTypedHarnessConfigSchema = object({
   formatOnMutation: OmoFormatOnMutationLayerSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),
   git_master: OmoGitMasterSettingsLayerSchema.optional(),
@@ -19885,6 +19889,7 @@ var OmoConfigProfileSchema = object({
 }).strict();
 var OmoConfigSchema = object({
   formatOnMutation: OmoFormatOnMutationSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   $schema: string2().optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),
@@ -19908,6 +19913,7 @@ var OmoConfigSchema = object({
 }).strict();
 var OmoConfigLayerSchema = object({
   formatOnMutation: OmoFormatOnMutationLayerSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   $schema: string2().optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),
