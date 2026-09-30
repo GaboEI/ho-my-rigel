@@ -29,6 +29,7 @@
           }
         },
         "websearch": { "provider": "tavily" },
+        "disabled_agents": ["sisyphus"],
         "disabled_mcps": ["context7"],
         "browser_automation_engine": { "provider": "playwright" },
         "goal": {

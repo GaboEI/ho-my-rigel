@@ -30,6 +30,7 @@ for (const hook of ["goal", "compaction-context-injector", "compaction-todo-pres
   if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled to preserve the external root authority`)
 }
 if (profile.sisyphus_agent?.disabled !== true) fail("Sisyphus must not be the primary orchestrator")
+if (!profile.disabled_agents?.includes("sisyphus")) fail("Sisyphus must not remain in the Gabo profile catalog")
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "forja") fail("Forja must be the root orchestrator")
 if (manifest.rootAuthorities?.acceptance !== "juez") fail("Juez must be the acceptance authority")
