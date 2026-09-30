@@ -6,7 +6,10 @@ worker operations, namespaced SQL, joined relay transactions and typed refusals.
 preserves existing rows. Registration and calls apply pending steps under the bounded core write
 lock. SQLite authorization and schema-effect checks protect other namespaces and core objects.
 The transaction adapter reuses relay/engine validation and budgets, defers file effects until
-commit, and rolls back both kinds of writes on failure. The public thread SDK forwards the API.
+commit, and rolls back both kinds of writes on failure. Object ownership is persisted in
+`extension_objects`, with the core schema captured before any extension runs; matching a prefix
+never grants access. Core-colliding names, triggers and views are refused, and DELETE without a
+WHERE clause is checked against the same ownership registry. The public thread SDK forwards the API.
 Tests cover cross-process ensure, namespace violations, all refusals and continued core service,
 relay parity, rollback, actor attribution, and lock bounds. The v2 fixture now removes v5 additions
 when constructing its historical database. PR #9331 stacks on #9222.

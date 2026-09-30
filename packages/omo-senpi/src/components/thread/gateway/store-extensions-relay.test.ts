@@ -90,16 +90,18 @@ test("#given pending outbox rows #when paging and acking under the extension loc
   expect(await core(store, "outboxAck", { binding_id: binding.binding_id, cursor: 999999 })).toMatchObject({ kind: "error", error: { code: "cursor_invalid" } })
 })
 
-test("#given prefixed views triggers indexes and quoted names #when migrating #then valid own objects operate normally", async () => {
+test("#given owned tables indexes and quoted names #when migrating and renaming #then ownership follows valid schema changes", async () => {
   const { store } = await setup()
   const result = await store.registerStoreExtension({ ...registration, migrations: [
     ...registration.migrations,
-    ['CREATE TABLE "alpha_audit" (id INTEGER)', "CREATE INDEX alpha_value ON alpha_items(value)", "CREATE VIEW alpha_view AS SELECT id, value FROM alpha_items",
-      "CREATE TRIGGER alpha_trace AFTER INSERT ON alpha_items BEGIN INSERT INTO alpha_audit VALUES (NEW.id); END"],
+    ['CREATE TABLE "alpha_audit" (id INTEGER)', "CREATE INDEX alpha_value ON alpha_items(value)"],
   ] })
   expect(result).toEqual({ kind: "ok", value: { version: 2 } })
   expect((await store.extensionCall("alpha", "put", { name: "alpha", id: 5, value: "valid" })).kind).toBe("ok")
-  expect(await store.extensionCall("alpha", "sql", { sql: "SELECT id FROM alpha_audit", columns: ["id"] })).toEqual({ kind: "ok", value: [{ id: 5 }] })
+  expect((await store.extensionCall("alpha", "sql", { sql: "INSERT INTO alpha_audit VALUES(5)" })).kind).toBe("ok")
+  expect((await store.extensionCall("alpha", "sql", { sql: "ALTER TABLE alpha_audit RENAME TO alpha_renamed" })).kind).toBe("ok")
+  expect(await store.extensionCall("alpha", "sql", { sql: "SELECT id FROM alpha_renamed", columns: ["id"] })).toEqual({ kind: "ok", value: [{ id: 5 }] })
+  expect((await store.extensionCall("alpha", "sql", { sql: "DROP TABLE alpha_renamed" })).kind).toBe("ok")
 })
 
 test("#given mixed statements and overlapping namespaces #when accessing another namespace #then access is refused", async () => {

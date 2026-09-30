@@ -1,5 +1,5 @@
 import { createGatewayEngine, type GatewayEngineOptions } from "./engine"
-import { checkExtensionPrograms, checkExtensionSchema, extensionSchema, extensionSql } from "./extension-sql"
+import { checkExtensionSchema, extensionSchema, extensionSql } from "./extension-sql"
 import { singleExtensionStatement } from "./extension-statement"
 import { createGatewayRelay, type GatewayRelayOptions } from "./relay"
 import * as ops from "./store-ops"
@@ -26,8 +26,7 @@ export function extensionTransaction(ctx: ops.StoreContext, name: string, now: n
     try {
       singleExtensionStatement(statement)
       const value = extensionSql(ctx.sql, name, body)
-      checkExtensionSchema(name, before, extensionSchema(ctx.sql))
-      checkExtensionPrograms(ctx.sql, name)
+      checkExtensionSchema(ctx.sql, name, before, extensionSchema(ctx.sql))
       return value
     } catch (error) {
       failure = error

@@ -10,12 +10,9 @@
  * the sink's first argument, and rows are placed by that number.
  */
 
-export type SqliteConnection = {
-  exec(sql: string): void
-  setAuthorizer(callback: SqlAuthorizer | null): void
-  function(name: string, options: { readonly varargs?: boolean; readonly deterministic?: boolean }, fn: (...args: never[]) => unknown): void
-  close(): void
-}
+import type { DatabaseSync } from "node:sqlite"
+
+export type SqliteConnection = Pick<DatabaseSync, "exec" | "setAuthorizer" | "function" | "close">
 
 export type SqlAuthorizer = (action: number, arg1: string | null, arg2: string | null, database: string | null, source: string | null) => number
 

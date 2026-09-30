@@ -1,90 +1,138 @@
 import { constants } from "node:sqlite"
 
-import { GATEWAY_TABLES } from "./schema"
 import type { Sql, SqlRow } from "./sql"
 
 export class ExtensionSchemaViolation extends Error {
   readonly code = "extension_schema_violation"
 }
 
+type SchemaSnapshot = {
+  readonly objects: readonly SqlRow[]
+  readonly owners: ReadonlyMap<string, string | null>
+}
+
 const COLUMNS = ["type", "name", "tbl_name", "sql"] as const
-const CORE: ReadonlySet<string> = new Set(GATEWAY_TABLES)
-const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`
+const keyOf = (row: SqlRow): string => `${String(row.type)}:${String(row.name)}`
 
-export function extensionSchema(sql: Sql): readonly SqlRow[] {
-  return sql.all(COLUMNS, "SELECT type, name, tbl_name, sql FROM sqlite_schema", [], "type, name")
+export function extensionSchema(sql: Sql): SchemaSnapshot {
+  return {
+    objects: sql.all(COLUMNS, "SELECT type, name, tbl_name, sql FROM sqlite_schema", [], "type, name"),
+    owners: new Map(sql.all(["type", "name", "owner"], "SELECT type, name, owner FROM extension_objects")
+      .map((row) => [keyOf(row), row.owner === null ? null : String(row.owner)])),
+  }
 }
 
-function owns(name: string, object: string | null): boolean {
-  return object !== null && object.startsWith(`${name}_`) && !CORE.has(object)
+export function assertExtensionName(sql: Sql, name: string): void {
+  const core = sql.all(["name"], "SELECT name FROM extension_objects WHERE owner IS NULL")
+  if (["gateway", "thread", "sqlite"].includes(name) || core.some((row) => String(row.name).startsWith(name))) {
+    throw new ExtensionSchemaViolation(`Extension name ${name} collides with a core namespace.`)
+  }
 }
 
-function namespaceOwner(sql: Sql, name: string): (object: string | null) => boolean {
-  const others = sql.all(["name"], "SELECT name FROM extension_schema WHERE name != ?", [name]).map((row) => String(row.name))
-  return (object) => owns(name, object) && !others.some((other) => other.startsWith(`${name}_`) && object?.startsWith(`${other}_`))
-}
-
-export function checkExtensionSchema(name: string, before: readonly SqlRow[], after: readonly SqlRow[]): void {
-  const old = new Map(before.map((row) => [`${row.type}:${row.name}`, row]))
-  const next = new Map(after.map((row) => [`${row.type}:${row.name}`, row]))
-  for (const key of new Set([...old.keys(), ...next.keys()])) {
+/** Validate actual schema effects, then persist ownership in the same transaction as those effects. */
+export function checkExtensionSchema(sql: Sql, name: string, before: SchemaSnapshot, after: SchemaSnapshot): void {
+  const old = new Map(before.objects.map((row) => [keyOf(row), row]))
+  const next = new Map(after.objects.map((row) => [keyOf(row), row]))
+  const changed = [...new Set([...old.keys(), ...next.keys()])].filter((key) => JSON.stringify(old.get(key)) !== JSON.stringify(next.get(key)))
+  for (const key of changed) {
     const a = old.get(key)
     const b = next.get(key)
-    if (JSON.stringify(a) === JSON.stringify(b)) continue
-    for (const row of [a, b]) {
-      if (row !== undefined && (!owns(name, String(row.name)) || !owns(name, String(row.tbl_name)))) {
-        throw new ExtensionSchemaViolation(`Extension ${name} changed an object outside its namespace: ${String(row.name)}.`)
+    if (a !== undefined && before.owners.get(key) !== name) {
+      throw new ExtensionSchemaViolation(`Extension ${name} changed an object it does not own: ${String(a.name)}.`)
+    }
+    if (b === undefined) continue
+    if (b.type === "trigger" || b.type === "view") {
+      throw new ExtensionSchemaViolation("Store extensions cannot create triggers or views.")
+    }
+    if (!String(b.name).startsWith(`${name}_`) || (before.owners.has(key) && before.owners.get(key) !== name)) {
+      throw new ExtensionSchemaViolation(`Extension ${name} created an object outside its namespace: ${String(b.name)}.`)
+    }
+    if (b.type === "index") {
+      const tableKey = `table:${String(b.tbl_name)}`
+      const tableAddedHere = !old.has(tableKey) && next.has(tableKey) && changed.includes(tableKey)
+      if (before.owners.get(tableKey) !== name && after.owners.get(tableKey) !== name && !tableAddedHere) {
+        throw new ExtensionSchemaViolation(`Extension ${name} indexed a table it does not own: ${String(b.tbl_name)}.`)
       }
+    }
+  }
+  for (const key of changed) {
+    const a = old.get(key)
+    const b = next.get(key)
+    if (b === undefined && a !== undefined) {
+      sql.run("DELETE FROM extension_objects WHERE type = ? AND name = ? AND owner = ?", [String(a.type), String(a.name), name])
+    } else if (b !== undefined) {
+      sql.run("INSERT INTO extension_objects (type, name, owner) VALUES (?, ?, ?) ON CONFLICT(type, name) DO UPDATE SET owner = excluded.owner", [String(b.type), String(b.name), name])
     }
   }
 }
 
-/** SQLite resolves names, subqueries and trigger/view accesses; SQL text is never used as an authorization parser. */
+/** Authorize resolved SQLite statements, including DELETE's truncate form, not just cursor accesses. */
 export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
-  const owned = namespaceOwner(sql, name)
-  let ddl = false
+  const snapshot = extensionSchema(sql)
+  const owners = new Map(snapshot.owners)
+  const programs = new Set(snapshot.objects.filter((row) => row.type === "trigger" || row.type === "view").map((row) => String(row.name)))
+  const owned = (type: string, object: string | null): boolean => object !== null && owners.get(`${type}:${object}`) === name
+  const claim = (type: string, object: string | null): boolean => {
+    if (object === null || !object.startsWith(`${name}_`) || owners.has(`${type}:${object}`)) return false
+    owners.set(`${type}:${object}`, name)
+    return true
+  }
+  let ddl: "create" | "alter" | "drop" | undefined
+  let catalogWritten = false
   let denied: string | undefined
   const allow = constants.SQLITE_OK
   const deny = (object: string | null): number => {
-    denied = `Extension ${name} cannot access ${object ?? "this SQLite operation"}.`
+    denied = `Extension ${name} does not own ${object ?? "this SQLite operation"}.`
     return constants.SQLITE_DENY
   }
   try {
     return sql.authorized((action, a, b, database, source) => {
-      if (source !== null && !owned(source)) return deny(source)
+      // SQLite also labels CTE reads with their CTE name; those are not persisted programs.
+      if (source !== null && programs.has(source)) return deny(source)
       switch (action) {
         case constants.SQLITE_CREATE_TABLE:
-        case constants.SQLITE_CREATE_VIEW:
-        case constants.SQLITE_DROP_TABLE:
-        case constants.SQLITE_DROP_VIEW:
-          ddl = true
-          return database === "main" && owned(a) ? allow : deny(a)
+          ddl = "create"
+          return database === "main" && claim("table", a) ? allow : deny(a)
         case constants.SQLITE_CREATE_INDEX:
+          ddl = "create"
+          return database === "main" && owned("table", b) && claim("index", a) ? allow : deny(a)
+        case constants.SQLITE_DROP_TABLE:
+          ddl = "drop"
+          return database === "main" && owned("table", a) ? allow : deny(a)
         case constants.SQLITE_DROP_INDEX:
-        case constants.SQLITE_CREATE_TRIGGER:
-        case constants.SQLITE_DROP_TRIGGER:
-          ddl = true
-          return database === "main" && owned(a) && owned(b) ? allow : deny(a)
+          ddl = "drop"
+          return database === "main" && owned("index", a) && owned("table", b) ? allow : deny(a)
         case constants.SQLITE_ALTER_TABLE:
-          ddl = true
-          return a === "main" && owned(b) ? allow : deny(b)
+          ddl = "alter"
+          return a === "main" && owned("table", b) ? allow : deny(b)
         case constants.SQLITE_REINDEX:
-          return database === "main" && owned(a) ? allow : deny(a)
+          return database === "main" && owned("index", a) ? allow : deny(a)
         case constants.SQLITE_READ:
         case constants.SQLITE_INSERT:
         case constants.SQLITE_UPDATE:
         case constants.SQLITE_DELETE:
-          // SQLite writes sqlite_master before announcing CREATE/DROP, and ALTER rewrites both
-          // schema catalogs. Direct catalog writes are disabled by SQLite; PRAGMA is denied below.
+          // sqlite_master writes precede CREATE/DROP callbacks. SQLite prohibits direct catalog
+          // writes; PRAGMA/writable_schema is never allowed. DDL is isolated to one statement.
           if (a === "sqlite_master" || a === "sqlite_temp_master") {
-            return action !== constants.SQLITE_READ || ddl ? allow : deny(a)
+            if (action === constants.SQLITE_UPDATE && b === "sql") catalogWritten = true
+            if (action !== constants.SQLITE_READ) return allow
+            return ddl === "alter" || ddl === "drop" || (ddl === "create" && catalogWritten && b === "ROWID") ? allow : deny(a)
           }
-          return database === "main" && owned(a) ? allow : deny(a)
+          // ALTER's own SQLite program renames only the authorized table's sequence entry.
+          // Direct reads/writes cannot reach this branch without that single ALTER statement.
+          if (ddl === "alter" && a === "sqlite_sequence" && b === "name"
+            && (action === constants.SQLITE_READ || action === constants.SQLITE_UPDATE)) return allow
+          // SQLite's optimized rowid/count read has an empty column and no database label.
+          return (database === "main" || (database === null && action === constants.SQLITE_READ && b === "")) && owned("table", a) ? allow : deny(a)
         case constants.SQLITE_SELECT:
         case constants.SQLITE_RECURSIVE:
           return allow
         case constants.SQLITE_FUNCTION:
           return b === "load_extension" ? deny(b) : allow
+        case constants.SQLITE_CREATE_TRIGGER:
+        case constants.SQLITE_CREATE_VIEW:
+          return deny(a)
+        // Includes DROP TRIGGER/VIEW, TEMP, ATTACH, transaction control and PRAGMA.
         default:
           return deny(a)
       }
@@ -92,23 +140,5 @@ export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
   } catch (error) {
     if (denied !== undefined) throw new ExtensionSchemaViolation(denied)
     throw error
-  }
-}
-
-/** Trigger bodies and views are resolved lazily by SQLite; compile their use before admitting their schema. */
-export function checkExtensionPrograms(sql: Sql, name: string): void {
-  const schema = extensionSchema(sql)
-  const owned = namespaceOwner(sql, name)
-  for (const row of schema) {
-    const object = String(row.name)
-    if (!owned(object)) continue
-    if (row.type === "view") extensionSql(sql, name, () => sql.exec(`SELECT * FROM ${quote(object)} LIMIT 0`))
-    if (row.type !== "table" || !schema.some((entry) => entry.type === "trigger" && entry.tbl_name === object)) continue
-    const columns = sql.all(["name"], "SELECT name FROM pragma_table_xinfo(?) WHERE hidden = 0", [object])
-    extensionSql(sql, name, () => {
-      sql.exec(`EXPLAIN INSERT INTO ${quote(object)} DEFAULT VALUES`)
-      sql.exec(`EXPLAIN DELETE FROM ${quote(object)}`)
-      sql.exec(`EXPLAIN UPDATE ${quote(object)} SET ${columns.map((column) => `${quote(String(column.name))} = ${quote(String(column.name))}`).join(", ")}`)
-    })
   }
 }

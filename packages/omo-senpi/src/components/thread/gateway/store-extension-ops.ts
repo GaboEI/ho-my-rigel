@@ -1,10 +1,9 @@
 import { extname } from "node:path"
 
-import { checkExtensionPrograms, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql } from "./extension-sql"
+import { assertExtensionName, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql } from "./extension-sql"
 import { extensionTransaction } from "./extension-transaction"
 import { singleExtensionStatement } from "./extension-statement"
 import { isLockWaitExceeded } from "./lock-wait"
-import { GATEWAY_TABLES } from "./schema"
 import { transaction, type StoreContext } from "./store-ops"
 import type { StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRegistration, StoreExtensionResult } from "./store-extensions"
 
@@ -34,6 +33,11 @@ export class StoreExtensions {
       || !descriptor.migrations.every((step) => Array.isArray(step) && step.every((sql) => typeof sql === "string"))) {
       return refusal("invalid_arguments", "An extension needs a valid namespace and an array of SQL migration steps.")
     }
+    try {
+      assertExtensionName(this.ctx.sql, descriptor.name)
+    } catch (error) {
+      return fromError(error)
+    }
     let module: Readonly<Record<string, unknown>>
     try {
       const url = new URL(descriptor.moduleUrl)
@@ -58,7 +62,7 @@ export class StoreExtensions {
       const step = await transaction(this.ctx, "extension_migrate", () => {
         const row = this.ctx.sql.one(["version"], "SELECT version FROM extension_schema WHERE name = ?", [name])
         const version = Number(row?.version ?? 0)
-        if (row === undefined && extensionSchema(this.ctx.sql).some((object) => String(object.name).startsWith(`${name}_`) && !GATEWAY_TABLES.some((core) => core === object.name))) {
+        if (row === undefined && extensionSchema(this.ctx.sql).objects.some((object) => String(object.name).startsWith(`${name}_`))) {
           throw new ExtensionSchemaViolation(`Namespace ${name} already contains objects owned by another registration.`)
         }
         if (version >= migrations.length) {
@@ -68,10 +72,11 @@ export class StoreExtensions {
         const before = extensionSchema(this.ctx.sql)
         for (const statement of migrations[version]) {
           singleExtensionStatement(statement)
+          const beforeStatement = extensionSchema(this.ctx.sql)
           extensionSql(this.ctx.sql, name, () => this.ctx.sql.exec(statement))
+          checkExtensionSchema(this.ctx.sql, name, beforeStatement, extensionSchema(this.ctx.sql))
         }
-        checkExtensionSchema(name, before, extensionSchema(this.ctx.sql))
-        checkExtensionPrograms(this.ctx.sql, name)
+        checkExtensionSchema(this.ctx.sql, name, before, extensionSchema(this.ctx.sql))
         this.ctx.sql.run("INSERT INTO extension_schema (name, version, updated_at) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at", [name, version + 1, now])
         return { version: version + 1, applied: true }
       })
@@ -96,7 +101,7 @@ export class StoreExtensions {
         } finally {
           await scope.finish()
         }
-        checkExtensionSchema(name, before, extensionSchema(this.ctx.sql))
+        checkExtensionSchema(this.ctx.sql, name, before, extensionSchema(this.ctx.sql))
         // Refuse uncloneable results before commit, not in the worker's response writer afterwards.
         return structuredClone(result)
       })

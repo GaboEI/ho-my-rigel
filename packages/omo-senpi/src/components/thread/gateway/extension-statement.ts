@@ -1,12 +1,8 @@
 import { ExtensionSchemaViolation } from "./extension-sql"
 
-/** Each SQL API call is one statement, including a trigger body. Namespace authorization is SQLite's job. */
+/** Keep statement-scoped catalog authorization from carrying into another statement. */
 export function singleExtensionStatement(sql: string): void {
-  const words: string[] = []
-  let trigger = false
-  let depth = 0
   let ended = false
-  const wordChar = (c: string): boolean => c !== "" && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_")
   for (let i = 0; i < sql.length;) {
     const c = sql[i]
     if (c <= " ") { i++; continue }
@@ -31,17 +27,7 @@ export function singleExtensionStatement(sql: string): void {
       }
       continue
     }
-    if (wordChar(c)) {
-      const start = i++
-      while (wordChar(sql[i] ?? "")) i++
-      const word = sql.slice(start, i).toUpperCase()
-      words.push(word)
-      if (words[0] === "CREATE" && word === "TRIGGER" && words.length <= 3) trigger = true
-      if (trigger && (word === "BEGIN" || word === "CASE")) depth++
-      if (trigger && word === "END") depth--
-      continue
-    }
-    if (c === ";" && depth === 0) ended = true
+    if (c === ";") ended = true
     i++
   }
 }

@@ -136,7 +136,9 @@ The compiled `.js`, `.mjs` or `.cjs` module exports named operations `(tx, args)
 structured-cloneable. Both API methods return `{ kind: "ok", value }` or
 `{ kind: "refused", code, message }`; registration's value is `{ version }`.
 
-`name` matches `^[a-z][a-z0-9_]{1,31}$`. Each migration step is an array of SQL statements,
+`name` matches `^[a-z][a-z0-9_]{1,31}$` and must not collide with a core namespace or prefix
+any core object name. Names such as `gateway`, `thread`, and `sqlite` are rejected at registration.
+Each migration step is an array of SQL statements,
 tracked in `extension_schema`, independently of core `user_version`. Registration and calls
 ensure pending steps after core migrations. Each step takes `BEGIN IMMEDIATE` and re-reads the
 version under the lock, so concurrent processes apply it once.
@@ -150,7 +152,8 @@ Operations run in one `BEGIN IMMEDIATE`. The transaction surface is:
   binding, put literal question marks in parameters, not SQL text.
 - `enqueue({ binding_id, event_id, text, author?, mode? })`: the relay's inbound validation,
   author-specific rate limits, mode ceiling and idempotency, without contacting a live endpoint
-  before commit. `deliveries.actor_user_id` records `author.user_id`, or NULL without it.
+  before commit. Enqueue requires a binding; there is no `enqueueToSession` operation.
+  `deliveries.actor_user_id` records `author.user_id`, or NULL without it.
 - `bind({ principal, binding, idempotency_key? })`, `unbind({ principal, binding_id,
   expected_revision, idempotency_key? })`, `rebind({ principal, binding_id, expected_revision,
   session_durable_id, idempotency_key? })`, and `outboxAck({ binding_id, cursor,
@@ -159,10 +162,17 @@ Operations run in one `BEGIN IMMEDIATE`. The transaction surface is:
   or NULL. `outboxPending({ binding_id, after_cursor?, limit? })`: the relay page shape, pending
   rows only, ordered by cursor; default 100 and maximum 500.
 
-SQL can access only the extension's `<name>_*` objects, never core objects or another namespace.
-SQLite resolves object accesses; `sqlite_schema` (`type`, `name`, `tbl_name`, `sql`) is compared
-before and after every migration step and call. A created, dropped or altered object outside the
-namespace rolls back the transaction, including triggers, views and renames. Use explicit
+SQL can access only objects recorded as owned by this extension in the persistent
+`extension_objects` registry. Core migration v5 snapshots every existing schema object as
+core-owned before extensions run. Each extension's new `<name>_*` objects are recorded under its
+owner in the same transaction; a prefix alone never grants access. Ownership survives reopening
+the store, and a newly appearing lookalike does not become extension-owned.
+
+SQLite authorizes resolved statements, including `DELETE FROM table` without a WHERE clause.
+`sqlite_schema` (`type`, `name`, `tbl_name`, `sql`) is also compared before and after migration
+steps and calls. Creating, dropping, renaming or altering an object the extension does not own
+rolls back the transaction. Triggers and views are rejected outright, both during statement
+authorization and in the schema-effect check, even with a matching prefix. Use explicit
 prefixed indexes instead of constraints that create unprefixed `sqlite_autoindex_*` objects.
 Transaction-control SQL, PRAGMAs and attached/temporary databases are refused. This is a store
 API contract, not a sandbox for untrusted JavaScript modules.
@@ -174,7 +184,9 @@ relay refusal is data, so an operation that wants to undo its earlier work must 
 Refusal codes are `extension_import_failed`, `extension_unknown_op`, `extension_unknown_name`,
 `extension_schema_violation`, and `gateway_lock_wait_exceeded`. Invalid registration input is
 `invalid_arguments`; an operation throwing is `extension_operation_failed`. The worker keeps
-serving core requests after every refusal. Lock acquisition uses the core busy timeout and
+serving core requests after every refusal. Reserved names, unowned object access, triggers,
+views, and forbidden DDL all use `extension_schema_violation`; rejecting a reserved name leaves
+that name unregistered. Lock acquisition uses the core busy timeout and
 30-second total bound, not an unbounded retry. Older binaries keep their current newer-schema
 behavior: they open a v5 store without downgrading its version.
 
