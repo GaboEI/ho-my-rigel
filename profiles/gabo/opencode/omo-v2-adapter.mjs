@@ -8,7 +8,7 @@ const fallbackClient = {
 }
 
 export default {
-  id: "oh-my-openagent",
+  id: "ho-my-rigel",
   setup: async (context) => {
     const directory = context?.location?.directory ?? process.cwd()
     const client = context?.client ?? fallbackClient
