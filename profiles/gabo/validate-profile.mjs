@@ -36,7 +36,8 @@ if (manifest.mcpPolicy?.websearch !== "tavily" || !manifest.mcpPolicy?.omoBuilti
 if (!manifest.mcpPolicy?.omoBuiltinsRetained?.includes("grep_app") || !manifest.mcpPolicy?.omoBuiltinsRetained?.includes("lsp")) fail("OmO grep_app and LSP must remain available")
 for (const skill of ["prompt-master", "juez-tester", "juez-repo"]) {
   if (!manifest.skillPolicy?.gaboCore?.includes(skill)) fail(`${skill} must remain a core Gabo skill`)
-  if (!manifest.skillPolicy?.bundled?.includes(skill)) fail(`${skill} must be bundled in the portable profile`)
+}
+for (const skill of manifest.skillPolicy?.bundled ?? []) {
   const skillPath = join(root, "skills", skill, "SKILL.md")
   if (!existsSync(skillPath) || !readFileSync(skillPath, "utf8").startsWith(`---\nname: ${skill}`)) fail(`${skill} must have a valid bundled SKILL.md`)
 }
