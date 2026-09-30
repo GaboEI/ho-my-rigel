@@ -1,3 +1,9 @@
+## 2026-09-30 - `omo host status --all` never labels older activity as newest (#9222 gate G1)
+
+`last_activity_at` now follows the thread SDK's truthful bounded result: the final complete session entry's timestamp,
+or `null` when that entry is partial, malformed or too large for the 256 KiB final-line cap. The 160 KiB regression
+is covered through the real host-status enrichment path.
+
 ## 2026-09-30 - `omo thread` author and mode flags; `omo host status --all` stamps terminal rows with `last_activity_at` (#9143, review of #9222)
 
 `thread.js`: `send --binding` accepts `--mode auto|follow_up` (the SDK caps it by the binding's inbound mode) and
