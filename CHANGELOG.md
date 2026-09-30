@@ -37,6 +37,8 @@ On macOS, computer use keeps its Accessibility and Screen Recording permissions 
 
 On Windows, killing a running background task marks it as killed instead of reporting a crash. Thanks to @Dante-dan. ([#9228](https://github.com/code-yeongyu/oh-my-openagent/issues/9228), [#9233](https://github.com/code-yeongyu/oh-my-openagent/pull/9233))
 
+Standalone release binaries now run JavaScript, Python, a real file read and cell listing before upload on all nine natively executable targets, including Alpine musl. All twelve target manifests preserve the same derived codemode sidecars, and required wasm assets fail packaging if missing. ([#9291](https://github.com/code-yeongyu/oh-my-openagent/issues/9291))
+
 ## [5.1.5] - 2026-09-30
 
 **Big thanks to [@ashmoonori-afk](https://github.com/ashmoonori-afk), whose [#9209](https://github.com/code-yeongyu/oh-my-openagent/pull/9209) teaches memory recall to find Korean, Japanese and Chinese notes and to pick the right note out of a big memory.**

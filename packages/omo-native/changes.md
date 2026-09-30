@@ -1,3 +1,32 @@
+## 2026-09-30 - Eval release smoke covers every executable target (#9291, follow-up to #9250)
+
+### What changed
+
+The packaged-binary RPC smoke now verifies JavaScript and Python arithmetic, cell listing,
+and exactly one real file read through the before/after tool hooks. Its fixture contains a
+random marker; execution runs while the source checkout is renamed, then shuts down the
+isolated task hosts and checks for surviving processes and sockets. The release workflow
+executes it on nine native targets, provisioning Python, Node and process tools inside the
+three Alpine musl legs. Cross-compiled Darwin x64 and Windows arm64 retain digest/manifest
+coverage. Twelve platform manifests are compared against the derived codemode sidecar set.
+Every wasm in the runtime closure also has a required file entry. The build-only
+`OMO_SIDECAR_EXCLUDE` fixture permits a missing-package RED smoke without a dependency list.
+
+### Why
+
+#9250 restored eval registration but tested only one JavaScript cell on Darwin arm64.
+It could not detect a broken Python bridge, host tool pipeline, missing target assets,
+or a release leg bypassing the smoke.
+
+### Why an extension could not handle it
+
+These checks exercise the compiled payload and release workflow before upload. An extension
+cannot repair an asset absent from that payload or enforce a gate on another release leg.
+
+### Expected merge conflict zones
+
+The engine-sidecar resolver, binary staging fixture, and release smoke workflow.
+
 ## 2026-09-30 - The compiled binary hands a downloaded Claude Code to the engine at startup (#9276)
 
 `compile-entry.ts` calls `applyCachedClaudeCode` (omo-senpi `claude-code/index.ts`) right after
