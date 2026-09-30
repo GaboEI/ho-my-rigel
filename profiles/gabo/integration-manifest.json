@@ -29,7 +29,7 @@
     "externalConfigurationRequired": ["context7", "playwright", "github", "docker", "ssh", "postgres", "tide", "openrouter", "obsidian"]
   },
   "skillPolicy": {
-    "bundled": ["prompt-master", "juez-tester", "juez-repo", "github-public-writing", "opencode-multi-auth-fix", "defuddle"],
+    "bundled": ["prompt-master", "juez-tester", "juez-repo", "github-public-writing", "opencode-multi-auth-fix", "defuddle", "obsidian-vault-writing-rules", "obsidian-second-brain-audit", "obsidian-cli"],
     "gaboCore": ["prompt-master", "juez-tester", "juez-repo"],
     "gaboAvailable": ["github-public-writing", "obsidian-vault-writing-rules", "obsidian-second-brain-audit", "obsidian-markdown", "obsidian-cli", "obsidian-bases", "json-canvas", "tui-design", "skill-creator", "opencode-multi-auth-fix", "defuddle"],
     "omoAdopt": ["debugging", "frontend", "git-master", "remove-ai-slops", "security-research", "visual-qa", "team-mode"],

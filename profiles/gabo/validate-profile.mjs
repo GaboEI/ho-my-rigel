@@ -41,6 +41,7 @@ for (const skill of manifest.skillPolicy?.bundled ?? []) {
   const skillPath = join(root, "skills", skill, "SKILL.md")
   if (!existsSync(skillPath) || !readFileSync(skillPath, "utf8").startsWith(`---\nname: ${skill}`)) fail(`${skill} must have a valid bundled SKILL.md`)
 }
+if (!existsSync(join(root, "skills", "obsidian-second-brain-audit", "scripts", "audit_vault.py"))) fail("obsidian-second-brain-audit must retain its audit script")
 for (const skill of ["dev-browser", "ultimate-browsing"]) {
   if (!manifest.skillPolicy?.omoDisabled?.includes(skill)) fail(`${skill} must remain disabled in the Gabo profile`)
 }
