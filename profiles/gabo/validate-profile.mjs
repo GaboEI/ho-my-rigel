@@ -24,6 +24,9 @@ if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
 if (profile.browser_automation_engine?.provider !== "playwright") fail("Playwright must be canonical")
 if (profile.goal?.enabled !== false || profile.default_mode?.goal !== false) fail("OmO root Goal must stay disabled")
+for (const hook of ["goal", "compaction-context-injector", "compaction-todo-preserver"]) {
+  if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled to preserve the external root authority`)
+}
 if (profile.sisyphus_agent?.disabled !== true) fail("Sisyphus must not be the primary orchestrator")
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "forja") fail("Forja must be the root orchestrator")

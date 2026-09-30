@@ -23,6 +23,11 @@
           "disabled": true
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
+        "disabled_hooks": [
+          "goal",
+          "compaction-context-injector",
+          "compaction-todo-preserver"
+        ],
         "team_mode": {
           "enabled": true,
           "tmux_visualization": false,
