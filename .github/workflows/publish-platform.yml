@@ -155,6 +155,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Set up Python for packaged eval
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.2"
@@ -394,11 +399,6 @@ jobs:
             ".omo/release-binaries/${BINARY}"
           # Signing rewrites the bytes the build step digested.
           (cd .omo/release-binaries && shasum -a 256 "$BINARY" > SHA256SUMS)
-
-      - uses: actions/setup-python@v6
-        if: steps.release-assets.outputs.binary_exists != 'true'
-        with:
-          python-version: "3.12"
 
       - name: Smoke test release binary
         if: steps.release-assets.outputs.binary_exists != 'true'
