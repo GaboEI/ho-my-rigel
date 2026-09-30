@@ -9,7 +9,8 @@ import {
 	isQuarantinedFile,
 	locateDesktopEngine,
 } from "./locator";
-import { DESKTOP_ENGINE_CHECKSUMS_ASSET, DESKTOP_ENGINE_RELEASE_HOSTS, desktopEngineReleaseAssetName } from "./release-assets";
+import { parseDesktopEngineChecksums } from "./checksums";
+import { DESKTOP_ENGINE_CHECKSUMS_ASSET, desktopEngineReleaseAssetName } from "./release-assets";
 import { isDesktopEngineRelease } from "./release-signature";
 
 const RELEASE_BASE = "https://github.com/code-yeongyu/oh-my-openagent/releases/download";
@@ -112,19 +113,9 @@ export async function acquireDesktopEngine(options: AcquireDesktopEngineOptions)
 		if (!binaryResponse.ok) return unavailable(`${asset}: HTTP ${binaryResponse.status}`);
 		if (!checksumsResponse.ok) return unavailable(`${DESKTOP_ENGINE_CHECKSUMS_ASSET}: HTTP ${checksumsResponse.status}`);
 
-		const checksumLines = (await checksumsResponse.text()).trimEnd().split(/\r?\n/);
-		const seen = new Set<string>();
-		let expected: string | undefined;
-		for (const line of checksumLines) {
-			const match = /^([a-fA-F0-9]{64})  ([A-Za-z0-9.-]+)$/.exec(line);
-			const name = match?.[2];
-			if (name === undefined || !DESKTOP_ENGINE_RELEASE_HOSTS.some((supported) => desktopEngineReleaseAssetName(supported) === name)) {
-				return unavailable("Invalid desktop engine checksum entry or asset name");
-			}
-			if (seen.has(name)) return unavailable(`Duplicate SHA-256 checksum for ${name}`);
-			seen.add(name);
-			if (name === asset) expected = match?.[1];
-		}
+		const parsed = parseDesktopEngineChecksums(await checksumsResponse.text());
+		if (parsed.error !== null) return unavailable(parsed.error);
+		const expected = parsed.checksums.get(asset);
 		if (expected === undefined) return unavailable(`No SHA-256 checksum for ${asset}`);
 		const binary = Buffer.from(await binaryResponse.arrayBuffer());
 		const actual = createHash("sha256").update(binary).digest("hex");
