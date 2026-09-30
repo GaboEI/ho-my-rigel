@@ -7,13 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [5.1.7] - 2026-09-30
-
-**Computer use on macOS says what it needs and where its engine comes from.** A downloaded install trusts the engine shipped inside its own app, a missing Screen Recording or Accessibility grant opens the right System Settings pane, and `/computer status` and `omo doctor` show which engine you have before it starts. This release runs on the senpi 2026.9.30 engine, like 5.1.6.
-
 ### Added
-
-`/computer status` and `omo doctor` report where the computer-use engine is and where it came from (the app bundle, the cache or a path you set) without starting it, name hosts it does not support, and give the same answer. `omo doctor` never downloads the engine. ([#9286](https://github.com/code-yeongyu/oh-my-openagent/issues/9286), [#9311](https://github.com/code-yeongyu/oh-my-openagent/pull/9311))
 
 **Every session can reach every other one, terminal sessions included.** ([#9143](https://github.com/code-yeongyu/oh-my-openagent/issues/9143)) Messages between sessions now go through a session gateway: one small database in the agent directory, with no daemon to run and nothing to configure. A terminal session opens a private control socket, so a Desktop thread, a task child or a script can list it, read it and send to it; the thread tools list terminal sessions with their real names and times. A message never interrupts what you are doing: while you are typing, or a submission of yours is on its way, it waits, and the session shows one line saying a remote message is queued. A message to a session that is not running is kept for 24 hours and taken when the session runs again. Fixed limits stop runaway loops: a session cannot message itself or reply straight back into the chain that messaged it, a chain of messages stops after 4 hops or 64 messages, one turn reaches at most 16 sessions, and one sender gets a burst of 8 messages to a session, then one every 5 seconds.
 
@@ -27,13 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **`omo daemon adopt` moves a session from a host into your terminal.** ([#9143](https://github.com/code-yeongyu/oh-my-openagent/issues/9143)) `omo daemon adopt <session>` asks the host holding a Desktop thread or a background session to hand it over, then resumes it in the current terminal, in the session's own directory. A session in the middle of a turn is refused unless you pass `--interrupt`, and input the interrupt took out of its queue becomes your first prompts. A session a Desktop window has open is refused unless you pass `--force`. `omo daemon status` now lists terminal sessions as `tui` rows, and `handoff` and `stop --all` leave them alone.
 
-### Changed
-
-Test cleanups from an internal audit, with no change to behavior. ([#9302](https://github.com/code-yeongyu/oh-my-openagent/pull/9302), [#9304](https://github.com/code-yeongyu/oh-my-openagent/pull/9304), [#9310](https://github.com/code-yeongyu/oh-my-openagent/pull/9310), [#9312](https://github.com/code-yeongyu/oh-my-openagent/pull/9312), [#9314](https://github.com/code-yeongyu/oh-my-openagent/pull/9314), [#9315](https://github.com/code-yeongyu/oh-my-openagent/pull/9315), [#9316](https://github.com/code-yeongyu/oh-my-openagent/pull/9316), [#9317](https://github.com/code-yeongyu/oh-my-openagent/pull/9317), [#9318](https://github.com/code-yeongyu/oh-my-openagent/pull/9318), [#9319](https://github.com/code-yeongyu/oh-my-openagent/pull/9319), [#9321](https://github.com/code-yeongyu/oh-my-openagent/pull/9321))
-
 ### Removed
 
 **`omo daemon attach` and the shared-host opt-in env (`OMO_ENABLE_SHARED_HOST`) are removed; interactive sessions always run standalone.** ([#9143](https://github.com/code-yeongyu/oh-my-openagent/issues/9143)) A terminal session no longer joins an engine host; it always runs its own session in its own process, and other sessions reach it through the gateway. `OMO_ENABLE_SHARED_HOST` no longer changes anything. To continue a session that lives on a host in a terminal, use `omo daemon adopt`.
+
+### Fixed
+
+`omo host status --all` and `omo thread list` no longer show an older session entry as the latest activity when the final JSONL entry is large, partial or invalid. Both surfaces use the same bounded final-record policy, show `null` when freshness cannot be proved, and list known activity newest-first with unknown activity last. ([#9222](https://github.com/code-yeongyu/oh-my-openagent/pull/9222))
+
+## [5.1.7] - 2026-09-30
+
+**Computer use on macOS says what it needs and where its engine comes from.** A downloaded install trusts the engine shipped inside its own app, a missing Screen Recording or Accessibility grant opens the right System Settings pane, and `/computer status` and `omo doctor` show which engine you have before it starts. This release runs on the senpi 2026.9.30 engine, like 5.1.6.
+
+### Added
+
+`/computer status` and `omo doctor` report where the computer-use engine is and where it came from (the app bundle, the cache or a path you set) without starting it, name hosts it does not support, and give the same answer. `omo doctor` never downloads the engine. ([#9286](https://github.com/code-yeongyu/oh-my-openagent/issues/9286), [#9311](https://github.com/code-yeongyu/oh-my-openagent/pull/9311))
+
+### Changed
+
+Test cleanups from an internal audit, with no change to behavior. ([#9302](https://github.com/code-yeongyu/oh-my-openagent/pull/9302), [#9304](https://github.com/code-yeongyu/oh-my-openagent/pull/9304), [#9310](https://github.com/code-yeongyu/oh-my-openagent/pull/9310), [#9312](https://github.com/code-yeongyu/oh-my-openagent/pull/9312), [#9314](https://github.com/code-yeongyu/oh-my-openagent/pull/9314), [#9315](https://github.com/code-yeongyu/oh-my-openagent/pull/9315), [#9316](https://github.com/code-yeongyu/oh-my-openagent/pull/9316), [#9317](https://github.com/code-yeongyu/oh-my-openagent/pull/9317), [#9318](https://github.com/code-yeongyu/oh-my-openagent/pull/9318), [#9319](https://github.com/code-yeongyu/oh-my-openagent/pull/9319), [#9321](https://github.com/code-yeongyu/oh-my-openagent/pull/9321))
 
 ### Fixed
 
@@ -56,8 +62,6 @@ On OpenCode, ordinary chat no longer turns into a goal, and a message containing
 On Codex, updating removes the retired `features.child_agents_md` setting that Codex 0.156 rejects at startup, and the bundled rules no longer mention it. Thanks to @LilMGenius. ([#8693](https://github.com/code-yeongyu/oh-my-openagent/pull/8693))
 
 On Codex, the spawn examples in the bundled Hephaestus rule name their `agent_type`, so a session that follows them spawns its subagents instead of being blocked by the spawn guard. Thanks to @LilMGenius. ([#8298](https://github.com/code-yeongyu/oh-my-openagent/pull/8298))
-
-`omo host status --all` and `omo thread list` no longer show an older session entry as the latest activity when the final JSONL entry is large, partial or invalid. Both surfaces use the same bounded final-record policy, show `null` when freshness cannot be proved, and list known activity newest-first with unknown activity last. ([#9222](https://github.com/code-yeongyu/oh-my-openagent/pull/9222))
 
 ## [5.1.6] - 2026-09-30
 
