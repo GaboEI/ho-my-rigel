@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+Standalone release binaries now run JavaScript, Python, a real file read and cell listing before upload on all nine natively executable targets, including Alpine musl. All twelve target manifests preserve the same derived codemode sidecars, and required wasm assets fail packaging if missing. ([#9291](https://github.com/code-yeongyu/oh-my-openagent/issues/9291))
+
+## [5.1.6] - 2026-09-30
+
 **Hotfix: reopening a session with an unanswerable question no longer crashes the TUI.** ([#9268](https://github.com/code-yeongyu/oh-my-openagent/issues/9268)) When a session was resumed with a pending question whose saved arguments no longer formed a valid question set, the question widget showed "0 unanswered" and crashed with `Cannot read properties of undefined (reading 'question')` as soon as you expanded it. The call now settles as lost in a restart, so the model learns the question is gone and can ask again, and clicking a widget whose questions all have answers submits them. Thanks to @copycatcode for the report. This release runs on the senpi 2026.9.30 engine.
 
 ### Added
@@ -36,8 +42,6 @@ An `eval` cell's return value reaches the model whole up to the normal output bu
 On macOS, computer use keeps its Accessibility and Screen Recording permissions across updates, because the signed desktop engine now always runs from the same path. ([#9282](https://github.com/code-yeongyu/oh-my-openagent/issues/9282), [#9288](https://github.com/code-yeongyu/oh-my-openagent/pull/9288))
 
 On Windows, killing a running background task marks it as killed instead of reporting a crash. Thanks to @Dante-dan. ([#9228](https://github.com/code-yeongyu/oh-my-openagent/issues/9228), [#9233](https://github.com/code-yeongyu/oh-my-openagent/pull/9233))
-
-Standalone release binaries now run JavaScript, Python, a real file read and cell listing before upload on all nine natively executable targets, including Alpine musl. All twelve target manifests preserve the same derived codemode sidecars, and required wasm assets fail packaging if missing. ([#9291](https://github.com/code-yeongyu/oh-my-openagent/issues/9291))
 
 ## [5.1.5] - 2026-09-30
 

@@ -142,9 +142,9 @@ function textOf(message) {
 async function main() {
   const sandbox = createSandbox(parseArgs(process.argv.slice(2)))
   const previousCwd = process.cwd()
-  // Windows shells hold the checkout root open; hide each source namespace there.
+  // Windows shells hold the checkout root open; hide every original entry there.
   const trees = process.platform === "win32"
-    ? ["packages", "node_modules", "script"].map((name) => join(sourceTree, name))
+    ? readdirSync(sourceTree).map((name) => join(sourceTree, name))
     : [sourceTree]
   const hiddenTrees = []
   const hostSockets = []
