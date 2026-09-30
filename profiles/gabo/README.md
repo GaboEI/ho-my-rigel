@@ -6,8 +6,8 @@ It is deliberately not an installer. It contains no credentials, local host path
 
 ## Layout
 
-- `omo.jsonc` defines the OmO `gabo` profile: Tavily, one external Context7, external Goal ownership, Forja over Sisyphus, and canonical Playwright.
-- `opencode/agents/` contains the portable Forja and Juez definitions.
+- `omo.jsonc` defines the OmO `gabo` profile: Tavily, one external Context7, external Goal ownership, the merged Sisyphus/Forja orchestrator, and canonical Playwright.
+- `opencode/prompts/forja-orchestration.md` adds Forja's delegation and acceptance contract to upstream Sisyphus; `opencode/agents/` contains the independent Juez definition.
 - `opencode/opencode.json` is a test template. The runner substitutes `__OMO_PLUGIN_ENTRY__` with the local plugin entrypoint; it must never be copied unchanged to a user configuration.
 - `integration-manifest.json` documents the external plugins and MCP ownership that a later isolated harness must provide.
 

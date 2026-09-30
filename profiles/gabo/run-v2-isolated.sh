@@ -33,12 +33,12 @@ command -v docker >/dev/null 2>&1 || {
   exit 2
 }
 
-mkdir -p "$sandbox/home/.omo/opencode/agents" "$sandbox/xdg/config/opencode" "$sandbox/xdg/data" "$sandbox/xdg/state" "$sandbox/xdg/cache" "$sandbox/project"
+mkdir -p "$sandbox/home/.omo/opencode/agents" "$sandbox/home/.omo/opencode/prompts" "$sandbox/xdg/config/opencode" "$sandbox/xdg/data" "$sandbox/xdg/state" "$sandbox/xdg/cache" "$sandbox/project"
 # The profile is consumed inside the container, where the host sandbox is
 # deliberately exposed only as /sandbox.
 sed 's|__OMO_PROFILE_ROOT__|/sandbox/home/.omo|g' "$root/profiles/gabo/omo.jsonc" > "$sandbox/home/.omo/omo.jsonc"
-cp "$root/profiles/gabo/opencode/agents/forja.md" "$sandbox/home/.omo/opencode/agents/forja.md"
 cp "$root/profiles/gabo/opencode/agents/juez.md" "$sandbox/home/.omo/opencode/agents/juez.md"
+cp "$root/profiles/gabo/opencode/prompts/forja-orchestration.md" "$sandbox/home/.omo/opencode/prompts/forja-orchestration.md"
 sed 's|file://__OMO_PLUGIN_ENTRY__|file:///workspace/packages/omo-opencode/src/index.ts|g' "$root/profiles/gabo/opencode/opencode.json" > "$sandbox/xdg/config/opencode/opencode.json"
 
 docker run -d --rm --name "$container_name" -p "127.0.0.1:${port}:${port}" \
@@ -94,8 +94,10 @@ docker run --rm \
     const paths = result.config.agent_definitions ?? [];
     const agentDefinitionAgents = loadAgentDefinitions(paths, "definition-file");
     const names = Object.keys(agentDefinitionAgents);
-    if (!result.valid || !names.includes("forja") || !names.includes("juez")) process.exit(1);
-    const config = { default_agent: "forja" };
+    const contract = result.config.agents?.sisyphus?.prompt_append;
+    if (!result.valid || !names.includes("juez") || names.includes("forja")) process.exit(1);
+    if (contract !== "file:///sandbox/home/.omo/opencode/prompts/forja-orchestration.md") process.exit(1);
+    const config = { default_agent: "sisyphus" };
     await assembleAgentConfig({
       config,
       pluginConfig: result.config,
@@ -110,7 +112,7 @@ docker run --rm \
       disabledAgentNames: new Set(),
     });
     const agents = config.agent;
-    if (agents.forja?.permission?.["*"] !== "allow") process.exit(1);
+    if (agents.juez?.mode !== "primary") process.exit(1);
     if (agents.juez?.permission?.edit !== "deny" || agents.juez?.permission?.task !== "ask") process.exit(1);
   '
 
@@ -119,4 +121,4 @@ if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*creden
   exit 1
 fi
 
-echo "Ho My Rigel V2 isolated smoke passed: $version (profile, Forja and Juez definitions verified)"
+echo "Ho My Rigel V2 isolated smoke passed: $version (merged Sisyphus/Forja contract and Juez verified)"

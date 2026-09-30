@@ -1,5 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["file://__OMO_PLUGIN_ENTRY__"],
-  "default_agent": "forja"
+  "default_agent": "sisyphus"
 }

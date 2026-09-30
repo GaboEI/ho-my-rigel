@@ -16,11 +16,10 @@ const profile = omo.profiles?.gabo?.["[opencode]"]
 
 if (!profile) fail("profiles.gabo.[opencode] is required")
 const expectedAgentDefinitions = [
-  "__OMO_PROFILE_ROOT__/opencode/agents/forja.md",
   "__OMO_PROFILE_ROOT__/opencode/agents/juez.md",
 ]
-if (JSON.stringify(profile.agent_definitions) !== JSON.stringify(expectedAgentDefinitions)) fail("Forja and Juez definition paths must remain portable templates")
-if (profile.agents?.forja?.mode !== "primary" || profile.agents.forja.permission?.["*"] !== "allow") fail("Forja must retain its primary execution permission")
+if (JSON.stringify(profile.agent_definitions) !== JSON.stringify(expectedAgentDefinitions)) fail("Juez definition path must remain a portable template")
+if (profile.agents?.sisyphus?.prompt_append !== "file://__OMO_PROFILE_ROOT__/opencode/prompts/forja-orchestration.md") fail("Sisyphus must receive the Forja orchestration contract")
 if (profile.agents?.juez?.mode !== "primary" || profile.agents.juez.permission?.edit !== "deny" || profile.agents.juez.permission?.task !== "ask") fail("Juez must remain an independent non-executing auditor")
 if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
@@ -29,13 +28,11 @@ if (profile.goal?.enabled !== false || profile.default_mode?.goal !== false) fai
 for (const hook of ["goal", "compaction-context-injector", "compaction-todo-preserver"]) {
   if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled to preserve the external root authority`)
 }
-if (profile.sisyphus_agent?.disabled !== true) fail("Sisyphus must not be the primary orchestrator")
-if (!profile.disabled_agents?.includes("sisyphus")) fail("Sisyphus must not remain in the Gabo profile catalog")
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
-if (manifest.rootAuthorities?.orchestrator !== "forja") fail("Forja must be the root orchestrator")
+if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "forja") fail("Sisyphus must own the merged Forja orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "juez") fail("Juez must be the acceptance authority")
 if (!manifest.requiredPlugins?.includes("oc-codex-multi-auth")) fail("oc-codex-multi-auth is required")
-if (opencode.default_agent !== "forja") fail("Forja must be the default agent")
+if (opencode.default_agent !== "sisyphus") fail("Sisyphus must be the default agent")
 if (opencode.plugin?.length !== 1 || !opencode.plugin[0].includes("__OMO_PLUGIN_ENTRY__")) fail("plugin entry must remain an explicit test-time placeholder")
 
 const profileSerialized = JSON.stringify({ omo, opencode })

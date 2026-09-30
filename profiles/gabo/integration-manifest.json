@@ -27,7 +27,8 @@
     "omoBuiltinsDisabled": ["context7"]
   },
   "rootAuthorities": {
-    "orchestrator": "forja",
+    "orchestrator": "sisyphus",
+    "orchestrationContract": "forja",
     "acceptance": "juez",
     "goalContinuation": "local.goal-mode.server",
     "contextCompaction": "context-mode"

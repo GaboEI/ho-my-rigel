@@ -4,13 +4,11 @@
     "gabo": {
       "[opencode]": {
         "agent_definitions": [
-          "__OMO_PROFILE_ROOT__/opencode/agents/forja.md",
           "__OMO_PROFILE_ROOT__/opencode/agents/juez.md"
         ],
         "agents": {
-          "forja": {
-            "mode": "primary",
-            "permission": { "*": "allow" }
+          "sisyphus": {
+            "prompt_append": "file://__OMO_PROFILE_ROOT__/opencode/prompts/forja-orchestration.md"
           },
           "juez": {
             "mode": "primary",
@@ -29,7 +27,6 @@
           }
         },
         "websearch": { "provider": "tavily" },
-        "disabled_agents": ["sisyphus"],
         "disabled_mcps": ["context7"],
         "browser_automation_engine": { "provider": "playwright" },
         "goal": {
@@ -40,9 +37,6 @@
         "default_mode": {
           "goal": false,
           "ultrawork": false
-        },
-        "sisyphus_agent": {
-          "disabled": true
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
         "disabled_hooks": [
