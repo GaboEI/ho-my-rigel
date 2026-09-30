@@ -20,6 +20,8 @@ Run `bash profiles/gabo/run-v2-isolated.sh` to boot the host OpenCode **V2** bin
 
 Run `bash profiles/gabo/run-delegation-preflight.sh` to execute that isolated smoke plus focused tests of OmO's real delegated-session engine. It proves session creation, synchronous routing, continuation metadata, and child-session permission isolation; it deliberately does not use a model provider or account.
 
+Run `bash profiles/gabo/run-session-authority-preflight.sh` to verify that the Gabo profile preserves external Goal and Context Mode as root authorities while OmO retains delegated-child continuation.
+
 ## Activation for a future isolated test
 
 The test runner will create a temporary home, copy `omo.jsonc` as `<temporary-home>/.omo/omo.jsonc`, expand the portable agent-definition root only inside the container, copy the OpenCode template, substitute the local plugin entrypoint, and set `OMO_PROFILE=gabo`. It will never use Gabo's real configuration directory.
