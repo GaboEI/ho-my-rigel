@@ -21,7 +21,8 @@ const configDir = path.join(home, ".config/opencode")
 const configFile = path.join(configDir, "opencode.json")
 const frozenConfigFile = path.join(snapshot, "config-opencode/opencode.json")
 const omoDir = path.join(home, ".omo")
-const pluginEntry = `file://${path.join(sourceRoot, "dist/index.js")}`
+const distEntry = `file://${path.join(sourceRoot, "dist/index.js")}`
+const pluginEntry = path.join(stateRoot, "runtime/omo-v2-plugin")
 const runtimeState = path.join(stateRoot, "active-trial.json")
 const wrapper = path.join(home, ".local/bin/rigel-opencode")
 const rollbackWrapper = path.join(home, ".local/bin/rigel-rollback")
@@ -40,18 +41,25 @@ function protectedFingerprint(config) {
   return { obsidian: sha(config.mcp?.obsidian), codexPlugin: sha(codexPlugin(config)) }
 }
 function equal(a, b) { return a.obsidian === b.obsidian && a.codexPlugin === b.codexPlugin }
+function stageV2Adapter() {
+  if (!fs.existsSync(distEntry.slice("file://".length))) fail("no existe el artefacto construido dist/index.js.")
+  fs.mkdirSync(pluginEntry, { recursive: true, mode: 0o700 })
+  const adapter = fs.readFileSync(path.join(sourceRoot, "profiles/gabo/opencode/omo-v2-adapter.mjs"), "utf8")
+    .replaceAll("__OMO_DIST_ENTRY__", distEntry)
+  fs.writeFileSync(path.join(pluginEntry, "index.js"), adapter, { mode: 0o600 })
+}
 
 if (hasOpenCodeProcess()) fail("OpenCode sigue ejecutándose. Ciérralo antes de activar para no corromper sesiones.")
 if (!fs.existsSync(frozenConfigFile)) fail("no se encontró la congelación pre-Rigel.")
 if (fs.existsSync(runtimeState)) fail("ya existe una prueba Rigel activa; usa rigel-rollback antes de otra activación.")
 if (fs.existsSync(omoDir)) fail("~/.omo ya existe; se preserva para evitar mezclar otra configuración OmO.")
-if (!fs.existsSync(pluginEntry.slice("file://".length))) fail("no existe el entrypoint local del plugin Rigel.")
 
 const frozen = readJson(frozenConfigFile)
 const current = readJson(configFile)
 const frozenFingerprint = protectedFingerprint(frozen)
 if (!frozen.mcp?.obsidian || !codexPlugin(frozen)) fail("la congelación no contiene los componentes protegidos esperados.")
 if (!equal(frozenFingerprint, protectedFingerprint(current))) fail("la configuración activa difiere de la congelación en Obsidian o Codex auth.")
+stageV2Adapter()
 
 const tempOmo = `${omoDir}.rigel-stage-${process.pid}`
 try {
@@ -82,7 +90,7 @@ try {
   fs.writeFileSync(wrapper, `#!/usr/bin/env sh\n# Ho My Rigel trial wrapper; remove via rigel-rollback.\nexport OMO_PROFILE=gabo\nexec ${JSON.stringify(path.join(home, ".opencode/bin/opencode"))} "$@"\n`, { mode: 0o700 })
   fs.writeFileSync(rollbackWrapper, `#!/usr/bin/env sh\n# Ho My Rigel trial rollback wrapper.\nexec node ${JSON.stringify(path.join(sourceRoot, "profiles/gabo/rollback-live-trial.mjs"))}\n`, { mode: 0o700 })
   fs.writeFileSync(runtimeState, JSON.stringify({
-    activatedAt: new Date().toISOString(), snapshot, pluginEntry, profile: "gabo",
+    activatedAt: new Date().toISOString(), snapshot, pluginEntry, distEntry, profile: "gabo",
     protectedFingerprint: frozenFingerprint, protectedComponents: ["oc-codex-multi-auth", "obsidian"],
     protectedOpenGoRuntime: "/home/gabodev/Documents/Codex/2026-09-29/ho/work/opencode-go-multi-auth-v2/dist/bin.js"
   }, null, 2) + "\n", { mode: 0o600 })
