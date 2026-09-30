@@ -5,6 +5,8 @@ import { Worker } from "node:worker_threads"
 
 import type { BindingRecord, CompletionOutcome, OutboxRow, RelayOutcome } from "./bindings"
 import { GATEWAY_BUSY_TIMEOUT_MS, GATEWAY_LOCK_WAIT_MAX_MS } from "./constants"
+import type { StoreExtensionApi } from "./store-extensions"
+export type { StoreExtensionApi, StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRefusalCode, StoreExtensionRegistration, StoreExtensionResult, StoreExtensionTransaction } from "./store-extensions"
 import type {
   AnswerClaim,
   AnswerClaimRef,
@@ -70,7 +72,7 @@ export type OutboxPage = { readonly binding_id: string; readonly revision: numbe
 /** Relay results carry `deduplicated`: true when an idempotency key replayed an earlier success. */
 export type Deduplicated = { readonly deduplicated?: boolean }
 
-export type GatewayStore = {
+export type GatewayStore = StoreExtensionApi & {
   /** The store's busy timeout: the delay before a caller re-arms an operation that failed with a lock-wait error. */
   readonly busyTimeoutMs: number
   /** The clock this store's rows are stamped and expired against; drains, engines and relays built on the store default to it. */
@@ -200,6 +202,8 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
   }
 
   return {
+    registerStoreExtension: (extension) => call("extension_register", { extension, now: now() }),
+    extensionCall: (name, op, args) => call("extension_call", { name, op, args, now: now() }),
     busyTimeoutMs: config.busy_timeout_ms,
     now,
     identity: async () => (await start()).self,

@@ -63,6 +63,8 @@ export type StoreContext = {
   readonly emit: (event: GatewayStoreEvent) => void
   readonly hook: (name: "beforeDbCommit" | "afterDbCommit") => Promise<void>
   readonly delay: (ms: number) => Promise<void>
+  /** Present only on a context joining an extension's outer transaction. */
+  readonly afterCommit?: (() => void)[]
 }
 
 const DELIVERY_COLUMNS = [
@@ -131,6 +133,10 @@ function queuePosition(ctx: StoreContext, row: DeliveryRow): number {
 }
 
 async function beginImmediate(ctx: StoreContext, op: string, retryUntilLocked: boolean): Promise<boolean> {
+  if (ctx.afterCommit !== undefined) {
+    ctx.sql.exec("SAVEPOINT gateway_enqueue")
+    return true
+  }
   const started = Date.now()
   for (;;) {
     try {
@@ -158,16 +164,17 @@ async function beginImmediate(ctx: StoreContext, op: string, retryUntilLocked: b
 
 function rollbackQuietly(ctx: StoreContext): void {
   try {
-    ctx.sql.exec("ROLLBACK")
+    ctx.sql.exec(ctx.afterCommit === undefined ? "ROLLBACK" : "ROLLBACK TO gateway_enqueue; RELEASE gateway_enqueue")
   } catch {
     return
   }
 }
 
-export async function transaction<T>(ctx: StoreContext, op: string, body: () => T): Promise<T> {
+export async function transaction<T>(ctx: StoreContext, op: string, body: () => T | Promise<T>): Promise<T> {
+  if (ctx.afterCommit !== undefined) return await body()
   await beginImmediate(ctx, op, true)
   try {
-    const value = body()
+    const value = await body()
     ctx.sql.exec("COMMIT")
     return value
   } catch (error) {
@@ -178,6 +185,10 @@ export async function transaction<T>(ctx: StoreContext, op: string, body: () => 
 
 function createMarker(ctx: StoreContext, targetDurableId: string, deliveryId: string, allowExisting: boolean): string {
   const directory = gatewayInboxDirectory(ctx.config.agent_dir, targetDurableId)
+  if (ctx.afterCommit !== undefined) {
+    ctx.afterCommit.push(() => createMarker({ ...ctx, afterCommit: undefined }, targetDurableId, deliveryId, allowExisting))
+    return join(directory, deliveryId)
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const path = join(directory, deliveryId)
   let fd: number
@@ -196,6 +207,10 @@ function createMarker(ctx: StoreContext, targetDurableId: string, deliveryId: st
 }
 
 export function unlinkMarker(ctx: StoreContext, targetDurableId: string, deliveryId: string): void {
+  if (ctx.afterCommit !== undefined) {
+    ctx.afterCommit.push(() => unlinkMarker({ ...ctx, afterCommit: undefined }, targetDurableId, deliveryId))
+    return
+  }
   const path = join(gatewayInboxDirectory(ctx.config.agent_dir, targetDurableId), deliveryId)
   try {
     rmSync(path)
@@ -417,12 +432,14 @@ export async function enqueue(ctx: StoreContext, request: EnqueueRequest): Promi
   if (!(await beginImmediate(ctx, "enqueue", false))) return { kind: "busy" }
   let marker: string | null = null
   let committed = false
+  const effectsAtStart = ctx.afterCommit?.length ?? 0
+  const commitSql = ctx.afterCommit === undefined ? "COMMIT" : "RELEASE gateway_enqueue"
   try {
     write(ctx, "DELETE FROM receipts WHERE expires_at <= ?", [request.now])
     const receipt = selectReceipt(ctx, request.sender_principal, request.receipt.idempotency_key)
     if (receipt !== undefined) {
       const outcome = classifyReceipt(ctx, request, receipt)
-      ctx.sql.exec("COMMIT")
+      ctx.sql.exec(commitSql)
       committed = true
       return outcome
     }
@@ -490,15 +507,16 @@ export async function enqueue(ctx: StoreContext, request: EnqueueRequest): Promi
     ])
     marker = createMarker(ctx, row.target_durable_id, row.delivery_id, false)
     const position = queuePosition(ctx, row)
-    await ctx.hook("beforeDbCommit")
-    ctx.sql.exec("COMMIT")
+    if (ctx.afterCommit === undefined) await ctx.hook("beforeDbCommit")
+    ctx.sql.exec(commitSql)
     committed = true
-    await ctx.hook("afterDbCommit")
+    if (ctx.afterCommit === undefined) await ctx.hook("afterDbCommit")
     return { kind: "inserted", row, queue_position: position }
   } catch (error) {
     if (!committed) {
       rollbackQuietly(ctx)
-      if (marker !== null) rmSync(marker, { force: true })
+      if (ctx.afterCommit !== undefined) ctx.afterCommit.length = effectsAtStart
+      else if (marker !== null) rmSync(marker, { force: true })
     }
     throw error
   }

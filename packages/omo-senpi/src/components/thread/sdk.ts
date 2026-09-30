@@ -9,6 +9,8 @@ import { isUiRequestKind, UI_REQUEST_KINDS } from "./gateway/answer-shape"
 import { type BindInput, OUTBOUND_EVENTS, type OutboundEvent } from "./gateway/bindings"
 import type { GatewayRelay } from "./gateway/relay"
 import { createGatewayStore, type GatewayStore } from "./gateway/store"
+import type { StoreExtensionApi } from "./gateway/store-extensions"
+export type { StoreExtensionApi, StoreExtensionRegistration, StoreExtensionTransaction, StoreExtensionOperation, StoreExtensionResult, StoreExtensionRefusal, StoreExtensionRefusalCode } from "./gateway/store-extensions"
 import type { ExternalAuthor, GatewayDeliveryMode, GatewayDeliveryResult } from "./gateway/types"
 import { createLiveThreadSurface, parseHostStatusAll } from "./live-surface"
 import { createGatewayServices } from "./tools/gateway-services"
@@ -40,7 +42,7 @@ type Relayed<K extends keyof GatewayRelay> = Promise<Awaited<ReturnType<GatewayR
 /** Where a session lives right now, as `omo daemon adopt` needs it. */
 export type LocatedThread = Pick<AddressEntry, "thread_id" | "title" | "cwd" | "status" | "session_path" | "endpoint" | "surface" | "alive">
 
-export type ThreadSdk = {
+export type ThreadSdk = StoreExtensionApi & {
   /** `cli:<uid>`: the principal every receipt, budget and bindingless send of this SDK is keyed by. */
   readonly principal: string
   readonly list: (request: Scoped) => Promise<ThreadToolResult>
@@ -136,6 +138,8 @@ export function createThreadSdk(options: ThreadSdkOptions): ThreadSdk {
   }
 
   return {
+    registerStoreExtension: store.registerStoreExtension,
+    extensionCall: store.extensionCall,
     principal,
     list: (request) => guarded(async () => listThreads(surface, await view(), request.all_scope)),
     read: (request) => guarded(async () => readThread(surface, await view(), { thread: request.thread, max_bytes: request.max_bytes, cursor: request.cursor, all_scope: request.all_scope }, UNKNOWN_CALLER)),

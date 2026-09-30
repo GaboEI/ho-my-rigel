@@ -116,6 +116,68 @@ it queues the message and retries the same `send` (same `--idempotency-key`) aft
 busy human in a thread spends only their own budget; without an author every human in the thread
 shares the binding's one bucket.
 
+## Store extensions
+
+JavaScript packages can register a store extension on `createGatewayStore(...)`, or on the
+`createThreadSdk(...)` result exported by `runtime/thread-sdk/sdk.js`. Registration is local to
+that store handle; each process registers the extensions it uses.
+
+```typescript
+const registered = await store.registerStoreExtension({
+  name: "notes",
+  migrations: [["CREATE TABLE notes_items (id INTEGER PRIMARY KEY, text TEXT)"]],
+  moduleUrl: new URL("./dist/store-ops.mjs", import.meta.url).href,
+})
+const result = await store.extensionCall("notes", "remember", { id: 1, text: "hello" })
+```
+
+The compiled `.js`, `.mjs` or `.cjs` module exports named operations `(tx, args) => result`
+(async is supported). TypeScript is not stripped in the worker. Arguments and results must be
+structured-cloneable. Both API methods return `{ kind: "ok", value }` or
+`{ kind: "refused", code, message }`; registration's value is `{ version }`.
+
+`name` matches `^[a-z][a-z0-9_]{1,31}$`. Each migration step is an array of SQL statements,
+tracked in `extension_schema`, independently of core `user_version`. Registration and calls
+ensure pending steps after core migrations. Each step takes `BEGIN IMMEDIATE` and re-reads the
+version under the lock, so concurrent processes apply it once.
+
+Operations run in one `BEGIN IMMEDIATE`. The transaction surface is:
+
+- `all(columns, sql, params?, orderBy?)`, `one(columns, sql, params?)`, and `exec(sql, params?)`:
+  one SQLite statement per call, using `?` parameters (`string | number | null`). Reads return
+  records keyed by the explicit columns; `one` returns `undefined` when absent; `exec` returns
+  the changed-row count. Use `orderBy` for ordered reads. As in the store's statement-free
+  binding, put literal question marks in parameters, not SQL text.
+- `enqueue({ binding_id, event_id, text, author?, mode? })`: the relay's inbound validation,
+  author-specific rate limits, mode ceiling and idempotency, without contacting a live endpoint
+  before commit. `deliveries.actor_user_id` records `author.user_id`, or NULL without it.
+- `bind({ principal, binding, idempotency_key? })`, `unbind({ principal, binding_id,
+  expected_revision, idempotency_key? })`, `rebind({ principal, binding_id, expected_revision,
+  session_durable_id, idempotency_key? })`, and `outboxAck({ binding_id, cursor,
+  provider_message_id? })`: the existing relay operations, joined to this transaction.
+- `bindingFor({ platform, account_id, chat_id, thread_id })`: the active, unexpired binding
+  or NULL. `outboxPending({ binding_id, after_cursor?, limit? })`: the relay page shape, pending
+  rows only, ordered by cursor; default 100 and maximum 500.
+
+SQL can access only the extension's `<name>_*` objects, never core objects or another namespace.
+SQLite resolves object accesses; `sqlite_schema` (`type`, `name`, `tbl_name`, `sql`) is compared
+before and after every migration step and call. A created, dropped or altered object outside the
+namespace rolls back the transaction, including triggers, views and renames. Use explicit
+prefixed indexes instead of constraints that create unprefixed `sqlite_autoindex_*` objects.
+Transaction-control SQL, PRAGMAs and attached/temporary databases are refused. This is a store
+API contract, not a sandbox for untrusted JavaScript modules.
+
+A thrown operation rolls back extension rows and joined core writes together. Inbox/outbox
+marker writes and removals run only after COMMIT; rollback publishes no marker. A returned
+relay refusal is data, so an operation that wants to undo its earlier work must throw.
+
+Refusal codes are `extension_import_failed`, `extension_unknown_op`, `extension_unknown_name`,
+`extension_schema_violation`, and `gateway_lock_wait_exceeded`. Invalid registration input is
+`invalid_arguments`; an operation throwing is `extension_operation_failed`. The worker keeps
+serving core requests after every refusal. Lock acquisition uses the core busy timeout and
+30-second total bound, not an unbounded retry. Older binaries keep their current newer-schema
+behavior: they open a v5 store without downgrading its version.
+
 ## Connector loop
 
 ```bash

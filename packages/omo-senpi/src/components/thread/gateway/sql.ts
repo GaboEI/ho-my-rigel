@@ -12,9 +12,12 @@
 
 export type SqliteConnection = {
   exec(sql: string): void
+  setAuthorizer(callback: SqlAuthorizer | null): void
   function(name: string, options: { readonly varargs?: boolean; readonly deterministic?: boolean }, fn: (...args: never[]) => unknown): void
   close(): void
 }
+
+export type SqlAuthorizer = (action: number, arg1: string | null, arg2: string | null, database: string | null, source: string | null) => number
 
 export type SqlValue = string | number | null
 
@@ -36,6 +39,15 @@ export class Sql {
 
   exec(sql: string): void {
     this.db.exec(sql)
+  }
+
+  authorized<T>(authorizer: SqlAuthorizer, body: () => T): T {
+    this.db.setAuthorizer(authorizer)
+    try {
+      return body()
+    } finally {
+      this.db.setAuthorizer(null)
+    }
   }
 
   run(sql: string, params: readonly SqlValue[] = []): number {
