@@ -1,0 +1,21 @@
+{
+  "provider": {
+    "rigel-fixture": {
+      "name": "Rigel deterministic test provider",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:4010/v1",
+        "apiKey": "rigel-fixture-no-secret"
+      },
+      "models": {
+        "fixture": {
+          "name": "Rigel fixture",
+          "tool_call": true,
+          "modalities": { "input": ["text"], "output": ["text"] },
+          "limit": { "context": 16384, "output": 2048 }
+        }
+      }
+    }
+  },
+  "model": "rigel-fixture/fixture"
+}

@@ -1,0 +1,10 @@
+{
+  "provider": {
+    "opencode-go": {
+      "options": {
+        "baseURL": "http://127.0.0.1:18905"
+      }
+    }
+  },
+  "model": "opencode-go/deepseek-v4.1-flash"
+}
