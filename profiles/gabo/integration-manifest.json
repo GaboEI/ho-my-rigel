@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "profile": "gabo",
+  "platform": {
+    "opencode": ">=2.0.19",
+    "installation": "manual-after-isolated-acceptance"
+  },
+  "requiredPlugins": [
+    "opencode-go-multi-auth",
+    "oc-codex-multi-auth",
+    "opencode-model-filters-v2",
+    "context-mode",
+    "local.goal-mode.server",
+    "opencode-warp",
+    "auto_approve_keybind.mjs"
+  ],
+  "optionalPlugins": [
+    "kdco-primitives",
+    "kkcode.notify",
+    "whisperopencode-push"
+  ],
+  "mcpPolicy": {
+    "websearch": "tavily",
+    "context7": "external-singleton",
+    "playwright": "external-singleton",
+    "availableOnDemand": ["github", "docker", "ssh", "postgres", "tide", "openrouter", "obsidian"],
+    "omoBuiltinsDisabled": ["context7"]
+  },
+  "rootAuthorities": {
+    "orchestrator": "forja",
+    "acceptance": "juez",
+    "goalContinuation": "local.goal-mode.server",
+    "contextCompaction": "context-mode"
+  },
+  "nonGoals": [
+    "copy WatchdogVPN skills or commands",
+    "install into the active OpenCode configuration",
+    "store credentials, accounts, hosts, or database connections"
+  ]
+}

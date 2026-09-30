@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
+  "profiles": {
+    "gabo": {
+      "[opencode]": {
+        "agent_definitions": [
+          "__OMO_PROFILE_ROOT__/opencode/agents/forja.md",
+          "__OMO_PROFILE_ROOT__/opencode/agents/juez.md"
+        ],
+        "websearch": { "provider": "tavily" },
+        "disabled_mcps": ["context7"],
+        "browser_automation_engine": { "provider": "playwright" },
+        "goal": {
+          "enabled": false,
+          "auto_start": false,
+          "default_max_iterations": 100
+        },
+        "default_mode": {
+          "goal": false,
+          "ultrawork": false
+        },
+        "sisyphus_agent": {
+          "disabled": true
+        },
+        "disabled_skills": ["dev-browser", "ultimate-browsing"],
+        "team_mode": {
+          "enabled": true,
+          "tmux_visualization": false,
+          "max_parallel_members": 4,
+          "max_members": 8
+        }
+      }
+    }
+  }
+}
