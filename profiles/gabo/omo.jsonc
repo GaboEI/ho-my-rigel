@@ -26,6 +26,7 @@
             }
           }
         },
+        "disabled_agents": ["forja"],
         "websearch": { "provider": "tavily" },
         "disabled_mcps": ["context7"],
         "browser_automation_engine": { "provider": "playwright" },
