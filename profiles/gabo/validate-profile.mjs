@@ -34,13 +34,13 @@ if (manifest.rootAuthorities?.acceptance !== "juez") fail("Juez must be the acce
 if (!manifest.requiredPlugins?.includes("oc-codex-multi-auth")) fail("oc-codex-multi-auth is required")
 if (manifest.mcpPolicy?.websearch !== "tavily" || !manifest.mcpPolicy?.omoBuiltinsDisabled?.includes("context7")) fail("MCP singleton policy must preserve Tavily and external Context7")
 if (!manifest.mcpPolicy?.omoBuiltinsRetained?.includes("grep_app") || !manifest.mcpPolicy?.omoBuiltinsRetained?.includes("lsp")) fail("OmO grep_app and LSP must remain available")
-for (const mcp of ["docker", "ssh"]) {
+for (const mcp of ["ssh"]) {
   if (!manifest.mcpPolicy?.bundledLocal?.includes(mcp) || opencode.mcp?.[mcp]?.type !== "local" || opencode.mcp[mcp].enabled !== true) fail(`${mcp} must remain a bundled enabled local MCP`)
 }
 for (const mcp of ["context7", "playwright", "obsidian"]) {
   if (!manifest.mcpPolicy?.coreExternalConnections?.includes(mcp)) fail(`${mcp} must remain a core per-machine connection`)
 }
-if (!manifest.mcpPolicy?.optIn?.includes("github") || !manifest.mcpPolicy?.optIn?.includes("postgres")) fail("GitHub and Postgres must remain opt-in MCPs")
+if (!manifest.mcpPolicy?.optIn?.includes("docker") || !manifest.mcpPolicy?.optIn?.includes("github") || !manifest.mcpPolicy?.optIn?.includes("postgres")) fail("Docker, GitHub, and Postgres must remain opt-in MCPs")
 if (!manifest.mcpPolicy?.quarantinedPendingReview?.includes("tide") || !manifest.mcpPolicy?.excluded?.includes("openrouter")) fail("Tide must remain quarantined and OpenRouter excluded")
 for (const skill of ["prompt-master", "juez-tester", "juez-repo"]) {
   if (!manifest.skillPolicy?.gaboCore?.includes(skill)) fail(`${skill} must remain a core Gabo skill`)

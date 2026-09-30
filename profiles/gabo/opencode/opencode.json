@@ -3,11 +3,6 @@
   "plugin": ["file://__OMO_PLUGIN_ENTRY__"],
   "default_agent": "sisyphus",
   "mcp": {
-    "docker": {
-      "type": "local",
-      "command": ["npx", "-y", "@hypnosis/docker-mcp-server"],
-      "enabled": true
-    },
     "ssh": {
       "type": "local",
       "command": ["npx", "-y", "@hypnosis/ssh-mcp-server"],
