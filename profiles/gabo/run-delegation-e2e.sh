@@ -59,4 +59,12 @@ for _ in $(seq 1 80); do curl -fsS -u "opencode:$password" "http://127.0.0.1:$po
 rg -q 'SPECIALIST_EVIDENCE' "$sandbox/messages.json"
 rg -q 'SELF_AUDIT_PASS' "$sandbox/messages.json"
 rg -q 'explore' "$sandbox/messages.json"
-echo "Ho My Rigel delegation E2E passed: Sisyphus delegated and completed its self-audit"
+juez_response="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"agent":"juez","model":{"providerID":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/")[0])' "$fixture_config")"'","id":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/").slice(1).join("/"))' "$fixture_config")"'"}}' "http://127.0.0.1:$port/api/session")"
+juez_session="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const id=JSON.parse(s).data?.id;if(!id)process.exit(1);console.log(id)})' <<<"$juez_response")"
+juez_prompt="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"text":"Review this isolated delegation evidence: SPECIALIST_EVIDENCE; SELF_AUDIT_PASS. Return only APPROVED, REJECTED, or BLOCKED."}' "http://127.0.0.1:$port/api/session/$juez_session/prompt")"
+node -e 'const value=JSON.parse(process.argv[1]); if(value.error || value._tag)process.exit(1)' "$juez_prompt"
+for _ in $(seq 1 80); do curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$juez_session/message" > "$sandbox/juez-messages.json" 2>/dev/null && rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/juez-messages.json" && break; sleep .25; done
+rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/juez-messages.json"
+curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$juez_session" > "$sandbox/juez-session.json"
+rg -q '"agent":"juez"' "$sandbox/juez-session.json"
+echo "Ho My Rigel delegation E2E passed: Sisyphus delegated, self-audited, and Juez returned an independent verdict"
