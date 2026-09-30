@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "rigel-probe",
+  "agent": {
+    "rigel-probe": {
+      "mode": "primary",
+      "description": "Isolated Rigel V2 agent registration probe.",
+      "prompt": "You are a registration probe."
+    }
+  }
+}
