@@ -50,6 +50,14 @@ for (const skill of manifest.skillPolicy?.bundled ?? []) {
   if (!existsSync(skillPath) || !readFileSync(skillPath, "utf8").startsWith(`---\nname: ${skill}`)) fail(`${skill} must have a valid bundled SKILL.md`)
 }
 if (!existsSync(join(root, "skills", "obsidian-second-brain-audit", "scripts", "audit_vault.py"))) fail("obsidian-second-brain-audit must retain its audit script")
+for (const resource of [
+  ["tui-design", "references", "design-principles.md"],
+  ["tui-design", "templates", "bubbletea-starter", "main.go"],
+  ["skill-creator", "agents", "grader.md"],
+  ["skill-creator", "references", "schemas.md"],
+]) {
+  if (!existsSync(join(root, "skills", ...resource))) fail(`${resource[0]} must retain its portable resources`)
+}
 for (const skill of ["dev-browser", "ultimate-browsing"]) {
   if (!manifest.skillPolicy?.omoDisabled?.includes(skill)) fail(`${skill} must remain disabled in the Gabo profile`)
 }

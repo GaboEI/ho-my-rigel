@@ -8,7 +8,7 @@ It is deliberately not an installer. It contains no credentials, local host path
 
 - `omo.jsonc` defines the OmO `gabo` profile: Tavily, one external Context7, external Goal ownership, Sisyphus as the merged orchestrator, and canonical Playwright.
 - `opencode/prompts/sisyphus-orchestration.md` adds the delegation and acceptance contract to upstream Sisyphus; `opencode/agents/` contains the independent Juez definition.
-- `skills/` bundles the portable governance/support skills plus the Obsidian writing, audit, and CLI skills; the audit script is included with its skill.
+- `skills/` bundles portable governance/support skills, the complete Obsidian writing/audit/CLI suite, `tui-design` with its references and starter templates, and `skill-creator` with its evaluation resources.
 - `opencode/opencode.json` is a test template. The runner substitutes `__OMO_PLUGIN_ENTRY__` with the local plugin entrypoint; it bundles only the protective SSH MCP command. Docker remains an opt-in external MCP. It must never be copied unchanged to a user configuration.
 - `integration-manifest.json` records the core per-machine connections (Context7, Playwright, and Obsidian), opt-in integrations (GitHub and Postgres), and the excluded/quarantined services.
 
