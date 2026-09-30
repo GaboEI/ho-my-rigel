@@ -26,7 +26,7 @@
     "bundledLocal": ["ssh"],
     "coreExternalConnections": ["context7", "playwright", "obsidian"],
     "optIn": ["docker", "github", "postgres"],
-    "quarantinedPendingReview": ["tide"],
+    "optInSecurity": ["tide"],
     "excluded": ["openrouter"],
     "omoBuiltinsRetained": ["grep_app", "lsp"],
     "omoBuiltinsDisabled": ["context7"],

@@ -41,7 +41,10 @@ for (const mcp of ["context7", "playwright", "obsidian"]) {
   if (!manifest.mcpPolicy?.coreExternalConnections?.includes(mcp)) fail(`${mcp} must remain a core per-machine connection`)
 }
 if (!manifest.mcpPolicy?.optIn?.includes("docker") || !manifest.mcpPolicy?.optIn?.includes("github") || !manifest.mcpPolicy?.optIn?.includes("postgres")) fail("Docker, GitHub, and Postgres must remain opt-in MCPs")
-if (!manifest.mcpPolicy?.quarantinedPendingReview?.includes("tide") || !manifest.mcpPolicy?.excluded?.includes("openrouter")) fail("Tide must remain quarantined and OpenRouter excluded")
+if (!manifest.mcpPolicy?.optInSecurity?.includes("tide") || !manifest.mcpPolicy?.excluded?.includes("openrouter")) fail("Tide must remain optional security tooling and OpenRouter excluded")
+for (const mcp of ["context7", "playwright", "obsidian", "docker", "github", "postgres", "tide", "openrouter"]) {
+  if (mcp in (opencode.mcp ?? {})) fail(`${mcp} must not be embedded in the portable profile`)
+}
 for (const skill of ["prompt-master", "juez-tester", "juez-repo"]) {
   if (!manifest.skillPolicy?.gaboCore?.includes(skill)) fail(`${skill} must remain a core Gabo skill`)
 }

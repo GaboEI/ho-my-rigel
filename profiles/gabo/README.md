@@ -22,6 +22,8 @@ Run `bash profiles/gabo/run-delegation-preflight.sh` to execute that isolated sm
 
 Run `bash profiles/gabo/run-session-authority-preflight.sh` to verify that the Gabo profile preserves external Goal and Context Mode as root authorities while OmO retains delegated-child continuation.
 
+Run `bash profiles/gabo/run-mcp-policy-preflight.sh` to validate singleton ownership, the embedded protective SSH MCP, and the absence of credentials or duplicate external MCP declarations.
+
 ## Activation for a future isolated test
 
 The test runner will create a temporary home, copy `omo.jsonc` as `<temporary-home>/.omo/omo.jsonc`, expand the portable agent-definition root only inside the container, copy the OpenCode template, substitute the local plugin entrypoint, and set `OMO_PROFILE=gabo`. It will never use Gabo's real configuration directory.
