@@ -15,8 +15,8 @@ It is deliberately not an installer. It contains no credentials, local host path
 
 Run `node profiles/gabo/validate-profile.mjs`. It validates the static integration contract and rejects personal paths, secret markers, WatchdogVPN content, a duplicate OmO Context7, a competing OmO root goal, and a non-placeholder plugin path.
 
-Run `bash profiles/gabo/run-v2-isolated.sh` to boot the host OpenCode **V2** binary against a disposable home and XDG tree. The runner copies only this kit, points OpenCode at the local source entrypoint, starts an authenticated local server, verifies health, and removes the sandbox on exit. It does not mount or read the active OpenCode configuration.
+Run `bash profiles/gabo/run-v2-isolated.sh` to boot the host OpenCode **V2** binary against a disposable Docker home and XDG tree. The runner copies only this kit, mounts the fork source read-only, starts an authenticated local server, verifies the V2 OpenAPI surface plus the selected profile and agent definitions, and removes the sandbox on exit. It does not mount or read the active OpenCode configuration.
 
 ## Activation for a future isolated test
 
-The test runner will create a temporary home, copy `omo.jsonc` as `<temporary-home>/.omo/omo.jsonc`, copy the OpenCode template and agents under its temporary config directory, substitute the local plugin entrypoint, and set `OMO_PROFILE=gabo`. It will never use Gabo's real configuration directory.
+The test runner will create a temporary home, copy `omo.jsonc` as `<temporary-home>/.omo/omo.jsonc`, expand the portable agent-definition root only inside the container, copy the OpenCode template, substitute the local plugin entrypoint, and set `OMO_PROFILE=gabo`. It will never use Gabo's real configuration directory.
