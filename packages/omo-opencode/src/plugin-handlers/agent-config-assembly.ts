@@ -242,8 +242,7 @@ async function assembleSisyphusEnabledConfig(params: AssembleAgentConfigParams):
   };
 }
 
-async function assembleSisyphusDisabledConfig(params: AssembleAgentConfigParams): Promise<void> {
-  const { currentModel } = params;
+function assembleSisyphusDisabledConfig(params: AssembleAgentConfigParams): void {
   const protectedBuiltinAgentNames = createProtectedAgentNameSet(Object.keys(params.builtinAgents));
   const filteredSources = filterCustomAgentSources(params.sources, protectedBuiltinAgentNames);
   const filteredConfigAgents = params.sources.configAgent
@@ -256,19 +255,8 @@ async function assembleSisyphusDisabledConfig(params: AssembleAgentConfigParams)
     params.pluginConfig.agents,
   );
 
-  // Sisyphus may be intentionally absent as the root orchestrator while
-  // category-based delegation remains available through its focused executor.
-  // This preserves the task-tool contract for alternate primary agents such as
-  // Forja without reintroducing Sisyphus into the catalog.
-  const sisyphusJunior = createSisyphusJuniorAgentWithOverrides(
-    params.pluginConfig.agents?.["sisyphus-junior"],
-    currentModel,
-    params.useTaskSystem,
-  );
-
   params.config.agent = {
     ...params.builtinAgents,
-    "sisyphus-junior": sisyphusJunior,
     ...customAgents,
     ...filteredConfigAgents,
   };
@@ -281,7 +269,7 @@ export async function assembleAgentConfig(params: AssembleAgentConfigParams): Pr
   if (isSisyphusEnabled && params.builtinAgents.sisyphus) {
     await assembleSisyphusEnabledConfig(params);
   } else {
-    await assembleSisyphusDisabledConfig(params);
+    assembleSisyphusDisabledConfig(params);
   }
 
   return { configuredDefaultAgent };

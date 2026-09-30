@@ -971,22 +971,5 @@ describe("applyAgentConfig builtin override protection", () => {
       expect(result["opencode-agent"]).toBeDefined()
       expect(result["opencode-agent"]?.prompt).toBe("from opencode.json")
     })
-
-    test("keeps Sisyphus-Junior callable when Sisyphus orchestration is disabled", async () => {
-      // given
-      const pluginConfig = createPluginConfig()
-      pluginConfig.sisyphus_agent = { disabled: true, planner_enabled: false }
-
-      // when
-      const result = await applyAgentConfig({
-        config: createBaseConfig(),
-        pluginConfig,
-        ctx: { directory: "/tmp" },
-        pluginComponents: createPluginComponents(),
-      })
-
-      // then category-based delegation still has its focused executor
-      expect(["subagent", "all"]).toContain(result[BUILTIN_SISYPHUS_JUNIOR_DISPLAY_NAME]?.mode)
-    })
   })
 })
