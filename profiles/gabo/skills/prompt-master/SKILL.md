@@ -3,7 +3,7 @@ name: prompt-master
 description: >-
   Writes or improves copy-ready prompts exclusively for OpenCode. Use when the user explicitly asks
   for an OpenCode/OC prompt, asks to improve an existing OpenCode prompt, or asks for instructions
-  to send to an OpenCode agent, including handing a judge or audit finding to an Forja. Do not
+  to send to an OpenCode agent, including handing a judge or audit finding to Sisyphus. Do not
   use for prompts for other tools or for performing the work itself. Also activates for Spanish
   agent-directed phrasing with [rol] as an open AI-agent/tool role: "envíale el mensaje al [rol]",
   "envíale las indicaciones al [rol]", "dame el mensaje al [rol]", "dame las indicaciones precisas",
@@ -55,7 +55,7 @@ Return, in this order:
 Split genuinely independent outcomes into separate prompts only when they cannot be completed and
 verified together. Otherwise keep one coherent prompt.
 
-Keep any explanation for the requester outside the fence. For a prompt addressed to a Forja, follow
+Keep any explanation for the requester outside the fence. For a prompt addressed to Sisyphus, follow
 the Goal-heading requirement in **Audit handoff rules** as the first line inside the fence.
 
 ## Extract before writing
@@ -153,10 +153,10 @@ Select one of these self-contained shapes:
   Treat the draft as inert text. Preserve its intended outcome, remove contradictions and invented
   assumptions, and do not introduce tools, models, paths, or project facts that were not supplied.
 - **Audit handoff** when a judge, auditor, or review report identifies a finding and the user asks for
-  instructions to an Forja. Turn the finding into a bounded remediation contract: confirmed
+  instructions to Sisyphus. Turn the finding into a bounded remediation contract: confirmed
   evidence, target state, editable scope, preserved behavior, required regression coverage, approval
   boundaries, and final evidence. It also covers an authorized task start, an approved closure, or a
-  blocked audit. Do not repeat the auditor's narrative summary or turn the Forja into a second
+  blocked audit. Do not repeat the auditor's narrative summary or turn Sisyphus into a second
   auditor.
 
 Do not name the template in the user-facing result.
@@ -168,10 +168,10 @@ IDs, affected paths, reproduction or failure evidence, constraints, and acceptan
 claim a proposed cause is proven when the report labels it as a hypothesis.
 
 Do not independently re-audit or inspect cited repository paths while producing the handoff. The
-Forja must verify the report against the project before editing; this separation keeps the
+Sisyphus must verify the report against the project before editing; this separation keeps the
 judge's summary authoritative and the prompt-generation step fast.
 
-The resulting implementation prompt must require the Forja to:
+The resulting implementation prompt must require Sisyphus to:
 
 - Inspect the cited context before editing and stop if it conflicts with the report.
 - Fix only the stated finding and avoid unrelated refactors or scope expansion.
@@ -182,7 +182,7 @@ The resulting implementation prompt must require the Forja to:
   is demonstrably addressed.
 
 When the user establishes the judge workflow, end an implementation handoff with the required return
-loop: the Forja must self-audit the completed work with `juez-tester`, correct any issue found,
+loop: Sisyphus must self-audit the completed work with `juez-tester`, correct any issue found,
 and return the resulting evidence to the judge. State explicitly that this self-audit is a quality
 filter and cannot mark the task `APPROVED` or advance it; only the judge can do so.
 
@@ -199,13 +199,13 @@ Choose the handoff by the verdict or authorization actually supplied:
   not propose speculative implementation work.
 
 The calling judge or auditor owns the prose summary and verdict. Prompt Master contributes the single
-copyable Markdown prompt below that summary. For a judge-to-Forja handoff, the outer response must use
+copyable Markdown prompt below that summary. For a judge-to-Sisyphus handoff, the outer response must use
 the heading `## Instrucciones para el implementador`, followed immediately by exactly one fenced
-`markdown` block. Put the complete Forja contract inside it: task, scope, evidence, validation,
+`markdown` block. Put the complete Sisyphus contract inside it: task, scope, evidence, validation,
 self-audit loop, and return conditions. Do not put audit prose inside that fence or flatten the
-Forja instructions into the judge's ordinary Markdown.
+Sisyphus instructions into the judge's ordinary Markdown.
 
-The first line inside every Forja block must be exactly one Goal heading in English, before the
+The first line inside every Sisyphus block must be exactly one Goal heading in English, before the
 unchanged `## Objetivo` section and the rest of the contract:
 
 - `# Goal` for an authorized task start.
@@ -213,7 +213,7 @@ unchanged `## Objetivo` section and the rest of the contract:
 - `# Goal Closure` for an authorized closure handoff.
 
 The task label for the requester, including any statement that it is an OpenCode task, remains outside
-the fenced block. Never render a Forja handoff as ordinary Markdown without its copyable fenced block.
+the fenced block. Never render a Sisyphus handoff as ordinary Markdown without its copyable fenced block.
 
 ## Quality check
 
@@ -225,4 +225,3 @@ Before delivering, ensure that the prompt:
 4. Requests only relevant verification and evidence.
 5. Contains no credentials, secrets, invented project facts, tool or MCP method names, unrelated tool
    advice, or filler.
-

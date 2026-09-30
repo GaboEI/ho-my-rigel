@@ -8,7 +8,7 @@
         ],
         "agents": {
           "sisyphus": {
-            "prompt_append": "file://__OMO_PROFILE_ROOT__/opencode/prompts/forja-orchestration.md"
+            "prompt_append": "file://__OMO_PROFILE_ROOT__/opencode/prompts/sisyphus-orchestration.md"
           },
           "juez": {
             "mode": "primary",
