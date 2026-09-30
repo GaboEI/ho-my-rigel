@@ -1,3 +1,9 @@
+## 2026-09-30 - host status and thread list share strict unknown-activity semantics (#9222 gate round 2)
+
+Malformed, partial and over-cap final session records now remain `null` through both `last_activity_at` and degraded
+`updated_at`. The public thread list applies the documented known-newest/null-last/id-ascending order after live and
+resumable rows are combined.
+
 ## 2026-09-30 - `omo host status --all` never labels older activity as newest (#9222 gate G1)
 
 `last_activity_at` now follows the thread SDK's truthful bounded result: the final complete session entry's timestamp,
