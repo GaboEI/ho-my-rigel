@@ -1,0 +1,17 @@
+{
+  "orchestratedAgentIds": [
+    "Sisyphus - ultraworker",
+    "Prometheus - Plan Builder",
+    "Atlas - Plan Executor",
+    "explore",
+    "librarian",
+    "Metis - Plan Consultant",
+    "Momus - Plan Critic",
+    "multimodal-looker",
+    "oracle",
+    "Sisyphus-Junior"
+  ],
+  "preservedIndependentAgentIds": ["juez"],
+  "disabledLegacyAgentIds": ["forja"],
+  "excludedOmOAgentIds": ["Hephaestus - Deep Agent", "judge", "build", "plan"]
+}
