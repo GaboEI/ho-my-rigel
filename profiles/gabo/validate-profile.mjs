@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 
@@ -32,6 +32,17 @@ if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skill
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "forja") fail("Sisyphus must own the merged Forja orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "juez") fail("Juez must be the acceptance authority")
 if (!manifest.requiredPlugins?.includes("oc-codex-multi-auth")) fail("oc-codex-multi-auth is required")
+if (manifest.mcpPolicy?.websearch !== "tavily" || !manifest.mcpPolicy?.omoBuiltinsDisabled?.includes("context7")) fail("MCP singleton policy must preserve Tavily and external Context7")
+if (!manifest.mcpPolicy?.omoBuiltinsRetained?.includes("grep_app") || !manifest.mcpPolicy?.omoBuiltinsRetained?.includes("lsp")) fail("OmO grep_app and LSP must remain available")
+for (const skill of ["prompt-master", "juez-tester", "juez-repo"]) {
+  if (!manifest.skillPolicy?.gaboCore?.includes(skill)) fail(`${skill} must remain a core Gabo skill`)
+  if (!manifest.skillPolicy?.bundled?.includes(skill)) fail(`${skill} must be bundled in the portable profile`)
+  const skillPath = join(root, "skills", skill, "SKILL.md")
+  if (!existsSync(skillPath) || !readFileSync(skillPath, "utf8").startsWith(`---\nname: ${skill}`)) fail(`${skill} must have a valid bundled SKILL.md`)
+}
+for (const skill of ["dev-browser", "ultimate-browsing"]) {
+  if (!manifest.skillPolicy?.omoDisabled?.includes(skill)) fail(`${skill} must remain disabled in the Gabo profile`)
+}
 if (opencode.default_agent !== "sisyphus") fail("Sisyphus must be the default agent")
 if (opencode.plugin?.length !== 1 || !opencode.plugin[0].includes("__OMO_PLUGIN_ENTRY__")) fail("plugin entry must remain an explicit test-time placeholder")
 

@@ -39,6 +39,7 @@ mkdir -p "$sandbox/home/.omo/opencode/agents" "$sandbox/home/.omo/opencode/promp
 sed 's|__OMO_PROFILE_ROOT__|/sandbox/home/.omo|g' "$root/profiles/gabo/omo.jsonc" > "$sandbox/home/.omo/omo.jsonc"
 cp "$root/profiles/gabo/opencode/agents/juez.md" "$sandbox/home/.omo/opencode/agents/juez.md"
 cp "$root/profiles/gabo/opencode/prompts/forja-orchestration.md" "$sandbox/home/.omo/opencode/prompts/forja-orchestration.md"
+cp -R "$root/profiles/gabo/skills" "$sandbox/xdg/config/opencode/skills"
 sed 's|file://__OMO_PLUGIN_ENTRY__|file:///workspace/packages/omo-opencode/src/index.ts|g' "$root/profiles/gabo/opencode/opencode.json" > "$sandbox/xdg/config/opencode/opencode.json"
 
 docker run -d --rm --name "$container_name" -p "127.0.0.1:${port}:${port}" \

@@ -24,7 +24,19 @@
     "context7": "external-singleton",
     "playwright": "external-singleton",
     "availableOnDemand": ["github", "docker", "ssh", "postgres", "tide", "openrouter", "obsidian"],
-    "omoBuiltinsDisabled": ["context7"]
+    "omoBuiltinsRetained": ["grep_app", "lsp"],
+    "omoBuiltinsDisabled": ["context7"],
+    "externalConfigurationRequired": ["context7", "playwright", "github", "docker", "ssh", "postgres", "tide", "openrouter", "obsidian"]
+  },
+  "skillPolicy": {
+    "bundled": ["prompt-master", "juez-tester", "juez-repo"],
+    "gaboCore": ["prompt-master", "juez-tester", "juez-repo"],
+    "gaboAvailable": ["github-public-writing", "obsidian-vault-writing-rules", "obsidian-second-brain-audit", "obsidian-markdown", "obsidian-cli", "obsidian-bases", "json-canvas", "tui-design", "skill-creator", "opencode-multi-auth-fix", "defuddle"],
+    "omoAdopt": ["debugging", "frontend", "git-master", "remove-ai-slops", "security-research", "visual-qa", "team-mode"],
+    "omoAdapt": ["playwright", "review-work", "init-deep", "ulw-plan", "ulw-research", "ulw-execute"],
+    "omoProgressive": ["ast-grep", "coding-agent-sessions", "data-scientist", "lsp-setup", "programming", "refactor"],
+    "omoDisabled": ["dev-browser", "ultimate-browsing"],
+    "projectLocalExcluded": ["watchdogvpn-session-start", "watchdogvpn-standing-rules", "watchdogvpn-task-closure"]
   },
   "rootAuthorities": {
     "orchestrator": "sisyphus",
