@@ -29,12 +29,12 @@ if (beforeFingerprint.obsidian !== state.protectedFingerprint.obsidian || before
 if (!(before.plugin || []).includes(state.pluginEntry)) fail("no se encontró el entrypoint Rigel activo")
 
 fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
-for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs"]) {
+for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs"]) {
   fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), path.join(runtime, file === "rigel-v2-native.mjs" ? "index.js" : file))
 }
 fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
+for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
 
 const raw = fs.readFileSync(configFile, "utf8")
 const oldEntry = JSON.stringify(state.pluginEntry)

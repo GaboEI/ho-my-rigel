@@ -22,6 +22,7 @@ describe("Rigel native OpenCode V2 delegation", () => {
     expect(calls).toEqual([{ location }])
     expect(agents.map((agent) => agent.name)).toEqual(["explore", "oracle"])
     expect(resolveNamedAgent(agents, "oracle")).toMatchObject({ name: "oracle", mode: "subagent" })
+    expect(resolveNamedAgent([{ name: "Explore", mode: "subagent" }], "explore")).toMatchObject({ name: "Explore" })
   })
 
   test("uses V2's scoped app.agents surface when that is the plugin-host client", async () => {
@@ -54,7 +55,7 @@ describe("Rigel native OpenCode V2 delegation", () => {
     expect(delegated).toEqual({ sessionID: "ses_child", agent: "explore", background: true })
     expect(calls).toEqual([
       ["create", { agent: "explore", location: { directory: "/isolated/project" } }],
-      ["prompt", { sessionID: "ses_child", prompt: { text: "<rigel-native-child-task>\nList root files only." }, resume: true }],
+      ["prompt", { sessionID: "ses_child", text: "<rigel-native-child-task>\nList root files only.", resume: true }],
     ])
     expect(taskResult(delegated)).toMatchObject({ metadata: { sessionID: "ses_child", agent: "explore", background: true } })
   })

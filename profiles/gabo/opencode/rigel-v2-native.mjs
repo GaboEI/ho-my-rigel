@@ -1,16 +1,26 @@
 import {
-  delegateNamedAgent,
-  listCallableAgents,
+  delegateNamedAgentFromClients,
+  listCallableAgentsFromClients,
   resolveNamedAgent,
   taskResult,
 } from "./rigel-v2-native-core.mjs"
 import { createNativePromptHook, loadUltraworkDirective } from "./rigel-v2-native-prompt.mjs"
+import { categoryTaskPrompt, resolveCategoryFromClients } from "./rigel-v2-native-categories.mjs"
 
+// V2 accepts a JSON Schema/Standard Schema/Effect codec. A raw V1 Zod shape
+// becomes `unknown` to the model, which silently produces V1 argument names.
 const taskInput = {
-  subagent_type: { _zod: { def: { type: "string" } } },
-  description: { _zod: { def: { type: "string" } } },
-  prompt: { _zod: { def: { type: "string" } } },
-  run_in_background: { _zod: { def: { type: "boolean" } } },
+  type: "object",
+  properties: {
+    subagent_type: { type: "string", description: "Exact callable agent name; omit when category is supplied." },
+    category: { type: "string", description: "OmO category; omit when subagent_type is supplied." },
+    description: { type: "string", description: "Short task description." },
+    prompt: { type: "string", description: "Full task for the child agent." },
+    run_in_background: { type: "boolean", description: "Run independently and return the child session ID." },
+  },
+  required: ["prompt"],
+  additionalProperties: false,
+  anyOf: [{ required: ["subagent_type"] }, { required: ["category"] }],
 }
 
 export default {
@@ -20,21 +30,32 @@ export default {
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
+    const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "task"
     const registration = await context.tool.transform((editor) => {
       editor.add({
-        name: "task",
-        description: "Delegate a task to a callable OpenCode V2 subagent.",
+        name: taskName,
+        description: "Delegate a task to a callable OpenCode V2 subagent or an OmO category.",
         input: taskInput,
         execute: async (input, toolContext) => {
-          const client = toolContext?.client ?? context.client
-          const agents = await listCallableAgents(client, location)
-          const agent = resolveNamedAgent(agents, input.subagent_type)
-          const delegated = await delegateNamedAgent({
-            client,
+          console.error(`[ho-my-rigel] Native V2 task context: name=${taskName}; setup=${Object.keys(context ?? {}).sort().join(",")}; tool=${Object.keys(toolContext ?? {}).sort().join(",")}`)
+          // In the V2 setup() API, the context itself is the typed service
+          // surface. Tool execution receives only turn metadata, not a second
+          // API client. Do not assume the V1 `context.client` shape.
+          const clients = [context, context.client, toolContext?.client]
+          const agents = await listCallableAgentsFromClients(clients, location)
+          const category = input.category
+            ? await resolveCategoryFromClients(clients, location, input.category)
+            : undefined
+          const agent = category
+            ? resolveNamedAgent(agents, "Sisyphus-Junior")
+            : resolveNamedAgent(agents, input.subagent_type)
+          const delegated = await delegateNamedAgentFromClients({
+            clients,
             location,
             agent,
-            prompt: input.prompt,
+            prompt: category ? categoryTaskPrompt(input.prompt, category) : input.prompt,
             background: input.run_in_background !== false,
+            model: category?.model,
           })
           return taskResult(delegated)
         },
@@ -48,7 +69,7 @@ export default {
       // for the same turn.
       defaultUltrawork: process.env.RIGEL_NATIVE_DEFAULT_ULTRAWORK !== "0",
     }))
-    console.error("[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; inventory resolves at invocation time")
+    console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     return async () => {
       await Promise.all([registration?.dispose?.(), promptRegistration?.dispose?.()])
     }

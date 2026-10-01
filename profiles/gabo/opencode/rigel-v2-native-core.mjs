@@ -41,10 +41,36 @@ export async function listCallableAgents(client, location) {
   throw new Error("OpenCode V2 agent inventory API is unavailable")
 }
 
+/**
+ * V2 exposes a setup client and a tool-execution client.  They need not carry
+ * the same endpoint subsets, so inventory is intentionally resolved from the
+ * first client that can answer it, never from an assumed global singleton.
+ */
+export async function listCallableAgentsFromClients(clients, location) {
+  const diagnostics = []
+  for (const client of clients.filter(Boolean)) {
+    try {
+      const agents = await listCallableAgents(client, location)
+      if (agents.length > 0) return agents
+      diagnostics.push("inventory returned no callable agents")
+    } catch (error) {
+      diagnostics.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(`OpenCode V2 callable-agent inventory is unavailable: ${diagnostics.join("; ")}`)
+}
+
 export function resolveNamedAgent(agents, requestedName) {
   const requested = String(requestedName ?? "").trim()
+  // OmO's prompts use stable lowercase identifiers (`explore`, `oracle`),
+  // while V2 can surface a display-cased builtin (`Explore`). Resolve names
+  // case-insensitively but keep the host's canonical name for session.create.
   const agent = agents.find((candidate) => candidate.name === requested)
-  if (agent) return agent
+    ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === requested.toLocaleLowerCase())
+  if (agent) {
+    console.error(`[ho-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}`)
+    return agent
+  }
   const available = agents.map((candidate) => candidate.name).sort()
   throw new Error(`Unknown agent: "${requested}". Available agents: ${available.join(", ")}`)
 }
@@ -71,18 +97,32 @@ function sessionIdFrom(response) {
   return id
 }
 
-export async function delegateNamedAgent({ client, location, agent, prompt, background = true }) {
+export async function delegateNamedAgent({ client, location, agent, prompt, background = true, model }) {
   const sessions = sessionApi(client)
-  const created = await sessions.create({ agent: agent.name, location })
+  const created = await sessions.create({ agent: agent.name, location, ...(model ? { model } : {}) })
   const sessionID = sessionIdFrom(created)
   await sessions.prompt({
     sessionID,
-    prompt: { text: childTaskPrompt(prompt) },
+    // Plugin V2's SessionDomain takes PromptInput fields directly. The SDK
+    // client wraps this as `prompt: { text }`, but this domain does not.
+    text: childTaskPrompt(prompt),
     // A background task must be independently scheduled. The parent session
     // receives the child ID and OpenCode owns its lifecycle thereafter.
     resume: background,
   })
   return { sessionID, agent: agent.name, background }
+}
+
+export async function delegateNamedAgentFromClients({ clients, ...input }) {
+  const diagnostics = []
+  for (const client of clients.filter(Boolean)) {
+    try {
+      return await delegateNamedAgent({ ...input, client })
+    } catch (error) {
+      diagnostics.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(`OpenCode V2 child session could not be created: ${diagnostics.join("; ")}`)
 }
 
 export function taskResult({ sessionID, agent, background }) {
