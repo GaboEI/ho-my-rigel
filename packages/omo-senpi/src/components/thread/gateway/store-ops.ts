@@ -33,7 +33,7 @@ import { readLegacyMailbox } from "./legacy-mailbox"
 import { gatewayInboxDirectory } from "./paths"
 import { isClaimantDead, sameProcess } from "./process-identity"
 import { resultFromRow } from "./result"
-import { GATEWAY_MIGRATIONS } from "./schema"
+import { GATEWAY_MIGRATIONS, GatewaySchemaVersionError } from "./schema"
 import { lockWaitExceeded } from "./lock-wait"
 import { isBusyError, type Sql, type SqlRow, type SqlValue } from "./sql"
 import type {
@@ -256,7 +256,9 @@ function argsHash(value: unknown): string {
 }
 
 function schemaVersion(ctx: StoreContext): number {
-  return Number(ctx.sql.one(["user_version"], "SELECT user_version FROM pragma_user_version()")?.user_version ?? 0)
+  const version = Number(ctx.sql.one(["user_version"], "SELECT user_version FROM pragma_user_version()")?.user_version ?? 0)
+  if (version > GATEWAY_MIGRATIONS.length) throw new GatewaySchemaVersionError(version, GATEWAY_MIGRATIONS.length)
+  return version
 }
 
 /**

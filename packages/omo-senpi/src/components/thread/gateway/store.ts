@@ -6,7 +6,7 @@ import { Worker } from "node:worker_threads"
 import type { BindingRecord, CompletionOutcome, OutboxRow, RelayOutcome } from "./bindings"
 import { GATEWAY_BUSY_TIMEOUT_MS, GATEWAY_LOCK_WAIT_MAX_MS } from "./constants"
 import type { GatewayResolve } from "./engine"
-import type { StoreExtensionApi } from "./store-extensions"
+import type { StoreExtensionApi, StoreExtensionResult } from "./store-extensions"
 export type { StoreExtensionApi, StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRefusalCode, StoreExtensionRegistration, StoreExtensionResult, StoreExtensionTransaction } from "./store-extensions"
 import type {
   AnswerClaim,
@@ -228,8 +228,19 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     return (await post(op, args)) as T
   }
 
+  async function extensionRequest<T>(op: string, args: unknown): Promise<StoreExtensionResult<T>> {
+    try {
+      return await call(op, args)
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "gateway_schema_too_new") {
+        return { kind: "refused", code: "gateway_schema_too_new", message: error.message }
+      }
+      throw error
+    }
+  }
+
   return {
-    registerStoreExtension: (extension) => call("extension_register", { extension, now: now() }),
+    registerStoreExtension: (extension) => extensionRequest("extension_register", { extension, now: now() }),
     extensionCall: async (name, op, args) => {
       let cloned: unknown
       try {
@@ -237,7 +248,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
       } catch (error) {
         return { kind: "refused", code: "invalid_arguments", message: `Extension arguments are not cloneable: ${error instanceof Error ? error.message : String(error)}` }
       }
-      return await call("extension_call", { name, op, args: cloned, now: now() })
+      return await extensionRequest("extension_call", { name, op, args: cloned, now: now() })
     },
     busyTimeoutMs: config.busy_timeout_ms,
     now,

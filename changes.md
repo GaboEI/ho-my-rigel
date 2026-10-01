@@ -1,3 +1,10 @@
+## 2026-10-01 - Refuse unsupported newer gateway schemas (#9331)
+
+Core schema reads reject versions newer than this binary supports before migration or
+normal operations. Core callers receive a typed gateway_schema_too_new error; extension
+registration and calls receive that code as a refusal. The stored version and rows remain
+unchanged. The check is also performed on the version re-read under the migration lock.
+
 ## 2026-10-01 - Normalize SQLite ownership and make namespace overlap symmetric (#9331)
 
 Ownership checks fold identifier and schema-label ASCII case like SQLite, while retaining

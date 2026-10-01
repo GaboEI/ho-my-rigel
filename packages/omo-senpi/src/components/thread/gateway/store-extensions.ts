@@ -17,6 +17,7 @@ export type StoreExtensionRefusalCode =
   | "extension_schema_violation"
   | "extension_operation_failed"
   | "gateway_lock_wait_exceeded"
+  | "gateway_schema_too_new"
 
 export type StoreExtensionRefusal = {
   readonly kind: "refused"
