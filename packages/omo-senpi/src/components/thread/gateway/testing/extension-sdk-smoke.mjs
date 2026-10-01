@@ -22,6 +22,7 @@ try {
   }
   assert.deepEqual(await sdk.extensionCall("omo_gateway", "put", { name: "omo_gateway", id: "one", value: "compiled SDK" }), { kind: "ok", value: { value: "compiled SDK" } })
   assert.equal((await sdk.extensionCall("omo_gateway", "sql", { sql: "INSERT INTO MAIN.OMO_GATEWAY_ITEMS VALUES ('two', 'what?')" })).kind, "ok")
+  assert.equal((await sdk.registerStoreExtension({ name: "omo_gateway", moduleUrl, migrations: [] })).code, "gateway_schema_too_new")
   assert.equal((await sdk.extensionCall("omo_gateway", "put", { bad: () => undefined })).code, "invalid_arguments")
   assert.equal((await sdk.bindings({})).kind, "ok")
   assert.equal((await sdk.registerStoreExtension({ name: "gateway", moduleUrl, migrations: [] })).code, "extension_schema_violation")

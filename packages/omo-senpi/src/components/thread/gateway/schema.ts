@@ -1,7 +1,7 @@
 export class GatewaySchemaVersionError extends Error {
   readonly code = "gateway_schema_too_new"
-  constructor(readonly found: number, readonly supported: number) {
-    super(`Gateway schema ${found} is newer than this binary's supported version ${supported}.`)
+  constructor(readonly found: number, readonly supported: number, scope = "Gateway") {
+    super(`${scope} schema ${found} is newer than this binary's supported version ${supported}.`)
   }
 }
 

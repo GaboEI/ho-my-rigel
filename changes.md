@@ -1,3 +1,11 @@
+## 2026-10-01 - Refuse extension schema downgrades without changing registration (#9331)
+
+An extension whose stored version exceeds the caller's migration count now returns
+gateway_schema_too_new under the migration lock. Refusal preserves stored rows, metadata,
+ownership and any existing compatible registration; core service remains usable. Other
+migration failures keep the existing lazy-retry behavior. Fresh-handle and replacement
+regressions cover the refusal, unchanged SQLite data version and subsequent valid writes.
+
 ## 2026-10-01 - Exercise direct extension guards and document transaction behavior (#9331)
 
 Direct SQLite authorization tests assert the trigger/view create decisions without the

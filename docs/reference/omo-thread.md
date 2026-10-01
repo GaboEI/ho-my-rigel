@@ -215,8 +215,14 @@ the worker.
 
 A core schema newer than this binary supports is refused with `gateway_schema_too_new`
 without applying migrations or lowering `user_version`. Extension registration/calls return
-the refusal; core methods reject with an error carrying that code. Use a compatible binary
+the refusal; internal core store methods reject with an error carrying that code. Use a compatible binary
 to access that database.
+
+The same `gateway_schema_too_new` refusal applies when an extension's stored
+`extension_schema.version` exceeds the caller's `migrations.length`. Registration and
+lazy migration checks compare versions under the migration lock. Refusal leaves stored
+version, timestamps, ownership and data unchanged and does not replace an existing
+compatible registration. Core operations and compatible extensions remain usable.
 
 ## Connector loop
 

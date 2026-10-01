@@ -5,6 +5,7 @@ import { extensionTransaction } from "./extension-transaction"
 import { singleExtensionStatement } from "./extension-statement"
 import type { GatewayResolve } from "./engine"
 import { isLockWaitExceeded } from "./lock-wait"
+import { GatewaySchemaVersionError } from "./schema"
 import { transaction, type StoreContext } from "./store-ops"
 import type { StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRegistration, StoreExtensionResult } from "./store-extensions"
 
@@ -19,7 +20,7 @@ function refusal(code: StoreExtensionRefusal["code"], message: string): StoreExt
 
 function fromError(error: unknown): StoreExtensionRefusal {
   const message = error instanceof Error ? error.message : String(error)
-  if (error instanceof ExtensionSchemaViolation) return refusal(error.code, message)
+  if (error instanceof ExtensionSchemaViolation || error instanceof GatewaySchemaVersionError) return refusal(error.code, message)
   if (isLockWaitExceeded(error)) return refusal("gateway_lock_wait_exceeded", message)
   return refusal("extension_operation_failed", message)
 }
@@ -49,10 +50,13 @@ export class StoreExtensions {
     } catch (error) {
       return refusal("extension_import_failed", `Cannot import extension ${descriptor.name}: ${error instanceof Error ? error.message : String(error)}`)
     }
-    this.registered.set(descriptor.name, { descriptor, module })
     try {
-      return { kind: "ok", value: { version: await this.ensure(descriptor, now) } }
+      const version = await this.ensure(descriptor, now)
+      this.registered.set(descriptor.name, { descriptor, module })
+      return { kind: "ok", value: { version } }
     } catch (error) {
+      // Migration failures remain retryable on call; a downgrade must preserve the prior registration.
+      if (!(error instanceof GatewaySchemaVersionError)) this.registered.set(descriptor.name, { descriptor, module })
       return fromError(error)
     }
   }
@@ -63,11 +67,12 @@ export class StoreExtensions {
       const step = await transaction(this.ctx, "extension_migrate", () => {
         const row = this.ctx.sql.one(["version"], "SELECT version FROM extension_schema WHERE name = ?", [name])
         const version = Number(row?.version ?? 0)
+        if (version > migrations.length) throw new GatewaySchemaVersionError(version, migrations.length, `Extension ${name}`)
         const before = extensionSchema(this.ctx.sql)
         if (row === undefined && before.objects.some((object) => sqliteName(String(object.name)).startsWith(`${name}_`) && before.owners.get(`${String(object.type)}:${sqliteName(String(object.name))}`) == null)) {
           throw new ExtensionSchemaViolation(`Namespace ${name} already contains unowned objects.`)
         }
-        if (version >= migrations.length) {
+        if (version === migrations.length) {
           if (row === undefined) this.ctx.sql.run("INSERT INTO extension_schema (name, version, updated_at) VALUES (?, 0, ?)", [name, now])
           return { version, applied: false }
         }
