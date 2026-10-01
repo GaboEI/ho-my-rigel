@@ -1,3 +1,10 @@
+## 2026-10-01 - Normalize SQLite ownership and make namespace overlap symmetric (#9331)
+
+Ownership checks fold identifier and schema-label ASCII case like SQLite, while retaining
+the registry boundary around core and foreign objects. New ownership rows use canonical
+names and schema changes replace legacy mixed-case rows. Overlapping extension namespaces
+can register in either order; only unowned prefixed lookalikes block first registration.
+
 ## 2026-10-01 - Tokenize SQL parameters without changing quoted text (#9331)
 
 The statement-free SQLite binder and extension statement guard share a tokenizer for

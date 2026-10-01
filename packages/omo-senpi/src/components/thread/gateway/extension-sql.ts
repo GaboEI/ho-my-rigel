@@ -12,7 +12,8 @@ type SchemaSnapshot = {
 }
 
 const COLUMNS = ["type", "name", "tbl_name", "sql"] as const
-const keyOf = (row: SqlRow): string => `${String(row.type)}:${String(row.name)}`
+export const sqliteName = (name: string): string => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+const keyOf = (row: SqlRow): string => `${String(row.type)}:${sqliteName(String(row.name))}`
 
 export function extensionSchema(sql: Sql): SchemaSnapshot {
   return {
@@ -24,7 +25,7 @@ export function extensionSchema(sql: Sql): SchemaSnapshot {
 
 export function assertExtensionName(sql: Sql, name: string): void {
   const core = sql.all(["name"], "SELECT name FROM extension_objects WHERE owner IS NULL")
-  if (["gateway", "thread", "sqlite"].includes(name) || core.some((row) => String(row.name).startsWith(name))) {
+  if (["gateway", "thread", "sqlite"].includes(name) || core.some((row) => sqliteName(String(row.name)).startsWith(name))) {
     throw new ExtensionSchemaViolation(`Extension name ${name} collides with a core namespace.`)
   }
 }
@@ -44,12 +45,13 @@ export function checkExtensionSchema(sql: Sql, name: string, before: SchemaSnaps
     if (b.type === "trigger" || b.type === "view") {
       throw new ExtensionSchemaViolation("Store extensions cannot create triggers or views.")
     }
-    const automaticIndex = b.type === "index" && b.sql === null && String(b.name).startsWith(`sqlite_autoindex_${String(b.tbl_name)}_`)
-    if ((!automaticIndex && !String(b.name).startsWith(`${name}_`)) || (before.owners.has(key) && before.owners.get(key) !== name)) {
+    const objectName = sqliteName(String(b.name))
+    const automaticIndex = b.type === "index" && b.sql === null && objectName.startsWith(`sqlite_autoindex_${sqliteName(String(b.tbl_name))}_`)
+    if ((!automaticIndex && !objectName.startsWith(`${name}_`)) || (before.owners.has(key) && before.owners.get(key) !== name)) {
       throw new ExtensionSchemaViolation(`Extension ${name} created an object outside its namespace: ${String(b.name)}.`)
     }
     if (b.type === "index") {
-      const tableKey = `table:${String(b.tbl_name)}`
+      const tableKey = `table:${sqliteName(String(b.tbl_name))}`
       const tableAddedHere = !old.has(tableKey) && next.has(tableKey) && changed.includes(tableKey)
       if (before.owners.get(tableKey) !== name && after.owners.get(tableKey) !== name && !tableAddedHere) {
         throw new ExtensionSchemaViolation(`Extension ${name} indexed a table it does not own: ${String(b.tbl_name)}.`)
@@ -59,10 +61,11 @@ export function checkExtensionSchema(sql: Sql, name: string, before: SchemaSnaps
   for (const key of changed) {
     const a = old.get(key)
     const b = next.get(key)
-    if (b === undefined && a !== undefined) {
-      sql.run("DELETE FROM extension_objects WHERE type = ? AND name = ? AND owner = ?", [String(a.type), String(a.name), name])
-    } else if (b !== undefined) {
-      sql.run("INSERT INTO extension_objects (type, name, owner) VALUES (?, ?, ?) ON CONFLICT(type, name) DO UPDATE SET owner = excluded.owner", [String(b.type), String(b.name), name])
+    if (a !== undefined) {
+      sql.run("DELETE FROM extension_objects WHERE type = ? AND name = ? COLLATE NOCASE AND owner = ?", [String(a.type), String(a.name), name])
+    }
+    if (b !== undefined) {
+      sql.run("INSERT INTO extension_objects (type, name, owner) VALUES (?, ?, ?) ON CONFLICT(type, name) DO UPDATE SET owner = excluded.owner", [String(b.type), sqliteName(String(b.name)), name])
     }
   }
 }
@@ -71,7 +74,7 @@ export function checkExtensionSchema(sql: Sql, name: string, before: SchemaSnaps
 export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
   const snapshot = extensionSchema(sql)
   const owners = new Map(snapshot.owners)
-  const programs = new Set(snapshot.objects.filter((row) => row.type === "trigger" || row.type === "view").map((row) => String(row.name)))
+  const programs = new Set(snapshot.objects.filter((row) => row.type === "trigger" || row.type === "view").map((row) => sqliteName(String(row.name))))
   const owned = (type: string, object: string | null): boolean => object !== null && owners.get(`${type}:${object}`) === name
   const claim = (type: string, object: string | null, automaticIndex = false): boolean => {
     if (object === null || (!automaticIndex && !object.startsWith(`${name}_`)) || owners.has(`${type}:${object}`)) return false
@@ -87,7 +90,11 @@ export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
     return constants.SQLITE_DENY
   }
   try {
-    return sql.authorized((action, a, b, database, source) => {
+    return sql.authorized((action, rawA, rawB, rawDatabase, rawSource) => {
+      const a = rawA === null ? null : sqliteName(rawA)
+      const b = rawB === null ? null : sqliteName(rawB)
+      const database = rawDatabase === null ? null : sqliteName(rawDatabase)
+      const source = rawSource === null ? null : sqliteName(rawSource)
       // SQLite also labels CTE reads with their CTE name; those are not persisted programs.
       if (source !== null && programs.has(source)) return deny(source)
       switch (action) {
@@ -117,7 +124,7 @@ export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
           if (a === "sqlite_master" || a === "sqlite_temp_master") {
             if (action === constants.SQLITE_UPDATE && b === "sql") catalogWritten = true
             if (action !== constants.SQLITE_READ) return allow
-            return ddl === "alter" || ddl === "drop" || (ddl === "create" && catalogWritten && b === "ROWID") ? allow : deny(a)
+            return ddl === "alter" || ddl === "drop" || (ddl === "create" && catalogWritten && b === "rowid") ? allow : deny(a)
           }
           // ALTER's own SQLite program renames only the authorized table's sequence entry.
           // Direct reads/writes cannot reach this branch without that single ALTER statement.

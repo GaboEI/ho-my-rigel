@@ -1,6 +1,6 @@
 import { extname } from "node:path"
 
-import { assertExtensionName, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql } from "./extension-sql"
+import { assertExtensionName, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql, sqliteName } from "./extension-sql"
 import { extensionTransaction } from "./extension-transaction"
 import { singleExtensionStatement } from "./extension-statement"
 import type { GatewayResolve } from "./engine"
@@ -63,14 +63,14 @@ export class StoreExtensions {
       const step = await transaction(this.ctx, "extension_migrate", () => {
         const row = this.ctx.sql.one(["version"], "SELECT version FROM extension_schema WHERE name = ?", [name])
         const version = Number(row?.version ?? 0)
-        if (row === undefined && extensionSchema(this.ctx.sql).objects.some((object) => String(object.name).startsWith(`${name}_`))) {
-          throw new ExtensionSchemaViolation(`Namespace ${name} already contains objects owned by another registration.`)
+        const before = extensionSchema(this.ctx.sql)
+        if (row === undefined && before.objects.some((object) => sqliteName(String(object.name)).startsWith(`${name}_`) && before.owners.get(`${String(object.type)}:${sqliteName(String(object.name))}`) == null)) {
+          throw new ExtensionSchemaViolation(`Namespace ${name} already contains unowned objects.`)
         }
         if (version >= migrations.length) {
           if (row === undefined) this.ctx.sql.run("INSERT INTO extension_schema (name, version, updated_at) VALUES (?, 0, ?)", [name, now])
           return { version, applied: false }
         }
-        const before = extensionSchema(this.ctx.sql)
         for (const statement of migrations[version]) {
           singleExtensionStatement(statement)
           const beforeStatement = extensionSchema(this.ctx.sql)
