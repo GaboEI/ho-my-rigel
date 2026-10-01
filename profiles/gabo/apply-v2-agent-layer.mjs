@@ -39,12 +39,47 @@ for (const id of selection.orchestratedAgentIds) {
   selected[id] = generated.agent[id]
 }
 const candidate = structuredClone(before)
+const judge = selection.independentJudge
+if (!judge?.id || !judge.definition || !judge.source || !judge.legacyExternalDefinitionPath || !judge.removeRigelLegacyAlias) {
+  fail("la selección del Juez independiente está incompleta")
+}
+// `juez` was a Rigel V2 preview alias.  Remove it only when the active trial
+// recorded that Rigel installed it; never remove an unrelated user agent.
+if (state.v2AgentLayer?.agentIds?.includes(judge.removeRigelLegacyAlias)) {
+  delete candidate.agent?.[judge.removeRigelLegacyAlias]
+}
+const legacyJudge = path.join(home, judge.legacyExternalDefinitionPath)
+let migratedLegacyJudge = false
+if (fs.existsSync(legacyJudge)) {
+  const migrationRoot = path.join(stateRoot, "migrations", "judge-v2")
+  const backup = path.join(migrationRoot, "judge.pre-rigel.md")
+  fs.mkdirSync(migrationRoot, { recursive: true, mode: 0o700 })
+  if (!fs.existsSync(backup)) fs.copyFileSync(legacyJudge, backup)
+  // The original source is now packaged as Rigel's V2 Judge. Removing only
+  // this duplicate file prevents OpenCode from discovering a second agent.
+  fs.unlinkSync(legacyJudge)
+  migratedLegacyJudge = true
+}
+const source = path.join(sourceRoot, "profiles/gabo", judge.definition)
+if (!fs.existsSync(source)) fail(`no existe la definición V2 integrada del Juez: ${judge.definition}`)
+const agent = readJson(source)
+if (agent.mode !== "primary" || agent.permission?.edit !== "deny" || agent.permission?.task !== "ask") {
+  fail("la definición V2 integrada del Juez debe ser un auditor independiente sin edición ni delegación automática")
+}
+selected[judge.id] = agent
 candidate.agent = { ...(candidate.agent || {}), ...selected }
 for (const id of selection.disabledLegacyAgentIds) candidate.agent[id] = { mode: "subagent", hidden: true }
 candidate.default_agent = generated.default_agent
 const afterFingerprint = fingerprint(candidate)
 if (afterFingerprint.obsidian !== beforeFingerprint.obsidian || afterFingerprint.codexPlugin !== beforeFingerprint.codexPlugin) fail("la capa de agentes alteraría un componente protegido.")
 fs.writeFileSync(configFile, JSON.stringify(candidate, null, 2) + "\n")
-state.v2AgentLayer = { appliedAt: new Date().toISOString(), defaultAgent: generated.default_agent, agentIds: Object.keys(selected), disabledLegacyAgentIds: selection.disabledLegacyAgentIds }
+state.v2AgentLayer = {
+  appliedAt: new Date().toISOString(),
+  defaultAgent: generated.default_agent,
+  agentIds: Object.keys(selected),
+  migratedLegacyAgentIds: migratedLegacyJudge ? [judge.id] : [],
+  removedRigelLegacyAgentIds: state.v2AgentLayer?.agentIds?.includes(judge.removeRigelLegacyAlias) ? [judge.removeRigelLegacyAlias] : [],
+  disabledLegacyAgentIds: selection.disabledLegacyAgentIds,
+}
 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 })
 console.log(JSON.stringify({ defaultAgent: generated.default_agent, installedAgents: Object.keys(selected), disabledLegacy: selection.disabledLegacyAgentIds }))

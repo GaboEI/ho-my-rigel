@@ -32,15 +32,15 @@ command -v opencode >/dev/null 2>&1 || { echo "OpenCode V2 is required" >&2; exi
 command -v docker >/dev/null 2>&1 || { echo "Docker is required" >&2; exit 2; }
 case "$(opencode --version)" in *"v2."*) ;; *) echo "Expected OpenCode V2" >&2; exit 2;; esac
 
-mkdir -p "$sandbox/home/.omo/opencode/agents" "$sandbox/home/.omo/opencode/prompts" "$sandbox/xdg/config/opencode" "$sandbox/xdg/data" "$sandbox/xdg/state" "$sandbox/xdg/cache" "$sandbox/project"
+mkdir -p "$sandbox/home/.omo/opencode/prompts" "$sandbox/xdg/config/opencode" "$sandbox/xdg/data" "$sandbox/xdg/state" "$sandbox/xdg/cache" "$sandbox/project"
 sed 's|__OMO_PROFILE_ROOT__|/sandbox/home/.omo|g' "$root/profiles/gabo/omo.jsonc" > "$sandbox/home/.omo/omo.jsonc"
-cp "$root/profiles/gabo/opencode/agents/juez.md" "$sandbox/home/.omo/opencode/agents/juez.md"
 cp "$root/profiles/gabo/opencode/prompts/sisyphus-orchestration.md" "$sandbox/home/.omo/opencode/prompts/sisyphus-orchestration.md"
 cp -R "$root/profiles/gabo/skills" "$sandbox/xdg/config/opencode/skills"
 node - "$root/profiles/gabo/opencode/opencode.json" "$fixture_config" "$sandbox/xdg/config/opencode/opencode.json" <<'NODE'
-const fs=require('fs'); const [base, fixture, output]=process.argv.slice(2);
+const fs=require('fs'); const path=require('path'); const [base, fixture, output]=process.argv.slice(2);
 const config=JSON.parse(fs.readFileSync(base,'utf8').replace('file://__OMO_PLUGIN_ENTRY__','file:///workspace/packages/omo-opencode/src/index.ts'));
 Object.assign(config, JSON.parse(fs.readFileSync(fixture,'utf8')));
+config.agent={...(config.agent ?? {}), judge: JSON.parse(fs.readFileSync(path.join(path.dirname(base),'agents/judge.v2.json'),'utf8'))};
 fs.writeFileSync(output, JSON.stringify(config,null,2));
 NODE
 
@@ -59,12 +59,12 @@ for _ in $(seq 1 80); do curl -fsS -u "opencode:$password" "http://127.0.0.1:$po
 rg -q 'SPECIALIST_EVIDENCE' "$sandbox/messages.json"
 rg -q 'SELF_AUDIT_PASS' "$sandbox/messages.json"
 rg -q 'explore' "$sandbox/messages.json"
-juez_response="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"agent":"juez","model":{"providerID":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/")[0])' "$fixture_config")"'","id":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/").slice(1).join("/"))' "$fixture_config")"'"}}' "http://127.0.0.1:$port/api/session")"
-juez_session="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const id=JSON.parse(s).data?.id;if(!id)process.exit(1);console.log(id)})' <<<"$juez_response")"
-juez_prompt="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"text":"Review this isolated delegation evidence: SPECIALIST_EVIDENCE; SELF_AUDIT_PASS. Return only APPROVED, REJECTED, or BLOCKED."}' "http://127.0.0.1:$port/api/session/$juez_session/prompt")"
-node -e 'const value=JSON.parse(process.argv[1]); if(value.error || value._tag)process.exit(1)' "$juez_prompt"
-for _ in $(seq 1 80); do curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$juez_session/message" > "$sandbox/juez-messages.json" 2>/dev/null && rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/juez-messages.json" && break; sleep .25; done
-rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/juez-messages.json"
-curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$juez_session" > "$sandbox/juez-session.json"
-rg -q '"agent":"juez"' "$sandbox/juez-session.json"
+judge_response="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"agent":"judge","model":{"providerID":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/")[0])' "$fixture_config")"'","id":"'"$(node -e 'const c=require(process.argv[1]);console.log(c.model.split("/").slice(1).join("/"))' "$fixture_config")"'"}}' "http://127.0.0.1:$port/api/session")"
+judge_session="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const id=JSON.parse(s).data?.id;if(!id)process.exit(1);console.log(id)})' <<<"$judge_response")"
+judge_prompt="$(curl -sS -u "opencode:$password" -H 'content-type: application/json' -d '{"text":"Review this isolated delegation evidence: SPECIALIST_EVIDENCE; SELF_AUDIT_PASS. Return only APPROVED, REJECTED, or BLOCKED."}' "http://127.0.0.1:$port/api/session/$judge_session/prompt")"
+node -e 'const value=JSON.parse(process.argv[1]); if(value.error || value._tag)process.exit(1)' "$judge_prompt"
+for _ in $(seq 1 80); do curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$judge_session/message" > "$sandbox/judge-messages.json" 2>/dev/null && rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/judge-messages.json" && break; sleep .25; done
+rg -q 'APPROVED|REJECTED|BLOCKED' "$sandbox/judge-messages.json"
+curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/api/session/$judge_session" > "$sandbox/judge-session.json"
+rg -q '"agent":"judge"' "$sandbox/judge-session.json"
 echo "Ho My Rigel delegation E2E passed: Sisyphus delegated, self-audited, and Juez returned an independent verdict"

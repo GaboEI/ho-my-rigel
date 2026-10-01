@@ -11,7 +11,13 @@
     "oracle",
     "Sisyphus-Junior"
   ],
-  "preservedIndependentAgentIds": ["juez"],
+  "independentJudge": {
+    "id": "judge",
+    "definition": "opencode/agents/judge.v2.json",
+    "source": "opencode/agents/judge.md",
+    "legacyExternalDefinitionPath": ".config/opencode/agents/judge.md",
+    "removeRigelLegacyAlias": "juez"
+  },
   "disabledLegacyAgentIds": ["forja"],
   "excludedOmOAgentIds": ["Hephaestus - Deep Agent", "judge", "build", "plan"]
 }

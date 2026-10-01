@@ -3,27 +3,9 @@
   "profiles": {
     "gabo": {
       "[opencode]": {
-        "agent_definitions": [
-          "__OMO_PROFILE_ROOT__/opencode/agents/juez.md"
-        ],
         "agents": {
           "sisyphus": {
             "prompt_append": "file://__OMO_PROFILE_ROOT__/opencode/prompts/sisyphus-orchestration.md"
-          },
-          "juez": {
-            "mode": "primary",
-            "permission": {
-              "read": "allow",
-              "grep": "allow",
-              "glob": "allow",
-              "list": "allow",
-              "webfetch": "allow",
-              "websearch": "allow",
-              "bash": "ask",
-              "edit": "deny",
-              "task": "ask",
-              "todowrite": "deny"
-            }
           }
         },
         "disabled_agents": ["forja"],

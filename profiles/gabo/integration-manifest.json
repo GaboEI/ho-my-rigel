@@ -45,7 +45,7 @@
   "rootAuthorities": {
     "orchestrator": "sisyphus",
     "orchestrationContract": "sisyphus",
-    "acceptance": "juez",
+    "acceptance": "judge",
     "goalContinuation": "local.goal-mode.server",
     "contextCompaction": "context-mode"
   },

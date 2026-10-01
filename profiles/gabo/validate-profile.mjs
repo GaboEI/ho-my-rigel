@@ -15,12 +15,9 @@ const opencode = readJson("opencode/opencode.json")
 const profile = omo.profiles?.gabo?.["[opencode]"]
 
 if (!profile) fail("profiles.gabo.[opencode] is required")
-const expectedAgentDefinitions = [
-  "__OMO_PROFILE_ROOT__/opencode/agents/juez.md",
-]
-if (JSON.stringify(profile.agent_definitions) !== JSON.stringify(expectedAgentDefinitions)) fail("Juez definition path must remain a portable template")
+if (profile.agent_definitions?.length) fail("the V2 profile must not add a second legacy Juez definition")
 if (profile.agents?.sisyphus?.prompt_append !== "file://__OMO_PROFILE_ROOT__/opencode/prompts/sisyphus-orchestration.md") fail("Sisyphus must receive its orchestration contract")
-if (profile.agents?.juez?.mode !== "primary" || profile.agents.juez.permission?.edit !== "deny" || profile.agents.juez.permission?.task !== "ask") fail("Juez must remain an independent non-executing auditor")
+if (profile.agents?.juez) fail("the V2 profile must not configure the retired juez alias")
 if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
 if (profile.browser_automation_engine?.provider !== "playwright") fail("Playwright must be canonical")
@@ -30,7 +27,18 @@ for (const hook of ["goal", "compaction-context-injector", "compaction-todo-pres
 }
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")
-if (manifest.rootAuthorities?.acceptance !== "juez") fail("Juez must be the acceptance authority")
+if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")
+const v2Selection = readJson("v2-agent-selection.json")
+const judge = v2Selection.independentJudge
+if (judge?.id !== "judge" || judge.removeRigelLegacyAlias !== "juez") fail("Judge must use the canonical id and retire the duplicate Rigel alias")
+if (judge?.source !== "opencode/agents/judge.md" || judge.legacyExternalDefinitionPath !== ".config/opencode/agents/judge.md") fail("Judge must be packaged as a Rigel V2 source and migrate the former local definition")
+const juezV2Path = join(root, judge.definition ?? "")
+if (!existsSync(juezV2Path)) fail("Juez must have a portable static V2 definition")
+const juezV2 = JSON.parse(readFileSync(juezV2Path, "utf8"))
+if (juezV2.mode !== "primary" || juezV2.permission?.edit !== "deny" || juezV2.permission?.task !== "ask") fail("Juez V2 definition must remain independent and non-executing")
+const judgeSource = join(root, judge.source)
+if (!existsSync(judgeSource) || /WatchdogVPN|\bForja\b|\/home\/gabodev/i.test(readFileSync(judgeSource, "utf8"))) fail("Judge source must preserve the generic audit system without project-specific rules")
+if (!v2Selection.orchestratedAgentIds?.includes("Momus - Plan Critic") || v2Selection.orchestratedAgentIds.includes("judge") || v2Selection.orchestratedAgentIds.includes("juez")) fail("Momus must remain a plan critic and must not replace Judge")
 if (!manifest.requiredPlugins?.includes("oc-codex-multi-auth")) fail("oc-codex-multi-auth is required")
 if (manifest.mcpPolicy?.websearch !== "tavily" || !manifest.mcpPolicy?.omoBuiltinsDisabled?.includes("context7")) fail("MCP singleton policy must preserve Tavily and external Context7")
 if (!manifest.mcpPolicy?.omoBuiltinsRetained?.includes("grep_app") || !manifest.mcpPolicy?.omoBuiltinsRetained?.includes("lsp")) fail("OmO grep_app and LSP must remain available")

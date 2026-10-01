@@ -48,6 +48,14 @@
 
 OmO is one `omo` command that turns your tokens into finished work: research across ten thousand sources, a deck people actually get, backends, frontends, code. It runs on senpi, our fork of [pi](https://github.com/badlogic/pi-mono), with everything below built in.
 
+> [!NOTE]
+> **Ho My Rigel fork branch.** This branch is a community adaptation of the
+> upstream OmO OpenCode integration for **OpenCode V2**. It does not fork
+> OpenCode itself. Migration scope, verified V2 behavior, and remaining V1
+> compatibility gaps are documented in [HO-MY-RIGEL.md](HO-MY-RIGEL.md).
+> See [FORK.md](FORK.md) for the supported source-based setup, safety model,
+> rollback path, and license boundary.
+
 ## Install
 
 ```bash

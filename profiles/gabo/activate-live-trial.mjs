@@ -47,6 +47,11 @@ function stageV2Adapter() {
   const adapter = fs.readFileSync(path.join(sourceRoot, "profiles/gabo/opencode/omo-v2-adapter.mjs"), "utf8")
     .replaceAll("__OMO_DIST_ENTRY__", distEntry)
   fs.writeFileSync(path.join(pluginEntry, "index.js"), adapter, { mode: 0o600 })
+  fs.copyFileSync(
+    path.join(sourceRoot, "profiles/gabo/opencode/omo-v2-adapter-core.mjs"),
+    path.join(pluginEntry, "omo-v2-adapter-core.mjs"),
+  )
+  fs.chmodSync(path.join(pluginEntry, "omo-v2-adapter-core.mjs"), 0o600)
 }
 
 if (hasOpenCodeProcess()) fail("OpenCode sigue ejecutándose. Ciérralo antes de activar para no corromper sesiones.")

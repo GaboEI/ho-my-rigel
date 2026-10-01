@@ -28,6 +28,11 @@ if (!(before.plugin || []).includes(state.pluginEntry)) fail("no se encontró el
 fs.mkdirSync(adapterDir, { recursive: true, mode: 0o700 })
 const adapter = fs.readFileSync(path.join(sourceRoot, "profiles/gabo/opencode/omo-v2-adapter.mjs"), "utf8").replaceAll("__OMO_DIST_ENTRY__", distEntry)
 fs.writeFileSync(path.join(adapterDir, "index.js"), adapter, { mode: 0o600 })
+fs.copyFileSync(
+  path.join(sourceRoot, "profiles/gabo/opencode/omo-v2-adapter-core.mjs"),
+  path.join(adapterDir, "omo-v2-adapter-core.mjs"),
+)
+fs.chmodSync(path.join(adapterDir, "omo-v2-adapter-core.mjs"), 0o600)
 const raw = fs.readFileSync(configFile, "utf8")
 const oldJson = JSON.stringify(state.pluginEntry)
 if (!raw.includes(oldJson)) fail("el entrypoint no se puede sustituir textualmente de forma segura.")
