@@ -63,7 +63,7 @@ export function createGatewayHarness(options: { readonly startAt?: number } = {}
   }
 
   function store(extra: Partial<GatewayStoreOptions> = {}): GatewayStore {
-    const created = storeFactory({ agentDir, now, ...extra })
+    const created = storeFactory({ agentDir, now, resolveTarget: resolveFromEntries(entries, () => agentDir), ...extra })
     stores.push(created)
     return created
   }

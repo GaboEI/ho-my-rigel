@@ -3,6 +3,7 @@ import { extname } from "node:path"
 import { assertExtensionName, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql } from "./extension-sql"
 import { extensionTransaction } from "./extension-transaction"
 import { singleExtensionStatement } from "./extension-statement"
+import type { GatewayResolve } from "./engine"
 import { isLockWaitExceeded } from "./lock-wait"
 import { transaction, type StoreContext } from "./store-ops"
 import type { StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRegistration, StoreExtensionResult } from "./store-extensions"
@@ -26,7 +27,7 @@ function fromError(error: unknown): StoreExtensionRefusal {
 export class StoreExtensions {
   private readonly registered = new Map<string, Registered>()
 
-  constructor(private readonly ctx: StoreContext) {}
+  constructor(private readonly ctx: StoreContext, private readonly resolveTarget: GatewayResolve) {}
 
   async register(descriptor: StoreExtensionRegistration, now: number): Promise<StoreExtensionResult<{ readonly version: number }>> {
     if (!/^[a-z][a-z0-9_]{1,31}$/.test(descriptor.name) || !Array.isArray(descriptor.migrations)
@@ -94,7 +95,7 @@ export class StoreExtensions {
       await this.ensure(entry.descriptor, now)
       const value = await transaction(this.ctx, "extension_call", async () => {
         const before = extensionSchema(this.ctx.sql)
-        const scope = extensionTransaction({ ...this.ctx, afterCommit: effects }, name, now)
+        const scope = extensionTransaction({ ...this.ctx, afterCommit: effects }, name, now, this.resolveTarget)
         let timer: ReturnType<typeof setTimeout> | undefined
         try {
           const run = async () => {
@@ -119,7 +120,13 @@ export class StoreExtensions {
           scope.cancel()
         }
       })
-      for (const effect of effects) effect()
+      for (const effect of effects) {
+        try {
+          effect()
+        } catch (error) {
+          this.ctx.emit({ kind: "extension_error", extension: name, phase: "after_commit", error: error instanceof Error ? error.message : String(error) })
+        }
+      }
       return { kind: "ok", value }
     } catch (error) {
       return fromError(error)

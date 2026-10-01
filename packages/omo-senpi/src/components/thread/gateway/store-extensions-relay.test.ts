@@ -17,6 +17,7 @@ const registration = { name: "alpha", moduleUrl, migrations: [["CREATE TABLE alp
 
 async function setup() {
   const h = (harness = createGatewayHarness())
+  h.phantom("target")
   const store = h.store()
   expect((await store.registerStoreExtension(registration)).kind).toBe("ok")
   return { h, store }

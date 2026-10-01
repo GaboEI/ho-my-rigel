@@ -29,3 +29,19 @@ export function staleTimer() {
   setTimeout(() => retained.exec("INSERT INTO alpha_items VALUES (3, 'timer')"), 0)
   return null
 }
+
+export async function enqueuePair(tx, bindings) {
+  const results = []
+  for (const binding of bindings) {
+    const bound = await tx.bind(binding)
+    if (bound.kind !== "ok") throw new Error(JSON.stringify(bound))
+    results.push(await tx.enqueue({ binding_id: bound.binding.binding_id, event_id: binding.binding.chat_id, text: "hello" }))
+  }
+  return results
+}
+
+export function unawaitedEnqueue(tx, request) {
+  tx.exec("INSERT INTO alpha_items VALUES (1, 'uncommitted')")
+  void tx.enqueue(request)
+  return "returned"
+}

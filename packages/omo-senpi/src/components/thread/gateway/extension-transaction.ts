@@ -1,4 +1,4 @@
-import { createGatewayEngine, type GatewayEngineOptions } from "./engine"
+import { createGatewayEngine, type GatewayEngineOptions, type GatewayResolve } from "./engine"
 import { checkExtensionSchema, extensionSchema, extensionSql } from "./extension-sql"
 import { singleExtensionStatement } from "./extension-statement"
 import { createGatewayRelay, type GatewayRelayOptions } from "./relay"
@@ -13,7 +13,7 @@ export class ExtensionTransactionEndedError extends Error {
   }
 }
 
-export function extensionTransaction(ctx: ops.StoreContext, name: string, now: number) {
+export function extensionTransaction(ctx: ops.StoreContext, name: string, now: number, resolveTarget: GatewayResolve) {
   let active = true
   let cancelled = false
   let failure: unknown
@@ -27,9 +27,8 @@ export function extensionTransaction(ctx: ops.StoreContext, name: string, now: n
     if (failure !== undefined) throw failure
     return body()
   }
-  async function schedule<T>(body: () => Promise<T>): Promise<T> {
-    checkActive()
-    const next = tail.then(() => joined(body))
+  function schedule<T>(body: () => Promise<T>): Promise<T> {
+    const next = active ? tail.then(() => joined(body)) : Promise.reject<T>(new ExtensionTransactionEndedError(name))
     tail = next.then(() => undefined, (error: unknown) => { failure = error })
     return next
   }
@@ -67,13 +66,15 @@ export function extensionTransaction(ctx: ops.StoreContext, name: string, now: n
     markPriorDelivered: (request) => joined(() => relay.markPriorDelivered(ctx, request)),
     emitCompletions: (request) => joined(() => relay.emitCompletions(ctx, request)),
   }
-  // This is enqueue-only: no endpoint is resolved or contacted while the transaction is open.
-  // The committed inbox marker wakes the receiver, using the existing offline delivery path.
+  // Resolve through the relay's address book, but never wake a receiver before COMMIT.
   const endpoints = { wake: async (): Promise<never> => { throw new Error("An extension enqueue cannot contact a live endpoint.") } }
   const engine = createGatewayEngine({
     store,
     endpoints,
-    resolve: async (durable_id) => ({ kind: "ok", target: { durable_id, endpoint: null, liveness: "dead" } }),
+    resolve: async (address, request) => {
+      const result = await resolveTarget(address, request)
+      return result.kind === "error" ? result : { kind: "ok", target: { ...result.target, endpoint: null, liveness: "dead" } }
+    },
   })
   const api = createGatewayRelay({ store, engine, endpoints, locate: async () => null })
   const tx: StoreExtensionTransaction = {

@@ -99,11 +99,11 @@ export function createThreadSdk(options: ThreadSdkOptions): ThreadSdk {
     env,
     ...(engineStatusAll === undefined ? {} : { statusAll: async () => parseHostStatusAll(await engineStatusAll()) }),
   })
-  const store = options.store ?? createGatewayStore({ agentDir: options.agentDir, ...(options.workerModuleUrl === undefined ? {} : { workerModuleUrl: options.workerModuleUrl }) })
+  const store = options.store ?? createGatewayStore({ agentDir: options.agentDir, resolveTarget: (address, request) => resolve(address, request), ...(options.workerModuleUrl === undefined ? {} : { workerModuleUrl: options.workerModuleUrl }) })
   const now = options.now ?? store.now
   const surface: ThreadToolSurfaceOptions = { host, store, stateDirectory: options.agentDir, sessionsDirectory: () => join(options.agentDir, "sessions"), callerSessionId: () => UNKNOWN_CALLER, callerWorkspaceRoot: () => options.cwd, now }
   const view = () => hostView(surface)
-  const { engine, relay, endpoints, locate } = createGatewayServices(surface, () => hostView(surface, { offline: true }))
+  const { engine, relay, endpoints, locate, resolve } = createGatewayServices(surface, () => hostView(surface, { offline: true }))
 
   // A running session writes a completion only once it knows of the arm; the arm is durable, so a
   // wake that does not get through leaves it to the session's next start instead.

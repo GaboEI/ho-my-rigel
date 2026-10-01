@@ -106,6 +106,7 @@ describe("store extension calls", () => {
 
   test("#given an enqueue followed by a throw #when the op fails #then extension core rows and markers all roll back", async () => {
     const h = (harness = createGatewayHarness())
+    h.phantom("target")
     const store = h.store()
     await store.registerStoreExtension(extension())
     const bound = await store.extensionCall<{ kind: "ok"; binding: { binding_id: string } }>("alpha", "core", { op: "bind", request: bind })
@@ -119,6 +120,7 @@ describe("store extension calls", () => {
 
   test("#given binding and inbound in one op #when committed #then binding reads actor attribution and markers are published", async () => {
     const h = (harness = createGatewayHarness())
+    h.phantom("target")
     const store = h.store()
     await store.registerStoreExtension(extension())
     const result = await store.extensionCall("alpha", "bindThenEnqueue", {

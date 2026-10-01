@@ -1,3 +1,13 @@
+## 2026-10-01 - Preserve relay validation and committed extension results (#9331)
+
+Extension enqueue resolves its binding target with the relay's shared live-and-disk
+address book over a worker request port. Missing sessions return not_found; receivers
+are still signaled only after commit. Post-commit effects run independently, reporting
+failed markers through extension_error store events without misreporting committed data
+as a refused operation. Pending resolution requests are released on operation completion.
+Tests cover missing/present targets, blocked markers followed by healthy markers, and
+unawaited resolution failures and timeouts without late writes or worker loss.
+
 ## 2026-10-01 - Bound extension operations and revoke expired transactions (#9331)
 
 Extension operations and pending helpers share the store's lock-wait budget. On expiry,

@@ -5,6 +5,7 @@ import { Worker } from "node:worker_threads"
 
 import type { BindingRecord, CompletionOutcome, OutboxRow, RelayOutcome } from "./bindings"
 import { GATEWAY_BUSY_TIMEOUT_MS, GATEWAY_LOCK_WAIT_MAX_MS } from "./constants"
+import type { GatewayResolve } from "./engine"
 import type { StoreExtensionApi } from "./store-extensions"
 export type { StoreExtensionApi, StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRefusalCode, StoreExtensionRegistration, StoreExtensionResult, StoreExtensionTransaction } from "./store-extensions"
 import type {
@@ -46,6 +47,8 @@ export type GatewayStoreOptions = {
   readonly now?: () => number
   /** The module location the worker sidecar is resolved from when the facade does not run inside `omo.js` (the thread SDK runtime). */
   readonly workerModuleUrl?: string | URL
+  /** Resolves extension enqueue targets through the caller's live-and-disk address book. */
+  readonly resolveTarget?: GatewayResolve
   /** Test seams only: a shorter busy timeout and lock-wait bound, commit-boundary hooks, and the module location the worker is resolved from. */
   readonly _test?: GatewayStoreTestHooks & { readonly busyTimeoutMs?: number; readonly lockWaitMaxMs?: number; readonly moduleUrl?: string | URL }
 }
@@ -119,6 +122,7 @@ export type GatewayStore = StoreExtensionApi & {
 type Pending = { readonly resolve: (value: unknown) => void; readonly reject: (error: Error) => void }
 
 type WorkerMessage =
+  | { readonly type: "resolve"; readonly id: number; readonly address: string; readonly request: Parameters<GatewayResolve>[1] }
   | { readonly type: "response"; readonly id: number; readonly ok: true; readonly value: unknown }
   | { readonly type: "response"; readonly id: number; readonly ok: false; readonly error: { readonly message: string; readonly stack?: string; readonly code?: string } }
   | { readonly type: "event"; readonly event: GatewayStoreEvent }
@@ -150,6 +154,15 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
   let opened: Promise<{ readonly self: ProcessIdentity; readonly legacy_migrated: number }> | undefined
   let nextId = 1
   let disposed = false
+  let resolveTarget = options.resolveTarget
+
+  const resolveExtensionTarget: GatewayResolve = async (address, request) => {
+    if (resolveTarget === undefined) {
+      const { createExtensionResolver } = await import("./extension-resolver")
+      resolveTarget = createExtensionResolver(options.agentDir)
+    }
+    return await resolveTarget(address, request)
+  }
 
   function failAll(error: Error): void {
     for (const entry of pending.values()) entry.reject(error)
@@ -176,6 +189,13 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     worker = spawned
     spawned.unref()
     spawned.on("message", (message: WorkerMessage) => {
+      if (message.type === "resolve") {
+        void resolveExtensionTarget(message.address, message.request).then(
+          (value) => { if (worker === spawned) spawned.postMessage({ type: "resolution", id: message.id, ok: true, value }) },
+          (error: unknown) => { if (worker === spawned) spawned.postMessage({ type: "resolution", id: message.id, ok: false, error: error instanceof Error ? error.message : String(error) }) },
+        )
+        return
+      }
       if (message.type === "event") {
         for (const listener of listeners) listener(message.event)
         return
