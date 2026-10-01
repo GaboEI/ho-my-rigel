@@ -6,17 +6,30 @@ import * as ops from "./store-ops"
 import * as relay from "./store-relay-ops"
 import type { StoreExtensionTransaction } from "./store-extensions"
 
+export class ExtensionTransactionEndedError extends Error {
+  readonly code = "extension_operation_failed"
+  constructor(readonly extension: string) {
+    super(`The ${extension} extension transaction has ended.`)
+  }
+}
+
 export function extensionTransaction(ctx: ops.StoreContext, name: string, now: number) {
   let active = true
+  let cancelled = false
   let failure: unknown
   let tail = Promise.resolve()
   const checkActive = (): void => {
-    if (!active) throw new Error("The extension transaction has ended.")
+    if (!active) throw new ExtensionTransactionEndedError(name)
     if (failure !== undefined) throw failure
   }
-  function schedule<T>(body: () => Promise<T>): Promise<T> {
+  function joined<T>(body: () => T): T {
+    if (cancelled) throw new ExtensionTransactionEndedError(name)
+    if (failure !== undefined) throw failure
+    return body()
+  }
+  async function schedule<T>(body: () => Promise<T>): Promise<T> {
     checkActive()
-    const next = tail.then(body)
+    const next = tail.then(() => joined(body))
     tail = next.then(() => undefined, (error: unknown) => { failure = error })
     return next
   }
@@ -36,23 +49,23 @@ export function extensionTransaction(ctx: ops.StoreContext, name: string, now: n
   const store: GatewayRelayOptions["store"] & GatewayEngineOptions["store"] = {
     now: () => now,
     busyTimeoutMs: ctx.config.busy_timeout_ms,
-    enqueue: (request) => ops.enqueue(ctx, request),
-    completeReceipt: (request) => ops.completeReceipt(ctx, request),
-    abandonReceipt: (request) => ops.abandonReceipt(ctx, request),
-    deliveryView: async (id) => ops.deliveryView(ctx, id),
-    bind: (request) => relay.bindThread(ctx, request),
-    unbind: (request) => relay.unbindThread(ctx, request),
-    rebind: (request) => relay.rebindThread(ctx, request),
-    listBindings: (request) => relay.listBindings(ctx, request),
-    bindingView: (request) => relay.bindingView(ctx, request),
-    report: (request) => relay.reportEvent(ctx, request),
-    readOutbox: (request) => relay.readOutbox(ctx, { ...request, pendingOnly: true }),
-    ackOutbox: (request) => relay.ackOutbox(ctx, request),
-    claimAnswer: (request) => relay.claimAnswer(ctx, request),
-    releaseAnswer: (request) => relay.releaseAnswer(ctx, request),
-    confirmAnswer: (request) => relay.confirmAnswer(ctx, request),
-    markPriorDelivered: (request) => relay.markPriorDelivered(ctx, request),
-    emitCompletions: (request) => relay.emitCompletions(ctx, request),
+    enqueue: (request) => joined(() => ops.enqueue(ctx, request)),
+    completeReceipt: (request) => joined(() => ops.completeReceipt(ctx, request)),
+    abandonReceipt: (request) => joined(() => ops.abandonReceipt(ctx, request)),
+    deliveryView: async (id) => joined(() => ops.deliveryView(ctx, id)),
+    bind: (request) => joined(() => relay.bindThread(ctx, request)),
+    unbind: (request) => joined(() => relay.unbindThread(ctx, request)),
+    rebind: (request) => joined(() => relay.rebindThread(ctx, request)),
+    listBindings: (request) => joined(() => relay.listBindings(ctx, request)),
+    bindingView: (request) => joined(() => relay.bindingView(ctx, request)),
+    report: (request) => joined(() => relay.reportEvent(ctx, request)),
+    readOutbox: (request) => joined(() => relay.readOutbox(ctx, { ...request, pendingOnly: true })),
+    ackOutbox: (request) => joined(() => relay.ackOutbox(ctx, request)),
+    claimAnswer: (request) => joined(() => relay.claimAnswer(ctx, request)),
+    releaseAnswer: (request) => joined(() => relay.releaseAnswer(ctx, request)),
+    confirmAnswer: (request) => joined(() => relay.confirmAnswer(ctx, request)),
+    markPriorDelivered: (request) => joined(() => relay.markPriorDelivered(ctx, request)),
+    emitCompletions: (request) => joined(() => relay.emitCompletions(ctx, request)),
   }
   // This is enqueue-only: no endpoint is resolved or contacted while the transaction is open.
   // The committed inbox marker wakes the receiver, using the existing offline delivery path.
@@ -84,6 +97,11 @@ export function extensionTransaction(ctx: ops.StoreContext, name: string, now: n
   }
   return {
     tx,
+    cancel: () => {
+      active = false
+      cancelled = true
+      api.dispose()
+    },
     finish: async () => {
       active = false
       await tail

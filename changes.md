@@ -1,3 +1,11 @@
+## 2026-10-01 - Bound extension operations and revoke expired transactions (#9331)
+
+Extension operations and pending helpers share the store's lock-wait budget. On expiry,
+their transaction is revoked and rolled back and the worker accepts the next request.
+Retained transactions raise typed errors; late asynchronous helper calls reject promises
+instead of throwing synchronously. The worker reports an unhandled expired-transaction
+error as a store event without losing core service. Other uncaught errors remain fatal.
+
 ## 2026-10-01 - Own automatic indexes through their extension tables (#9331)
 
 Extension migrations now accept SQLite's automatic indexes for TEXT and composite primary

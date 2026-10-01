@@ -95,15 +95,29 @@ export class StoreExtensions {
       const value = await transaction(this.ctx, "extension_call", async () => {
         const before = extensionSchema(this.ctx.sql)
         const scope = extensionTransaction({ ...this.ctx, afterCommit: effects }, name, now)
-        let result: unknown
+        let timer: ReturnType<typeof setTimeout> | undefined
         try {
-          result = await (operation as StoreExtensionOperation)(scope.tx, args)
+          const run = async () => {
+            try {
+              return await (operation as StoreExtensionOperation)(scope.tx, args)
+            } finally {
+              await scope.finish()
+            }
+          }
+          const deadline = new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+              scope.cancel()
+              reject(new Error(`Extension ${name}.${op} exceeded its ${this.ctx.config.lock_wait_max_ms} ms operation budget.`))
+            }, this.ctx.config.lock_wait_max_ms)
+          })
+          const result = await Promise.race([run(), deadline])
+          checkExtensionSchema(this.ctx.sql, name, before, extensionSchema(this.ctx.sql))
+          // Refuse uncloneable results before commit, not in the worker's response writer afterwards.
+          return structuredClone(result)
         } finally {
-          await scope.finish()
+          clearTimeout(timer)
+          scope.cancel()
         }
-        checkExtensionSchema(this.ctx.sql, name, before, extensionSchema(this.ctx.sql))
-        // Refuse uncloneable results before commit, not in the worker's response writer afterwards.
-        return structuredClone(result)
       })
       for (const effect of effects) effect()
       return { kind: "ok", value }

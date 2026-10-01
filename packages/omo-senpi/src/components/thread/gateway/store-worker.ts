@@ -15,6 +15,7 @@ import { isBusyError, Sql, type SqliteConnection } from "./sql"
 import * as ops from "./store-ops"
 import * as relay from "./store-relay-ops"
 import { StoreExtensions } from "./store-extension-ops"
+import { ExtensionTransactionEndedError } from "./extension-transaction"
 import type { StoreExtensionRegistration } from "./store-extensions"
 import type { GatewayStoreConfig, GatewayStoreEvent } from "./types"
 
@@ -32,6 +33,14 @@ let running = false
 let context: ops.StoreContext | undefined
 let connection: SqliteConnection | undefined
 let extensions: StoreExtensions | undefined
+
+function lateTransactionError(error: unknown): void {
+  if (!(error instanceof ExtensionTransactionEndedError)) throw error
+  emit({ kind: "extension_error", extension: error.extension, phase: "stale_transaction", error: error.message })
+}
+
+process.on("uncaughtException", lateTransactionError)
+process.on("unhandledRejection", lateTransactionError)
 
 port.on("message", (message: WorkerRequest | WorkerControl) => {
   if (message.type === "resume") {

@@ -191,6 +191,7 @@ export type GatewayDeliverySuccess = {
 export type GatewayDeliveryResult = GatewayDeliverySuccess | { readonly kind: "error"; readonly error: ThreadToolFailure }
 
 export type GatewayStoreEvent =
+  | { readonly kind: "extension_error"; readonly extension: string; readonly phase: "stale_transaction" | "after_commit"; readonly error: string }
   | { readonly kind: "busy"; readonly op: string }
   | { readonly kind: "lock_wait_exceeded"; readonly op: string; readonly waited_ms: number }
   | { readonly kind: "completions_emitted"; readonly session_durable_id: string; readonly cursors: readonly number[] }
