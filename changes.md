@@ -1,3 +1,10 @@
+## 2026-10-01 - Own automatic indexes through their extension tables (#9331)
+
+Extension migrations now accept SQLite's automatic indexes for TEXT and composite primary
+keys and UNIQUE constraints. Authorization requires the owning table; schema validation
+checks the automatic index's table and records its extension owner atomically. Core
+automatic indexes remain core-owned and inaccessible to extension operations.
+
 ## 2026-09-30 - Session gateway extension contract and actor identity (Refs #9143)
 
 Core schema v5 adds `extension_schema` and nullable `deliveries.actor_user_id`, populated from

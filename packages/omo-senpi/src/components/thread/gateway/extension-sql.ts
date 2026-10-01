@@ -44,7 +44,8 @@ export function checkExtensionSchema(sql: Sql, name: string, before: SchemaSnaps
     if (b.type === "trigger" || b.type === "view") {
       throw new ExtensionSchemaViolation("Store extensions cannot create triggers or views.")
     }
-    if (!String(b.name).startsWith(`${name}_`) || (before.owners.has(key) && before.owners.get(key) !== name)) {
+    const automaticIndex = b.type === "index" && b.sql === null && String(b.name).startsWith(`sqlite_autoindex_${String(b.tbl_name)}_`)
+    if ((!automaticIndex && !String(b.name).startsWith(`${name}_`)) || (before.owners.has(key) && before.owners.get(key) !== name)) {
       throw new ExtensionSchemaViolation(`Extension ${name} created an object outside its namespace: ${String(b.name)}.`)
     }
     if (b.type === "index") {
@@ -72,8 +73,8 @@ export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
   const owners = new Map(snapshot.owners)
   const programs = new Set(snapshot.objects.filter((row) => row.type === "trigger" || row.type === "view").map((row) => String(row.name)))
   const owned = (type: string, object: string | null): boolean => object !== null && owners.get(`${type}:${object}`) === name
-  const claim = (type: string, object: string | null): boolean => {
-    if (object === null || !object.startsWith(`${name}_`) || owners.has(`${type}:${object}`)) return false
+  const claim = (type: string, object: string | null, automaticIndex = false): boolean => {
+    if (object === null || (!automaticIndex && !object.startsWith(`${name}_`)) || owners.has(`${type}:${object}`)) return false
     owners.set(`${type}:${object}`, name)
     return true
   }
@@ -95,7 +96,7 @@ export function extensionSql<T>(sql: Sql, name: string, body: () => T): T {
           return database === "main" && claim("table", a) ? allow : deny(a)
         case constants.SQLITE_CREATE_INDEX:
           ddl = "create"
-          return database === "main" && owned("table", b) && claim("index", a) ? allow : deny(a)
+          return database === "main" && owned("table", b) && claim("index", a, a?.startsWith(`sqlite_autoindex_${b}_`) === true) ? allow : deny(a)
         case constants.SQLITE_DROP_TABLE:
           ddl = "drop"
           return database === "main" && owned("table", a) ? allow : deny(a)
