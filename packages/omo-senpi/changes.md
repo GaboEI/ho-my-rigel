@@ -1,8 +1,73 @@
+## 2026-09-30 - claude-code: acquire before the auth check, from the provisioned runtime, with progress (#9276)
+
+- `src/components/claude-code/index.ts`: the component now also runs on `input`, which senpi's `prompt()` emits
+  before `checkAuth` (`emitInput`, then `checkAuth`, then `emitBeforeAgentStart`), so a prompt from a
+  `claude login`-only user downloads the executable before the ambient auth probe needs it. `before_agent_start` stays
+  for turns an extension starts (they skip `input`), registered `previewSafe` and skipping the prompt-cache preview.
+  The pin and cache root come from `claudeCodeRuntimeDir` (`OMO_PACKAGE_DIR`, else `dirname(execPath)`), since the
+  compiled launcher pins the provisioned runtime there while `execPath` can still be the downloaded binary.
+  A progress status (`omo-claude-code`: `Downloading Claude Code <version>: N% of M MB`, every 10%) shows while the
+  tarball streams (`acquire.ts` `onProgress`). New `applyCachedClaudeCode` lets the compiled launcher point the engine
+  at an already-downloaded copy before it starts.
+- Limit: on the launch that downloads, the startup ambient probe may already have cached "not signed in" for 30 s
+  (`availability.ts` `AMBIENT_STATUS_TTL_MS`); the next prompt after that window, and every later launch, resolve it.
+
+## 2026-09-30 - model-profile e2e: lane-beats-recommended-models proves a real recommended-models switch (#9238)
+
+- `scripts/qa/model-profile-e2e-scenarios.mjs`: `lane-beats-recommended-models` serves `mock-1`, `glm-5.3` and
+  `gpt-6-astra` on `chatgpt-subscription` + `opencode-go`, so no provider serves its engine provider default
+  (`gpt-6.1-sol`, `kimi-k3`). The session starts first-available on off-ladder `mock-1`, senpi's recommended-models
+  builtin switches to `chatgpt-subscription/gpt-6-astra`, and Daily · Normal still wins with `opencode-go/glm-5.3` max.
+  The old fixture's
+  only `gpt-6-sol` entry was the engine's initial provider-default record, which senpi#2393 moved to `gpt-6.1-sol`;
+  the builtin never switched there. `gpt-6-astra` keeps its ladder rung across senpi#2394's Sol-slot move.
+- `scripts/qa/model-profile-e2e.mjs`: that scenario's checks skip the initial-model record. `started_off_recommended_ladder`
+  requires the first `model_change` to be `mock-1`, and `recommended_models_switched_first` requires the builtin's
+  `chatgpt-subscription/gpt-6-astra` change to come after it and before the lane's `opencode-go/glm-5.3`.
+
+## 2026-09-30 - model-profile: Recommended leads its GPT-6 Sol slot with gpt-6.1-sol medium, gpt-6-sol behind it (senpi#2394)
+
+- `src/components/model-profile/builtin-profiles.ts`: `recommended` replaces its `gpt-6-sol` (medium) rung with
+  `gpt-6.1-sol` (medium) on `GPT_6_1_PROVIDERS` (`chatgpt-subscription|openai`), immediately followed by `gpt-6-sol`
+  (medium) on the shared `GPT_PROVIDERS` ranking, so Copilot and OpenCode Zen, which do not serve 6.1 Sol, still resolve
+  GPT-6 Sol. senpi#2394 makes the same switch in `RECOMMENDED_DEFAULT_MODELS`; OmO keeps the extra `gpt-6-sol` rung, and
+  the header comment says so. The lanes are unchanged. Telemetry already carries `gpt-6.1-sol` (#9214).
+- Tests: `builtin-profiles.test.ts` pins the seven-rung chain and the providers of both Sol rungs; `resolve.test.ts`
+  resolves `chatgpt-subscription/gpt-6.1-sol` medium when the subscription serves it next to `gpt-6-sol`, and
+  `github-copilot/gpt-6-sol` medium on a Copilot-only registry; `index.test.ts` applies both at session start.
+  `scripts/qa/model-profile-e2e-scenarios.mjs` adds `unset-gpt-6-1-sol` and `unset-copilot-gpt-6-sol`.
+- Docs: the Recommended ladder in `docs/guide/agent-model-matching.md`, `docs/guide/overview.md`,
+  `docs/guide/installation.md` and `docs/reference/omo-json.md`.
+- `plugin/extensions/` bundles regenerated on linux/amd64 (node 24, bun 1.4.2) for the chain change.
+
+## 2026-09-30 - lsp: post-edit install nudges stay inside projects and appear once per server (#9223)
+
+- `components/lsp/post-edit-outcome.ts` (moved out of `index.ts`) turns a daemon `not_installed` availability into the structured post-edit outcome, carrying `serverId`, `installDecisionTool` and a recorded decision.
+- `components/lsp/index.ts` `handlePostEditDiagnosticsToolResult` classifies each edited file against the session cwd and the engine-resolved agent dir (`resolveSessionAgentDir`, else `resolveAgentHome`): files outside a project, in the agent dir, or in a temp dir get no nudge, and each server is nudged once per session (reset on compaction).
+- `plugin/extensions/omo.js` regenerated on linux for the change above.
+
 ## 2026-09-30 - memory/kibitzer: connected-first sidecar model order (#9216)
 
 - `components/memory/kibitzer/sidecar-connected-order.ts` (new) `orderKibitzerCandidatesByConnection`: with a known, non-empty availability list the first connected candidate leads and unconnected ones trail; none connected returns the providers to connect.
 - `components/memory/kibitzer/sidecar-model.ts` `resolveKibitzerSidecarModel` applies it to category-sourced resolutions and returns `category_unavailable` when nothing is connected. The `task` tool path is untouched.
 - `plugin/extensions/omo.js` regenerated on linux/amd64 (node 24, bun 1.4.2) for the change above; `build-extension.mjs --check` and `build-install.mjs --check` pass on the regenerated tree.
+
+## 2026-09-30 - model-profile: Geeky · Normal leads with gpt-6.1-sol medium; telemetry knows the 6.1 Sol ids (#9214)
+
+- `src/components/model-profile/builtin-profiles.ts`: `geeky-normal` is `gpt-6.1-sol` (medium) on `chatgpt-subscription|openai`
+  (the new `GPT_6_1_PROVIDERS`: Copilot and OpenCode Zen do not serve 6.1 Sol, and every builtin rung must name a pair the
+  product knows), then `gpt-5.6-sol` (medium) on the shared `GPT_PROVIDERS` ranking. The `recommended` row and every other
+  profile are unchanged.
+- `src/components/telemetry/model-vocabulary.ts`: `gpt-6.1-sol` and `gpt-6.1-sol-fast` join the `chatgpt-subscription`,
+  `openai` and `openai-codex` vocabularies and `gpt-6.1-sol` the `vercel` one, so the new deep-low rungs export as themselves
+  instead of `custom`; `docs/reference/senpi-telemetry.md` is regenerated from the schemas.
+- Tests: `builtin-profiles.test.ts` pins the two-rung chain, `resolve.test.ts` resolves `chatgpt-subscription/gpt-6.1-sol`
+  medium when the subscription serves both, and `index.test.ts` applies it at session start; the Copilot-only and GPT-6-only
+  cases still resolve 5.6 Sol and report unavailable. `scripts/qa/model-profile-e2e-scenarios.mjs` `geeky-normal-sol` serves
+  `gpt-6.1-sol` next to `gpt-5.6-sol` and expects 6.1 Sol.
+- `plugin/extensions/omo.js`, `omo-task.js`, `omo-init-deep-advisor.js` regenerated on linux/amd64 (node 24, bun 1.4.2) for
+  the chain, profile and vocabulary changes; `omo-member.js`, `memory-run-supervisor.mjs` and `omo-computer-use.js` rebuilt
+  byte-identical, so they are unchanged.
 
 ## 2026-09-29 - plugin bundles carry the typed launch_spec_insecure start failure (#9208)
 

@@ -8,7 +8,7 @@ The machine-wide socket `rpc.sock` stays as the operator endpoint: `omo daemon r
 and `attach` ensure it, and the thread tools create their sessions there.
 `omo daemon` is the operator's view of every one of these hosts in one agent directory.
 Everything that decides *who serves a socket* lives in the engine (`senpi host`);
-this command supplies omo's launch spec, reads the policy out of `omo.json`, and
+this command supplies omo's launch spec, reads the policy out of the omo config, and
 turns the engine's answer into an exit code a script can branch on.
 
 ```bash
@@ -243,7 +243,15 @@ Trust rules match the engine's own: a group- or world-writable spec, or one whos
 path contains `..`, is refused before anything is started. Edit the spec by
 rebuilding the plugin, not by hand.
 
-## Policy and configuration (`omo.json`)
+## Policy and configuration (`~/.omo/omo.jsonc`)
+
+`task.host_engine_policy` and `task.host_idle_exit_ms` are read through the omo config
+loader, like every other `task.*` key: `~/.omo/omo.jsonc` (or `~/.omo/omo.json`, comments
+allowed) plus the project `.omo` layers, nearest project last. The agent-dir file
+(`~/.omo/agent/omo.json`) is deprecated: it still supplies either key when no config layer
+sets it, and `omo doctor` then prints one `WARN task.<key>: read from deprecated <path>`
+line per key with the move to make. A legacy `"never"` policy is told to use
+`--no-upgrade` instead, because the config key accepts only `upgrade` or `fallback`.
 
 | Key | Values | Meaning |
 | --- | --- | --- |

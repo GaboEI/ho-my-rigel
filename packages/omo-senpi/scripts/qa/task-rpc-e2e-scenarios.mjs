@@ -199,11 +199,12 @@ export async function runKillCheck(senpiBin) {
       // already gone counts as killed
     }
     const errored = await waitForRecord(stateDir, (r) => r.task_id === running.task_id && r.status === "error" && r.killed === true, 15_000)
+    const latest = readRecords(stateDir).find((r) => r.task_id === running.task_id)
     return {
       check: "kill_marks_error_killed_true",
       verdict: errored ? "PASS" : "FAIL",
       ...(errored ? {} : { reason: "kill did not yield status=error killed:true" }),
-      facts: { pid: running.pid, killed: errored?.killed ?? false, error_excerpt: (errored?.error_message ?? "").slice(0, 120) },
+      facts: { pid: running.pid, killed: errored?.killed ?? false, status: latest?.status, recordedKilled: latest?.killed, error_excerpt: (latest?.error_message ?? "").slice(0, 120) },
     }
   } finally {
     await cleanupSenpiHost(parent)

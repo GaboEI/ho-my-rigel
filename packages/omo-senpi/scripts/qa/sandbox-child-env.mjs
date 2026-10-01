@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path"
+
 import { resolveProjectStateDirectory } from "../../../senpi-task/src/store/project-state-directory.ts"
 import { AGENT_DIR_ENV_NAMES } from "./task-host-e2e-sandbox.mjs"
 
@@ -24,7 +26,8 @@ const HOST_INTERNAL_ENV_PREFIX = "SENPI_RPC_HOST_"
  * points at the caller's own install, host or session, and every agent-dir lane on the sandbox.
  * The omo launcher exports OMO_CODING_AGENT_DIR to every tool child and that lane outranks
  * SENPI_CODING_AGENT_DIR, so overriding one lane alone put QA children on the production host
- * (oh-my-openagent#8967).
+ * (oh-my-openagent#8967). The memory root moves to `memory` beside the agent dir, so a child never
+ * reads or writes the caller's ~/.omo/memory (its OMO_MEMORY_HOME override, or the default).
  */
 export function isolatedChildEnv(baseEnv, agentDir) {
   const env = { ...baseEnv }
@@ -33,6 +36,7 @@ export function isolatedChildEnv(baseEnv, agentDir) {
   }
   for (const name of [...HOST_ROUTING_ENV_NAMES, ...SESSION_IDENTITY_ENV_NAMES]) delete env[name]
   for (const name of AGENT_DIR_ENV_NAMES) env[name] = agentDir
+  env.OMO_MEMORY_HOME = join(dirname(agentDir), "memory")
   return env
 }
 

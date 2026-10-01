@@ -42,6 +42,22 @@ describe("classifyChildExit", () => {
     expect(outcome.facts.signal).toBeNull()
   })
 
+  test("#given only the Bun Windows child-reaper startup advisory #when a child exits with code 1 #then it is killed", () => {
+    // The Windows driver captures this prefix; its error_excerpt truncates the rest.
+    const stderr = "child reaper unavailable under Bun on win32: children orphaned by a terminated worker thread stay as zombies until this "
+    const outcome = classifyChildExit({ code: 1, signal: null, pid: 2784, stderr, platform: "win32" })
+
+    expect(outcome.kind).toBe("killed")
+    expect(mapExitOutcomeToError(outcome, { alreadyTerminal: false })?.killed).toBe(true)
+  })
+
+  test("#given the Bun advisory followed by an actual crash #when classifying #then it stays crashed", () => {
+    const stderr = "child reaper unavailable under Bun on win32: children orphaned by a terminated worker thread stay as zombies until this runtime exits\nTypeError: boom\n"
+
+    expect(classifyChildExit({ code: 1, signal: null, pid: 2784, stderr, platform: "win32" }).kind).toBe("crashed")
+    expect(classifyChildExit({ code: 1, signal: null, pid: 2784, stderr, platform: "linux" }).kind).toBe("crashed")
+  })
+
   test("#given a Windows child that crashed on its own #when classifying #then it stays crashed, not killed", () => {
     // given: a genuine crash writes diagnostics to stderr before exiting
 

@@ -42,7 +42,7 @@ function fail(lines, message) {
   lines.push(`FAIL ${message}`)
 }
 
-function warningsForSettings() {
+export function warningsForSettings() {
   const agentDir = canonicalAgentDir()
   const settingsPath = join(agentDir, "settings.json")
   if (!existsSync(settingsPath)) return []
@@ -108,8 +108,22 @@ function listProcesses() {
   return entries
 }
 
+// A standalone binary runs its engine as the provisioned runtime executable itself. The same
+// executable also serves omo's own commands, internal hosts and bundled scripts, so only a bare launch
+// or engine flags count; those other roles are never engines.
+const BINARY_ENGINE = /[\\/]binary-runtime[\\/][^\\/\s]+[\\/]omo(?:\.exe)?(?=\s|$)\s*(\S*)/
+const BINARY_NON_ENGINE_COMMANDS = new Set(["doctor", "setup", "daemon", "update", "upgrade", "host", "install", "remove", "list", "config", "auth", "app-server", "ulw-loop", "--version", "-v"])
+
+function isBinaryEngine(command) {
+  const match = BINARY_ENGINE.exec(command)
+  if (!match) return false
+  const first = match[1] ?? ""
+  if (first.startsWith("--internal-") || /\.(?:m?js|cjs|ts)$/.test(first)) return false
+  return !BINARY_NON_ENGINE_COMMANDS.has(first)
+}
+
 function isEngine(entry) {
-  return ENGINE_MARKERS.some((marker) => entry.command.includes(marker))
+  return ENGINE_MARKERS.some((marker) => entry.command.includes(marker)) || isBinaryEngine(entry.command)
 }
 
 function isInteractive(entry) {
@@ -252,7 +266,7 @@ export function reapStaleEngines(args, options = {}) {
   return { lines, failed, reaped }
 }
 
-function staleEngineReport(options) {
+export function staleEngineReport(options) {
   const list = options.list ?? listProcesses
   return formatStaleEngineLines(classifyEngineProcesses(list()).stale)
 }
@@ -307,7 +321,7 @@ export function formatTransientMemoryLines(counts) {
   ]
 }
 
-function transientMemoryReport(options) {
+export function transientMemoryReport(options) {
   const root = memoryRoot(options.env ?? process.env)
   return formatTransientMemoryLines(countTransientMemoryIdentities({
     agentsRoot: join(root, MEMORY_AGENTS_DIRNAME),
@@ -391,6 +405,7 @@ export function runDoctor(inventory, args = [], options = {}) {
   lines.push(`INFO Update: ${updateTarget().command}`)
   lines.push(...migrationReport(options, updateTarget().command))
   lines.push(...warningsForSettings())
+  lines.push(...(options.configDiagnostics ?? []))
   lines.push(...piConfigReport({ env: options.env, homeDir: options.homeDir }))
   lines.push(...staleEngineReport(options))
   lines.push(...retiredPayloadReport(options))

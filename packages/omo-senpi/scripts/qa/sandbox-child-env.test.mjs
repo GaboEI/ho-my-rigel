@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { resolveMemoryRoot } from "../../../memory-core/src/identity/layout.ts";
+
 import { engineStateDir, isolatedChildEnv, sandboxStateDir } from "./sandbox-child-env.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -30,8 +32,27 @@ describe("isolatedChildEnv", () => {
 			OMO_CODING_AGENT_DIR: "/tmp/sbx/agent",
 			SENPI_CODING_AGENT_DIR: "/tmp/sbx/agent",
 			PI_CODING_AGENT_DIR: "/tmp/sbx/agent",
+			// Beside the agent dir, joined with the platform separator (`\tmp\sbx\memory` on Windows).
+			OMO_MEMORY_HOME: join(dirname("/tmp/sbx/agent"), "memory"),
 		});
 		expect(caller.OMO_CODING_AGENT_DIR).toBe("/home/u/.omo/agent");
+	});
+});
+
+describe("isolatedChildEnv memory root", () => {
+	test("resolves the child's memory root inside the sandbox, never the caller's real ~/.omo/memory", () => {
+		const sandboxAgentDir = "/tmp/sbx/agent";
+		for (const caller of [
+			{ PATH: "/bin", HOME: "/home/u" },
+			{ PATH: "/bin", HOME: "/home/u", OMO_MEMORY_HOME: "/home/u/.omo/memory" },
+		]) {
+			const env = isolatedChildEnv(caller, sandboxAgentDir);
+
+			const childRoot = resolveMemoryRoot(env, "/tmp/sbx/project");
+			const insideSandbox = relative(resolve("/tmp/sbx"), childRoot);
+			expect(isAbsolute(insideSandbox) || insideSandbox.split(sep)[0] === "..").toBe(false);
+			expect(childRoot).not.toBe(resolveMemoryRoot(caller, "/tmp/sbx/project"));
+		}
 	});
 });
 

@@ -29,7 +29,9 @@ omo-senpi plugin payload produced by `bun run build:omo-native` (gitignored, nev
     `OMO_SIGNAL_GRACE_MS` (default 10s), then re-raises an ignored signal. It waits for `SIGINT`
     without forwarding it twice. Never use `spawnSync` for these long-lived handoffs.
   - `bun-bin-shim.js` — `ensureBunBinShim`: keeps the user-facing bun-global bin an sh shim that
-    execs bun directly (POSIX only, self-healing across `bun add -g` updates, fail-open)
+    execs bun directly (POSIX only, fail-open). Every launch repairs it, under node or bun, and so
+    does postinstall (`bin/senpi-patch.mjs`), which bun runs on itself right after `bun add -g`
+    relinks the bin when node is not on PATH (#9293)
   - `doctor.js` — diagnostics plus stale-orphan detection: `classifyEngineProcesses` splits live
     engines into stale (interactive, PPID 1), attached and managed (`--mode`), and
     `reapStaleEngines` terminates ONLY explicitly named pids that are still stale at request time.
@@ -41,6 +43,7 @@ omo-senpi plugin payload produced by `bun run build:omo-native` (gitignored, nev
     offline ModelRuntime (read-only auth.json, models.json, env keys; nothing written) classified by the senpi-task
     resolver through `plugin/runtime/category-coverage/index.js`, which `build:omo-native` bundles from
     `category-coverage-entry.ts`. Fail-open: any error prints no line and omits the row.
+  - `config-doctor.js` - doctor's `WARN config: <file>: <key> ignored (...)` lines, one per key the omo.json loader dropped and one per file it did not load, from `configDoctorLines` (`config-doctor-runtime.ts`) through the same staged runtime bundle; the compiled entry imports it directly. A runtime that cannot load prints `WARN config: diagnostics unavailable: <reason>`.
   - `package-paths.js`, `provider-map.json`, `legacy-bun-global-migration.js`
 - **agent state lives in ONE canonical directory: `~/.omo/agent`.** `bin/lib/agent-dir.js` owns that answer (`canonicalAgentDir`), and the launcher, `omo doctor`, `omo setup` and the locally installed launcher (`packages/omo-senpi/src/install/local-launcher.ts`) all resolve it from there - never by composing their own default. An explicit `OMO_CODING_AGENT_DIR` (or legacy `SENPI_CODING_AGENT_DIR` / `PI_CODING_AGENT_DIR`) still wins, and `adoptLegacyFlatState` carries state left in the pre-unification flat `~/.omo` layout forward once, so unifying the location never reads as another reset.
 - `bin/omo-agent-toolkit.js` - internal delegate to the staged toolkit runtime, NOT an npm bin

@@ -54,8 +54,12 @@ export const CATEGORY_FALLBACK_CHAINS: Readonly<Record<string, readonly Delegate
     { providers: ["chatgpt-subscription", "openai", "opencode"], model: "gpt-5.6-sol", variant: "max" }
   ],
   "deep-low": [
-    // Plain gpt-5.6-sol leads on every lane that serves it. The Fast (priority) tier exists only on
-    // the ChatGPT subscription and OpenAI lanes, so it is the fallback there at the same effort.
+    // GPT-6.1 Sol leads at the same medium effort: it matches GPT-6 Sol's price with near-Astra
+    // quality, but only the ChatGPT subscription and OpenAI lanes serve it (plain, then the Fast
+    // tier). GPT-5.6 Sol stays behind it so Copilot, OpenCode Zen and a registry without 6.1 still
+    // resolve the lane.
+    { providers: ["chatgpt-subscription", "openai"], model: "gpt-6.1-sol", variant: "medium" },
+    { providers: ["chatgpt-subscription", "openai"], model: "gpt-6.1-sol-fast", variant: "medium" },
     {
       providers: ["chatgpt-subscription", "openai", "github-copilot", "opencode"],
       model: "gpt-5.6-sol",

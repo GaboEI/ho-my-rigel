@@ -1,3 +1,32 @@
+## 2026-09-30 - The foreground task wait is bounded at 900 s (#8759 cluster, senpi#2323)
+
+- `tools/task/foreground-wait.ts` `waitForForegroundTask`: the wait before a foreground child is promoted to background
+  is now `min(prompt-cache safe-wait budget, MAX_FOREGROUND_WAIT_SECONDS)`, with `MAX_FOREGROUND_WAIT_SECONDS = 900`.
+  The cap applies to both budget sources (`ctx.getPromptCacheSafeWaitSeconds()` and `PI_PROMPT_CACHE_SAFE_WAIT_SECONDS`).
+  The budget is already TTL - 30 s, so a 5 min TTL still waits 270 s and a 1 h TTL waits 900 s instead of 3570 s.
+  Without the cap, senpi#2323 (1 h TTL on the Claude SDK lane) would block a parent turn for up to ~59.5 min.
+- `promoted.budgetSeconds` reports the effective (capped) wait. No separate raw-budget field: its only consumers,
+  `execute-single.ts` and `execute-batch.ts`, pass it to `backgroundConversionText`, which renders the seconds the parent
+  actually waited, and 900 s is still inside the cache-safe window.
+- No-op today: every current budget is 270 s.
+- `foreground-wait-cap.test.ts`: getter 3570 and env 3570 schedule the deadline at 900_000 ms and promote with 900,
+  getter 270 stays at 270_000 ms, and the task tool notice states 900 s. Removing the cap fails the three 3570 cases.
+
+## 2026-09-30 - deep-low leads with GPT-6.1 Sol at medium (#9214)
+
+- `category/fallback-chains.ts` `deep-low`: `gpt-6.1-sol` (medium) on `chatgpt-subscription|openai`, then `gpt-6.1-sol-fast`
+  (medium) on the same lanes, then the unchanged `gpt-5.6-sol` (medium, all four GPT lanes) and `gpt-5.6-sol-fast` (medium)
+  rungs. The comment above the chain says why: 6.1 Sol is served only on the two OpenAI lanes, so 5.6 Sol keeps Copilot,
+  OpenCode Zen and a registry without 6.1 on the lane at the same effort.
+- `category/openai-categories.ts`: the builtin default becomes `chatgpt-subscription/gpt-6.1-sol` medium and
+  `DEEP_LOW_GATE_MODELS` becomes `gpt-6.1-sol`, `gpt-6.1-sol-fast`, `gpt-5.6-sol-fast`, `gpt-5.6-sol`, so a 5.6-Sol-only
+  registry still opens the lane. The task tool's listing annotation reads `(requires gpt-6.1-sol or gpt-6.1-sol-fast or
+  gpt-5.6-sol-fast or gpt-5.6-sol)`.
+- Tests: `fallback-chains.test.ts`, `resolve-category.test.ts` and `openai-categories.test.ts` pin the new chain, default and
+  gate; two new `openai-categories.test.ts` cases resolve `gpt-6.1-sol` over `gpt-5.6-sol` on the subscription lane and
+  the 6.1 Fast tier over plain 5.6 Sol; `gated-categories.test.ts` pins the new annotation. `scripts/manual-category-qa.ts`
+  expects the gate's attempted model `chatgpt-subscription/gpt-6.1-sol`.
+
 ## 2026-09-29 - A refused launch spec is a typed start failure that names the file and its fix (#9208)
 
 - `runners/rpc-host/daemon.ts` `loadDaemonLaunchSpec`: a `DaemonLaunchSpecError("launch_spec_insecure")` from
