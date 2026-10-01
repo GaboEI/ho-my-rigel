@@ -74,6 +74,13 @@ for (const skill of ["dev-browser", "ultimate-browsing"]) {
 }
 if (opencode.default_agent !== "sisyphus") fail("Sisyphus must be the default agent")
 if (opencode.plugin?.length !== 1 || !opencode.plugin[0].includes("__OMO_PLUGIN_ENTRY__")) fail("plugin entry must remain an explicit test-time placeholder")
+for (const file of ["opencode/rigel-v2-native.mjs", "opencode/rigel-v2-native-core.mjs", "opencode/rigel-v2-native-prompt.mjs", "switch-live-plugin-to-native-v2.mjs"]) {
+  if (!existsSync(join(root, file))) fail(`native V2 runtime artifact missing: ${file}`)
+}
+const nativeEntrypoint = readFileSync(join(root, "opencode/rigel-v2-native.mjs"), "utf8")
+if (/legacyModule|omo-v2-adapter/i.test(nativeEntrypoint)) fail("native V2 entrypoint must not load the V1 bridge")
+const activation = readFileSync(join(root, "apply-v2-runtime-service.sh"), "utf8")
+if (!activation.includes("switch-live-plugin-to-native-v2.mjs") || activation.includes("switch-live-plugin-to-v2-adapter.mjs")) fail("runtime activation must select the native V2 entrypoint")
 
 const profileSerialized = JSON.stringify({ omo, opencode })
 if (/WatchdogVPN|\/home\/gabodev|TAVILY_API_KEY|OPENAI_API_KEY|CODEX_AUTH/i.test(profileSerialized)) fail("profile contains a project rule, personal path, or secret marker")
