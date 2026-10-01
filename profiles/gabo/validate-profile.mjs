@@ -17,10 +17,14 @@ const profile = omo.profiles?.gabo?.["[opencode]"]
 if (!profile) fail("profiles.gabo.[opencode] is required")
 if (profile.agent_definitions?.length) fail("the V2 profile must not add a second legacy Juez definition")
 if (profile.agents?.sisyphus?.prompt_append !== "file://__OMO_PROFILE_ROOT__/opencode/prompts/sisyphus-orchestration.md") fail("Sisyphus must receive its orchestration contract")
+const sisyphusNote = readFileSync(join(root, "opencode/prompts/sisyphus-orchestration.md"), "utf8")
+if (!sisyphusNote.includes("additive profile note") || !sisyphusNote.includes("Preserve OmO's upstream identity")) fail("Sisyphus must preserve upstream orchestration")
+if (/\bsubagent\b|\btask\b|Use explore|routing discipline/i.test(sisyphusNote)) fail("Sisyphus profile note must not redefine OmO delegation")
 if (profile.agents?.juez) fail("the V2 profile must not configure the retired juez alias")
 if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
 if (profile.browser_automation_engine?.provider !== "playwright") fail("Playwright must be canonical")
+if (profile.default_mode?.ultrawork !== true) fail("Ultrawork must be enabled by default through OmO's native setting")
 if (profile.goal?.enabled !== false || profile.default_mode?.goal !== false) fail("OmO root Goal must stay disabled")
 for (const hook of ["goal", "compaction-context-injector", "compaction-todo-preserver"]) {
   if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled to preserve the external root authority`)
@@ -29,6 +33,7 @@ if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skill
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")
 const v2Selection = readJson("v2-agent-selection.json")
+if ((v2Selection.optionalAgentIds ?? []).includes("Hephaestus - Deep Agent") || !v2Selection.excludedOmOAgentIds?.includes("Hephaestus - Deep Agent")) fail("the OpenAI-only Hephaestus agent must remain excluded")
 const judge = v2Selection.independentJudge
 if (judge?.id !== "judge" || judge.removeRigelLegacyAlias !== "juez") fail("Judge must use the canonical id and retire the duplicate Rigel alias")
 if (judge?.source !== "opencode/agents/judge.md" || judge.legacyExternalDefinitionPath !== ".config/opencode/agents/judge.md") fail("Judge must be packaged as a Rigel V2 source and migrate the former local definition")
@@ -74,6 +79,20 @@ for (const skill of ["dev-browser", "ultimate-browsing"]) {
 }
 if (opencode.default_agent !== "sisyphus") fail("Sisyphus must be the default agent")
 if (opencode.plugin?.length !== 1 || !opencode.plugin[0].includes("__OMO_PLUGIN_ENTRY__")) fail("plugin entry must remain an explicit test-time placeholder")
+for (const file of [
+  "opencode/rigel-v2-native.mjs",
+  "opencode/rigel-v2-native-core.mjs",
+  "opencode/rigel-v2-native-prompt.mjs",
+  "opencode/rigel-v2-native-categories.mjs",
+  "opencode/rigel-v2-category-manifest.mjs",
+  "switch-live-plugin-to-native-v2.mjs",
+]) {
+  if (!existsSync(join(root, file))) fail(`native V2 runtime artifact missing: ${file}`)
+}
+const nativeEntrypoint = readFileSync(join(root, "opencode/rigel-v2-native.mjs"), "utf8")
+if (/legacyModule|omo-v2-adapter/i.test(nativeEntrypoint)) fail("native V2 entrypoint must not load the V1 bridge")
+const activation = readFileSync(join(root, "apply-v2-runtime-service.sh"), "utf8")
+if (!activation.includes("switch-live-plugin-to-native-v2.mjs") || activation.includes("switch-live-plugin-to-v2-adapter.mjs")) fail("runtime activation must select the native V2 entrypoint")
 
 const profileSerialized = JSON.stringify({ omo, opencode })
 if (/WatchdogVPN|\/home\/gabodev|TAVILY_API_KEY|OPENAI_API_KEY|CODEX_AUTH/i.test(profileSerialized)) fail("profile contains a project rule, personal path, or secret marker")
