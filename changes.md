@@ -1,3 +1,10 @@
+## 2026-10-01 - Refuse uncloneable extension arguments before posting (#9331)
+
+Extension calls snapshot their arguments before crossing the worker boundary and return
+invalid_arguments when cloning fails. A failed post also removes and rejects its pending
+request rather than leaving an unhandled rejection for disposal. Function and symbol
+arguments now leave the worker alive, preserve its registration and allow core calls.
+
 ## 2026-10-01 - Preserve relay validation and committed extension results (#9331)
 
 Extension enqueue resolves its binding target with the relay's shared live-and-disk

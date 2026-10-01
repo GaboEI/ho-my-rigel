@@ -11,7 +11,7 @@ let harness: GatewayHarness | undefined
 afterEach(async () => { await harness?.dispose(); harness = undefined })
 const moduleUrl = new URL("./testing/extension-lifecycle.mjs", import.meta.url).href
 
-test.each(["hang", "staleTimer"])("#given an extension %s #when its lifetime ends #then the worker and write lock remain usable", async (scenario) => {
+test.each(["hang", "staleTimer", "uncloneable-function", "uncloneable-symbol"])("#given an extension %s #when called #then the worker and write lock remain usable", async (scenario) => {
   // A separate client process lets the watchdog reap a regressed, wedged worker as well.
   const agentDir = mkdtempSync(join(tmpdir(), "gateway-lifecycle-"))
   const child = Bun.spawn([process.execPath, fileURLToPath(new URL("./testing/extension-lifecycle-driver.mjs", import.meta.url)), scenario, agentDir], { stdout: "pipe", stderr: "pipe" })
@@ -22,7 +22,8 @@ test.each(["hang", "staleTimer"])("#given an extension %s #when its lifetime end
     const result = JSON.parse(stdout.trim().split("\n").at(-1) ?? "")
     expect(result).toMatchObject({ rows: { kind: "ok", value: [] }, core: [] })
     if (scenario === "hang") expect(result).toMatchObject({ outcome: { kind: "refused", code: "extension_operation_failed" }, otherWriter: "ok" })
-    else expect(result).toMatchObject({ event: { kind: "extension_error", phase: "stale_transaction" } })
+    else if (scenario === "staleTimer") expect(result).toMatchObject({ event: { kind: "extension_error", phase: "stale_transaction" } })
+    else expect(result).toMatchObject({ outcome: { kind: "refused", code: "invalid_arguments" } })
   } finally {
     clearTimeout(watchdog)
     if (child.exitCode === null) child.kill()

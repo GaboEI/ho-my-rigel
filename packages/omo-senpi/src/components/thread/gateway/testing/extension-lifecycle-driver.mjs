@@ -13,6 +13,10 @@ try {
     try { await other.registerIncarnation({ durable_id: "post-timeout", incarnation: "new" }) }
     finally { await other.dispose() }
     console.log(JSON.stringify({ outcome, rows, core, otherWriter: "ok" }))
+  } else if (process.argv[2].startsWith("uncloneable-")) {
+    const args = process.argv[2] === "uncloneable-function" ? () => null : Symbol("invalid")
+    const outcome = await store.extensionCall("alpha", "rows", args)
+    console.log(JSON.stringify({ outcome, core: await store.list(), rows: await store.extensionCall("alpha", "rows", { name: "alpha" }) }))
   } else {
     await store.extensionCall("alpha", "retain", null)
     const event = new Promise((resolve) => {
