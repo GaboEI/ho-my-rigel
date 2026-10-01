@@ -18,7 +18,15 @@ function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")) }
 function sha(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex") }
 function codexPlugin(config) { return (config.plugins || []).find(v => typeof v === "string" && v.startsWith("oc-codex-multi-auth")) || null }
 function fingerprint(config) { return { obsidian: sha(config.mcp?.obsidian), codexPlugin: sha(codexPlugin(config)) } }
-function hasOpenCode() { try { return childProcess.execFileSync("pgrep", ["-af", `${home}/.opencode/bin/opencode`], { encoding: "utf8" }).trim() } catch { return "" } }
+// The system refresh stops `opencode-lan.service`, but the desktop helper
+// (`serve --service`) can legitimately remain alive.  Only the LAN server
+// owns the config/runtime being replaced here, so do not mistake that helper
+// for an unsafe concurrent service instance.
+function hasOpenCode() {
+  try {
+    return childProcess.execFileSync("pgrep", ["-af", `${home}/.opencode/bin/opencode serve --hostname 0.0.0.0 --port 4096`], { encoding: "utf8" }).trim()
+  } catch { return "" }
+}
 
 if (hasOpenCode()) fail("OpenCode sigue ejecutándose; el servicio debe estar detenido durante el cambio.")
 if (!fs.existsSync(stateFile)) fail("no hay una prueba Rigel activa.")
@@ -26,6 +34,11 @@ const state = readJson(stateFile)
 const before = readJson(configFile)
 const beforeFingerprint = fingerprint(before)
 if (beforeFingerprint.obsidian !== state.protectedFingerprint.obsidian || beforeFingerprint.codexPlugin !== state.protectedFingerprint.codexPlugin) fail("un componente protegido no coincide con su huella congelada.")
+
+const skillMaterialization = childProcess.spawnSync(process.execPath, [
+  path.join(sourceRoot, "profiles/gabo/materialize-v2-skills.mjs"),
+], { cwd: sourceRoot, env: { ...process.env, HOME: home }, encoding: "utf8" })
+if (skillMaterialization.status !== 0) fail(`no se pudo exponer las skills V2: ${skillMaterialization.stderr || skillMaterialization.stdout}`)
 
 fs.mkdirSync(path.dirname(generatedFile), { recursive: true, mode: 0o700 })
 const generation = childProcess.spawnSync(process.execPath, [
@@ -37,6 +50,18 @@ const selected = {}
 for (const id of selection.orchestratedAgentIds) {
   if (!generated.agent?.[id]) fail(`OmO no generó el agente esperado: ${id}`)
   selected[id] = generated.agent[id]
+}
+// Optional agents are installed when the generator produced them, and skipped
+// loudly when not. A provider-gated agent must never abort the whole refresh.
+const skippedOptional = []
+for (const id of selection.optionalAgentIds ?? []) {
+  const definition = generated.agent?.[id]
+  if (!definition) {
+    skippedOptional.push(id)
+    console.warn(`Rigel V2 agent layer: agente opcional no generado, se omite: ${id}`)
+    continue
+  }
+  selected[id] = definition
 }
 const candidate = structuredClone(before)
 const judge = selection.independentJudge
@@ -80,6 +105,7 @@ state.v2AgentLayer = {
   migratedLegacyAgentIds: migratedLegacyJudge ? [judge.id] : [],
   removedRigelLegacyAgentIds: state.v2AgentLayer?.agentIds?.includes(judge.removeRigelLegacyAlias) ? [judge.removeRigelLegacyAlias] : [],
   disabledLegacyAgentIds: selection.disabledLegacyAgentIds,
+  skippedOptionalAgentIds: skippedOptional,
 }
 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 })
-console.log(JSON.stringify({ defaultAgent: generated.default_agent, installedAgents: Object.keys(selected), disabledLegacy: selection.disabledLegacyAgentIds }))
+console.log(JSON.stringify({ defaultAgent: generated.default_agent, installedAgents: Object.keys(selected), skippedOptionalAgents: skippedOptional, disabledLegacy: selection.disabledLegacyAgentIds }))

@@ -68,6 +68,36 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
     expect(runtime.disposed).toEqual(["tool.transform"])
   })
 
+  test("adapts V2 agent.list to the legacy app.agents contract used by task", async () => {
+    const runtime = fakeContext()
+    const calls = []
+    runtime.context.client = {
+      agent: {
+        list: async (input) => {
+          calls.push(input)
+          return { data: [{ name: "explore", mode: "subagent" }] }
+        },
+      },
+    }
+    const plugin = createRigelV2Plugin({
+      loadLegacyHooks: async () => ({
+        tool: {
+          delegate_probe: {
+            description: "delegation client probe",
+            args: {},
+            execute: async (_input, context) => JSON.stringify(await context.client.app.agents()),
+          },
+        },
+      }),
+    })
+    await plugin.setup(runtime.context)
+    const result = await runtime.added[0].execute({}, {
+      sessionID: "ses_3", messageID: "msg_3", agent: "Sisyphus - ultraworker", signal: "abort", progress: () => undefined,
+    })
+    expect(JSON.parse(result.content)).toEqual({ data: [{ name: "explore", mode: "subagent" }] })
+    expect(calls).toEqual([{ location: { directory: "/isolated/project" } }])
+  })
+
   test("maps the V2 hooks that have a direct legacy equivalent", async () => {
     const runtime = fakeContext()
     const calls = []

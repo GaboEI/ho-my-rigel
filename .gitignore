@@ -2,6 +2,9 @@
 .omo/*
 !.omo/rules/
 !.omo/rules/**
+# Rigel agent instructions: local to the operator, not part of the project.
+/AGENTS.rigel.md
+.omo/rules/rigel.md
 packages/*/.omo/*
 .sisyphus/*
 !.sisyphus/rules/

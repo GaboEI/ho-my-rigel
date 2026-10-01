@@ -65,6 +65,10 @@ const frozenFingerprint = protectedFingerprint(frozen)
 if (!frozen.mcp?.obsidian || !codexPlugin(frozen)) fail("la congelación no contiene los componentes protegidos esperados.")
 if (!equal(frozenFingerprint, protectedFingerprint(current))) fail("la configuración activa difiere de la congelación en Obsidian o Codex auth.")
 stageV2Adapter()
+const skillMaterialization = childProcess.spawnSync(process.execPath, [
+  path.join(sourceRoot, "profiles/gabo/materialize-v2-skills.mjs"),
+], { cwd: sourceRoot, env: { ...process.env, HOME: home }, encoding: "utf8" })
+if (skillMaterialization.status !== 0) fail(`no se pudo exponer las skills V2: ${skillMaterialization.stderr || skillMaterialization.stdout}`)
 
 const tempOmo = `${omoDir}.rigel-stage-${process.pid}`
 try {

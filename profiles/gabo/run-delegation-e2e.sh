@@ -35,7 +35,8 @@ case "$(opencode --version)" in *"v2."*) ;; *) echo "Expected OpenCode V2" >&2; 
 mkdir -p "$sandbox/home/.omo/opencode/prompts" "$sandbox/xdg/config/opencode" "$sandbox/xdg/data" "$sandbox/xdg/state" "$sandbox/xdg/cache" "$sandbox/project"
 sed 's|__OMO_PROFILE_ROOT__|/sandbox/home/.omo|g' "$root/profiles/gabo/omo.jsonc" > "$sandbox/home/.omo/omo.jsonc"
 cp "$root/profiles/gabo/opencode/prompts/sisyphus-orchestration.md" "$sandbox/home/.omo/opencode/prompts/sisyphus-orchestration.md"
-cp -R "$root/profiles/gabo/skills" "$sandbox/xdg/config/opencode/skills"
+mkdir -p "$sandbox/home/.agents"
+cp -R "$root/profiles/gabo/skills" "$sandbox/home/.agents/skills"
 node - "$root/profiles/gabo/opencode/opencode.json" "$fixture_config" "$sandbox/xdg/config/opencode/opencode.json" <<'NODE'
 const fs=require('fs'); const path=require('path'); const [base, fixture, output]=process.argv.slice(2);
 const config=JSON.parse(fs.readFileSync(base,'utf8').replace('file://__OMO_PLUGIN_ENTRY__','file:///workspace/packages/omo-opencode/src/index.ts'));

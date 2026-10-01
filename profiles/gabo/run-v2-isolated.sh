@@ -38,7 +38,8 @@ mkdir -p "$sandbox/home/.omo/opencode/prompts" "$sandbox/xdg/config/opencode" "$
 # deliberately exposed only as /sandbox.
 sed 's|__OMO_PROFILE_ROOT__|/sandbox/home/.omo|g' "$root/profiles/gabo/omo.jsonc" > "$sandbox/home/.omo/omo.jsonc"
 cp "$root/profiles/gabo/opencode/prompts/sisyphus-orchestration.md" "$sandbox/home/.omo/opencode/prompts/sisyphus-orchestration.md"
-cp -R "$root/profiles/gabo/skills" "$sandbox/xdg/config/opencode/skills"
+mkdir -p "$sandbox/home/.agents"
+cp -R "$root/profiles/gabo/skills" "$sandbox/home/.agents/skills"
 sed 's|file://__OMO_PLUGIN_ENTRY__|file:///workspace/packages/omo-opencode/src/index.ts|g' "$root/profiles/gabo/opencode/opencode.json" > "$sandbox/xdg/config/opencode/opencode.json"
 
 docker run -d --rm --name "$container_name" -p "127.0.0.1:${port}:${port}" \
@@ -95,6 +96,7 @@ docker run --rm \
     if (contract !== "file:///sandbox/home/.omo/opencode/prompts/sisyphus-orchestration.md") process.exit(1);
     const judge = JSON.parse(fs.readFileSync("./profiles/gabo/opencode/agents/judge.v2.json", "utf8"));
     if (judge.mode !== "primary" || judge.permission?.edit !== "deny" || judge.permission?.task !== "ask") process.exit(1);
+    if (result.config.agents?.hephaestus?.model !== "openai/gpt-5.6-sol") process.exit(1);
   '
 
 if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*credential*' | grep -q .; then
@@ -102,4 +104,4 @@ if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*creden
   exit 1
 fi
 
-echo "Ho My Rigel V2 isolated smoke passed: $version (Sisyphus contract and integrated Judge verified)"
+echo "Ho My Rigel V2 isolated smoke passed: $version (Sisyphus contract, integrated Judge and the Hephaestus model pin verified)"

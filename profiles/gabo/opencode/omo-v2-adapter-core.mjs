@@ -8,7 +8,7 @@
  */
 
 const fallbackClient = {
-  app: { log: async () => undefined },
+  app: { log: async () => undefined, agents: async () => ({ data: [] }) },
   session: { messages: async () => ({ data: [] }) },
   // OpenCode V2's setup context does not expose the V1 TUI RPC client. OmO
   // treats notifications as best effort, so preserve execution and omit the
@@ -32,7 +32,7 @@ export function createRigelV2Plugin({ id = "ho-my-rigel", loadLegacyHooks }) {
     id,
     setup: async (context) => {
       const directory = context?.location?.directory ?? process.cwd()
-      const client = context?.client ?? fallbackClient
+      const client = adaptLegacyClient(context?.client, directory)
       const serverUrl = context?.serverUrl ?? new URL("http://127.0.0.1:4096")
       const legacy = await loadLegacyHooks({ directory, client, serverUrl, $: context?.$ })
       const registrations = []
@@ -76,12 +76,55 @@ async function registerTools(context, legacy, directory, registrations) {
           messageID: toolContext.messageID,
           agent: toolContext.agent,
           directory,
+          // V2 hands these over and the legacy context expects them: without
+          // `ask` the skill tool throws, and without `client` the delegate
+          // task cannot resolve agents.
+          worktree: toolContext.worktree,
           abort: toolContext.signal,
+          // V2 declares `ask` on ToolContext but does not populate it for tools
+          // registered through the tool editor, so forwarding alone yields
+          // undefined and the skill tool throws. Forward it when present and
+          // fall back to a permissive resolver so a missing host permission
+          // callback can never hard-fail a tool call.
+          ask: typeof toolContext.ask === "function" ? toolContext.ask : async () => {},
+          client: adaptLegacyClient(context?.client, directory),
           metadata: (metadata) => { void toolContext.progress?.(metadata) },
         })),
       })
     }
   }))
+}
+
+/**
+ * OmO's task tool asks for the V1 endpoint `client.app.agents()`.  OpenCode
+ * V2 exposes the same data as `client.agent.list({ location })`.  Keep all
+ * other client surfaces native and bridge only this renamed endpoint.
+ */
+function adaptLegacyClient(client, directory) {
+  if (!client || typeof client !== "object") return fallbackClient
+  if (typeof client?.app?.agents === "function") return client
+
+  const app = {
+    ...(client.app && typeof client.app === "object" ? client.app : {}),
+    log: typeof client?.app?.log === "function" ? client.app.log.bind(client.app) : fallbackClient.app.log,
+    agents: async (input = {}) => {
+      if (typeof client?.agent?.list !== "function") return fallbackClient.app.agents()
+      const location = {
+        directory: typeof input?.directory === "string" ? input.directory : directory,
+        ...(typeof input?.workspace === "string" ? { workspace: input.workspace } : {}),
+      }
+      return client.agent.list({ location })
+    },
+  }
+
+  // A proxy preserves getters/methods of the generated SDK with `client` as
+  // their receiver; Object.create(client) would break SDK private fields.
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === "app") return app
+      return Reflect.get(target, property, target)
+    },
+  })
 }
 
 async function registerToolHooks(context, legacy, registrations) {
