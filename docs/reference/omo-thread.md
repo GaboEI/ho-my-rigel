@@ -118,17 +118,21 @@ shares the binding's one bucket.
 
 ## Store extensions
 
-JavaScript packages can register a store extension on `createGatewayStore(...)`, or on the
-`createThreadSdk(...)` result exported by `runtime/thread-sdk/sdk.js`. Registration is local to
-that store handle; each process registers the extensions it uses.
+JavaScript packages register extensions on the `createThreadSdk(...)` result exported by the
+shipped `runtime/thread-sdk/sdk.js`. `createGatewayStore` is an internal source factory, not an
+export of a shipped bundle. Registration is local to the SDK's store handle; each process
+registers the extensions it uses.
 
 ```typescript
+const { createThreadSdk } = await import(`${pluginRoot}/runtime/thread-sdk/sdk.js`)
+const store = createThreadSdk({ agentDir, cwd: process.cwd(), uid: process.getuid(), user: "connector" })
 const registered = await store.registerStoreExtension({
   name: "notes",
   migrations: [["CREATE TABLE notes_items (id INTEGER PRIMARY KEY, text TEXT)"]],
   moduleUrl: new URL("./dist/store-ops.mjs", import.meta.url).href,
 })
 const result = await store.extensionCall("notes", "remember", { id: 1, text: "hello" })
+await store.dispose()
 ```
 
 The compiled `.js`, `.mjs` or `.cjs` module exports named operations `(tx, args) => result`
@@ -141,18 +145,24 @@ any core object name. Names such as `gateway`, `thread`, and `sqlite` are reject
 Each migration step is an array of SQL statements,
 tracked in `extension_schema`, independently of core `user_version`. Registration and calls
 ensure pending steps after core migrations. Each step takes `BEGIN IMMEDIATE` and re-reads the
-version under the lock, so concurrent processes apply it once.
+version under the lock, so concurrent processes apply it once. Overlapping namespaces such as
+`alpha` and `alpha_beta` are allowed in either registration order, but neither owns the other's
+objects. An unowned object already bearing the namespace prefix blocks its first registration.
 
 Operations run in one `BEGIN IMMEDIATE`. The transaction surface is:
 
 - `all(columns, sql, params?, orderBy?)`, `one(columns, sql, params?)`, and `exec(sql, params?)`:
   one SQLite statement per call, using `?` parameters (`string | number | null`). Reads return
   records keyed by the explicit columns; `one` returns `undefined` when absent; `exec` returns
-  the changed-row count. Use `orderBy` for ordered reads. As in the store's statement-free
-  binding, put literal question marks in parameters, not SQL text.
+  the changed-row count. Use `orderBy` for ordered reads. Only anonymous parameter tokens are
+  replaced; literal question marks in SQL strings, quoted identifiers and comments are preserved.
+  `exec` can also create, alter and drop the extension's own objects during an operation, not
+  just during migration. Identifiers and schema qualifiers follow SQLite's ASCII case folding.
 - `enqueue({ binding_id, event_id, text, author?, mode? })`: the relay's inbound validation,
-  author-specific rate limits, mode ceiling and idempotency, without contacting a live endpoint
-  before commit. Enqueue requires a binding; there is no `enqueueToSession` operation.
+  including resolution through its shared live-and-disk address book, author-specific rate
+  limits, mode ceiling and idempotency. A missing target returns `not_found`, just as relay
+  inbound does. It does not wake a live endpoint before commit. Enqueue requires a binding;
+  there is no `enqueueToSession` operation.
   `deliveries.actor_user_id` records `author.user_id`, or NULL without it.
 - `bind({ principal, binding, idempotency_key? })`, `unbind({ principal, binding_id,
   expected_revision, idempotency_key? })`, `rebind({ principal, binding_id, expected_revision,
@@ -165,30 +175,48 @@ Operations run in one `BEGIN IMMEDIATE`. The transaction surface is:
 SQL can access only objects recorded as owned by this extension in the persistent
 `extension_objects` registry. Core migration v5 snapshots every existing schema object as
 core-owned before extensions run. Each extension's new `<name>_*` objects are recorded under its
-owner in the same transaction; a prefix alone never grants access. Ownership survives reopening
-the store, and a newly appearing lookalike does not become extension-owned.
+owner in the same transaction; a prefix alone never grants access. Names in the registry are
+ASCII-case normalized. SQLite's automatic indexes for TEXT/composite primary keys and UNIQUE
+constraints inherit their table's owner; a core automatic index remains core-owned.
+Ownership survives reopening the store, and a newly appearing lookalike does not become
+extension-owned.
 
 SQLite authorizes resolved statements, including `DELETE FROM table` without a WHERE clause.
 `sqlite_schema` (`type`, `name`, `tbl_name`, `sql`) is also compared before and after migration
 steps and calls. Creating, dropping, renaming or altering an object the extension does not own
 rolls back the transaction. Triggers and views are rejected outright, both during statement
-authorization and in the schema-effect check, even with a matching prefix. Use explicit
-prefixed indexes instead of constraints that create unprefixed `sqlite_autoindex_*` objects.
-Transaction-control SQL, PRAGMAs and attached/temporary databases are refused. This is a store
-API contract, not a sandbox for untrusted JavaScript modules.
+authorization and in the schema-effect check, even with a matching prefix.
+Transaction-control SQL, PRAGMAs and attached/temporary databases are refused. Table-valued
+sources such as `json_each` and `pragma_table_info` are not owned objects and are refused.
+This is a store API contract, not a sandbox for untrusted JavaScript modules.
 
 A thrown operation rolls back extension rows and joined core writes together. Inbox/outbox
-marker writes and removals run only after COMMIT; rollback publishes no marker. A returned
-relay refusal is data, so an operation that wants to undo its earlier work must throw.
+marker writes and removals run only after COMMIT; rollback publishes no marker. Each
+post-commit effect runs independently: a failed marker emits an `extension_error` store event
+with phase `after_commit`, does not skip later effects, and does not turn committed data into
+a refused call. A returned relay refusal is data, so an operation that wants to undo its
+earlier work must throw. Catching an error from `all`, `one` or `exec` does not clear it:
+the whole call still rolls back, including for a caught constraint error.
 
 Refusal codes are `extension_import_failed`, `extension_unknown_op`, `extension_unknown_name`,
-`extension_schema_violation`, and `gateway_lock_wait_exceeded`. Invalid registration input is
-`invalid_arguments`; an operation throwing is `extension_operation_failed`. The worker keeps
-serving core requests after every refusal. Reserved names, unowned object access, triggers,
+`extension_schema_violation`, `gateway_lock_wait_exceeded`, and `gateway_schema_too_new`.
+Invalid registration input and uncloneable call arguments are `invalid_arguments`; a thrown
+operation or expired operation deadline is `extension_operation_failed`. The worker keeps
+serving core requests after operation refusals on a supported database. Reserved names, unowned object access, triggers,
 views, and forbidden DDL all use `extension_schema_violation`; rejecting a reserved name leaves
 that name unregistered. Lock acquisition uses the core busy timeout and
-30-second total bound, not an unbounded retry. Older binaries keep their current newer-schema
-behavior: they open a v5 store without downgrading its version.
+30-second total bound, not an unbounded retry. An operation and its pending helpers have the
+same time budget after acquiring the transaction lock. On expiry, the transaction is revoked
+and rolled back before the next request runs. This bounds asynchronous waits, not synchronous
+JavaScript that blocks the worker's event loop. Using a retained `tx` after the operation
+returns throws a typed error (async helpers reject); an unhandled expired-transaction error
+is reported as an `extension_error` event with phase `stale_transaction`, without killing
+the worker.
+
+A core schema newer than this binary supports is refused with `gateway_schema_too_new`
+without applying migrations or lowering `user_version`. Extension registration/calls return
+the refusal; core methods reject with an error carrying that code. Use a compatible binary
+to access that database.
 
 ## Connector loop
 

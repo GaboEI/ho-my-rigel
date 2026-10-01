@@ -14,6 +14,7 @@ export function sql(tx, args) {
 }
 
 export function swallow(tx, args) {
+  if (args.before) tx.exec(args.before)
   try { tx.exec(args.sql) } catch { return "caught" }
 }
 

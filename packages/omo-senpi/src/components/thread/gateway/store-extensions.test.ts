@@ -75,6 +75,7 @@ describe("store extension calls", () => {
     "CREATE TABLE outsider (id INTEGER)",
     "ALTER TABLE alpha_items RENAME TO outsider",
     "CREATE TRIGGER alpha_bad AFTER INSERT ON alpha_items BEGIN DELETE FROM receipts; END",
+    "SELECT value FROM json_each('[1,2]')",
   ])("#given forbidden SQL %s #when called #then a typed refusal leaves the worker usable", async (sql) => {
     const h = (harness = createGatewayHarness())
     const store = h.store()
@@ -84,11 +85,15 @@ describe("store extension calls", () => {
     expect(await store.list()).toEqual([])
   })
 
-  test("#given a module catches a schema denial #when returning #then the transaction still refuses", async () => {
+  test.each([
+    ["schema denial", "DROP TABLE deliveries", "extension_schema_violation"],
+    ["constraint error", "INSERT INTO alpha_items VALUES (0, 'duplicate')", "extension_operation_failed"],
+  ])("#given a module catches a %s #when returning #then the whole transaction still rolls back", async (_kind, sql, code) => {
     const h = (harness = createGatewayHarness())
     const store = h.store()
     await store.registerStoreExtension(extension())
-    expect(await store.extensionCall("alpha", "swallow", { sql: "DROP TABLE deliveries" })).toMatchObject({ kind: "refused", code: "extension_schema_violation" })
+    expect(await store.extensionCall("alpha", "swallow", { before: "INSERT INTO alpha_items VALUES (1, 'uncommitted')", sql })).toMatchObject({ kind: "refused", code })
+    expect(await store.extensionCall("alpha", "rows", { name: "alpha" })).toEqual({ kind: "ok", value: [{ id: 0, value: "seed" }] })
     expect(await store.list()).toEqual([])
   })
 
