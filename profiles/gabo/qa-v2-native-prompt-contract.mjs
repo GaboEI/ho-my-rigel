@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Proves the V2 prompt-hook mutation contract with a disposable native plugin. */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -64,7 +65,7 @@ export default {
   }, null, 2) + "\n", { mode: 0o600 })
   const result = childProcess.spawnSync(binary, [
     "--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", "Sisyphus - ultraworker", "Reply only: BASE",
-  ], { cwd: sourceRoot, env: { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache") }, encoding: "utf8", timeout: 60_000 })
+  ], { cwd: sourceRoot, env: { ...buildIsolatedV2Env({ sandbox: temporary, home: home }) }, encoding: "utf8", timeout: 60_000 })
   const transcript = [`exit=${result.status}; signal=${result.signal}; error=${result.error?.message ?? ""}`, "--- stdout ---", result.stdout ?? "", "--- stderr ---", result.stderr ?? ""].join("\n")
   writeEvidence("prompt-contract.txt", transcript)
   const setup = transcript.includes("RIGEL_V2_PROMPT_PROBE_SETUP")

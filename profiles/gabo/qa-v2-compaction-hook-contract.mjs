@@ -6,6 +6,7 @@
  * not a passing migration claim.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -77,7 +78,7 @@ try {
     provider: { "rigel-fixture": { name: "Rigel fixture", npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "fixture" }, models: { fixture: { name: "Fixture", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 1000000, output: 512 } } } } },
     model: "rigel-fixture/fixture", plugin: [plugin], default_agent: "Build", agent: { Build: { mode: "primary", model: "rigel-fixture/fixture" } },
   }, null, 2) + "\n", { mode: 0o600 })
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache"), OPENCODE_SERVER_PASSWORD: password }
+  const env = { ...buildIsolatedV2Env({ sandbox: temporary, home: home }), OPENCODE_SERVER_PASSWORD: password }
   const provider = childProcess.spawn(process.execPath, [path.join(root, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...env, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile, RIGEL_FAKE_TASK_NAME: "force_compact", RIGEL_FAKE_TASK_ARGUMENTS: "{}", RIGEL_FAKE_PARENT_REPLY: "WORK_DONE" }, stdio: ["ignore", "pipe", "pipe"] })
   const server = childProcess.spawn(binary, ["--print-logs", "--log-level", "debug", "serve", "--hostname", "127.0.0.1", "--port", String(serverPort)], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] })
   const logs = []

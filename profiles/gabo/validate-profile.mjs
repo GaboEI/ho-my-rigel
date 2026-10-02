@@ -88,6 +88,7 @@ for (const file of [
   "opencode/rigel-v2-native-agent-manifest.mjs",
   "opencode/rigel-v2-native-categories.mjs",
   "opencode/rigel-v2-category-manifest.mjs",
+  "isolated-v2-env.mjs",
   "switch-live-plugin-to-native-v2.mjs",
 ]) {
   if (!existsSync(join(root, file))) fail(`native V2 runtime artifact missing: ${file}`)

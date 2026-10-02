@@ -4,6 +4,7 @@
  * result. Several V1 reminders relied on appending text at this exact point.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -57,7 +58,7 @@ export default {
     model: "rigel-fixture/fixture", plugin: [plugin], default_agent: "Sisyphus - ultraworker",
     agent: { "Sisyphus - ultraworker": { mode: "primary", model: "rigel-fixture/fixture" } },
   }, null, 2) + "\n")
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache") }
+  const env = { ...buildIsolatedV2Env({ sandbox: temporary, home: home }) }
   provider = childProcess.spawn(process.execPath, [path.join(sourceRoot, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...env, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile, RIGEL_FAKE_TASK_NAME: "marker_tool", RIGEL_FAKE_TASK_ARGUMENTS: "{}", RIGEL_FAKE_PARENT_REPLY: "RIGEL_V2_TOOL_AFTER_OK" }, stdio: "ignore" })
   const result = childProcess.spawnSync(binary, ["--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", "Sisyphus - ultraworker", "Call marker_tool exactly once."], { cwd: sourceRoot, env, encoding: "utf8", timeout: 60_000 })
   const transcript = [`exit=${result.status}; signal=${result.signal}`, result.stdout ?? "", result.stderr ?? ""].join("\n")

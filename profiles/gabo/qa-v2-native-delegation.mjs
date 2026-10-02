@@ -5,6 +5,7 @@
  * continue the parent afterwards. No V1 configuration is read or modified.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -77,7 +78,7 @@ try {
     provider: { "rigel-fixture": { name: "Rigel deterministic test provider", npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "rigel-fixture-no-secret" }, models: { fixture: { name: "Rigel fixture", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 16384, output: 2048 } } } } },
     model: "rigel-fixture/fixture", plugin: [runtime], default_agent: "Sisyphus - ultraworker",
   }, null, 2) + "\n", { mode: 0o600 })
-  const commonEnv = { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache"), OPENCODE_SERVER_PASSWORD: serverPassword, RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION: "1", RIGEL_FAKE_RESUME_TASK: resumeMode ? "1" : "0", RIGEL_FAKE_TASK_ARGUMENTS: JSON.stringify({ subagent_type: "explore", prompt: "Reply exactly SPECIALIST_EVIDENCE.", run_in_background: backgroundMode }) }
+  const commonEnv = { ...buildIsolatedV2Env({ sandbox: temporary, home: home }), OPENCODE_SERVER_PASSWORD: serverPassword, RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION: "1", RIGEL_FAKE_RESUME_TASK: resumeMode ? "1" : "0", RIGEL_FAKE_TASK_ARGUMENTS: JSON.stringify({ subagent_type: "explore", prompt: "Reply exactly SPECIALIST_EVIDENCE.", run_in_background: backgroundMode }) }
   const provider = childProcess.spawn(process.execPath, [path.join(sourceRoot, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...commonEnv, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile }, stdio: ["ignore", "pipe", "pipe"] })
   const server = childProcess.spawn(binary, ["--print-logs", "--log-level", "debug", "serve", "--hostname", "127.0.0.1", "--port", String(serverPort)], { cwd: sourceRoot, env: commonEnv, stdio: ["ignore", "pipe", "pipe"] })
   const logs = []

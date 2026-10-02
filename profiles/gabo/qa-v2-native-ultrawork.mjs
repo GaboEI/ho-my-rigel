@@ -5,7 +5,9 @@
  * user's V1 config merely to borrow a provider/model.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -20,7 +22,7 @@ function save(name, value) {
 
 const result = childProcess.spawnSync(process.execPath, [delegatedContract], {
   cwd: root,
-  env: { ...process.env, RIGEL_QA_EXPLICIT_ULTRAWORKER: "1" },
+  env: { ...buildIsolatedV2Env({ sandbox: fs.mkdtempSync(path.join(os.tmpdir(), "rigel-ultrawork-")) }), RIGEL_QA_EXPLICIT_ULTRAWORKER: "1" },
   encoding: "utf8",
   timeout: 60_000,
 })

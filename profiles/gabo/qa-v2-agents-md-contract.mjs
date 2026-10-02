@@ -5,6 +5,7 @@
  * README.md context reach the next provider turn in that same session.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -96,7 +97,7 @@ try {
     default_agent: "Sisyphus - ultraworker",
     plugin: [runtime],
   }, null, 2) + "\n", { mode: 0o600 })
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache"), OPENCODE_SERVER_PASSWORD: password }
+  const env = { ...buildIsolatedV2Env({ sandbox: temporary, home: home }), OPENCODE_SERVER_PASSWORD: password }
   const fixture = childProcess.spawn(process.execPath, [path.join(root, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...env, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile, RIGEL_FAKE_TASK_NAME: "read", RIGEL_FAKE_TASK_ARGUMENTS: JSON.stringify({ path: "sample.txt" }), RIGEL_FAKE_PARENT_REPLY: "AGENTS_MD_OK" }, stdio: ["ignore", "pipe", "pipe"] })
   const server = childProcess.spawn(binary, ["--print-logs", "--log-level", "debug", "serve", "--hostname", "127.0.0.1", "--port", String(serverPort)], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"] })
   const logs = []

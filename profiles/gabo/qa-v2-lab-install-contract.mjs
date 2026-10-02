@@ -4,6 +4,7 @@
  * cannot mutate the user's V1 configuration. No OpenCode service is started.
  */
 import assert from "node:assert/strict"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import childProcess from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
@@ -42,7 +43,7 @@ try {
   fs.copyFileSync(v2Config, labConfig)
   const beforeConfig = JSON.parse(fs.readFileSync(labConfig, "utf8"))
   const env = {
-    ...process.env,
+    ...buildIsolatedV2Env({ sandbox: labRoot, home }),
     RIGEL_V2_LAB_ROOT: labRoot,
     RIGEL_V2_HOME: home,
     RIGEL_V2_CONFIG: labConfig,

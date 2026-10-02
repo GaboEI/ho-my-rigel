@@ -4,6 +4,7 @@
  * an agent. This intentionally loads no OmO/Rigel runtime or host plugins.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -76,7 +77,7 @@ export default {
   }, null, 2) + "\n")
   const result = childProcess.spawnSync(binary, ["--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", probeName, "Reply exactly RIGEL_AGENT_DOMAIN_OK."], {
     cwd: root,
-    env: { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache") },
+    env: { ...buildIsolatedV2Env({ sandbox: temporary, home: home }) },
     encoding: "utf8", timeout: 60_000,
   })
   const transcript = `exit=${result.status}; signal=${result.signal}\n${result.stdout}\n${result.stderr}`

@@ -4,6 +4,7 @@
  * initial list must be created, survive reload, and affect a provider turn.
  */
 import childProcess from "node:child_process"
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -60,7 +61,7 @@ export default {
     provider: { "rigel-fixture": { name: "Rigel deterministic test provider", npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "rigel-fixture-no-secret" }, models: { fixture: { name: "Rigel fixture", modalities: { input: ["text"], output: ["text"] }, limit: { context: 16384, output: 2048 } } } } },
     model: "rigel-fixture/fixture", plugin: [plugin], default_agent: "build",
   }, null, 2) + "\n", { mode: 0o600 })
-  const env = { ...process.env, HOME: path.join(temporary, "home"), XDG_CONFIG_HOME: path.join(temporary, "config"), XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache") }
+  const env = { ...buildIsolatedV2Env({ sandbox: temporary, home: path.join(temporary, "home") }) }
   const provider = childProcess.spawn(process.execPath, [path.join(root, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...env, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile, RIGEL_FAKE_PARENT_REPLY: "RIGEL_AGENT_TRANSFORM_OK" }, stdio: ["ignore", "pipe", "pipe"] })
   const result = childProcess.spawnSync(binary, ["--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", "rigel-contract-probe", "Reply only: BASE"], { cwd: root, env, encoding: "utf8", timeout: 60_000 })
   provider.kill("SIGTERM")
