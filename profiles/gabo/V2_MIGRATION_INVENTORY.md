@@ -57,7 +57,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `question-label-truncator` | Pendiente de clasificación V2 | — |
 | `ralph-loop` | Pendiente de clasificación V2 | — |
 | `read-image-resizer` | Pendiente de clasificación V2 | — |
-| `rules-injector` | Pendiente de clasificación V2 | — |
+| `rules-injector` | Migrado parcialmente | El reemplazo nativo V2 descubre reglas de proyecto/globales, aplica `alwaysApply` y globs, deduplica por sesión y anexa la regla al resultado de read/edit/write. El contrato aislado demuestra reglas reales del fork tras `read`; faltan la semántica YAML/picomatch completa y el truncador dinámico V1. `rigel-v2-native-rules.mjs`; `rigel-v2-native-rules.test.mjs`; `qa-v2-native-rules-injector-contract.mjs` |
 | `runtime-fallback` | Pendiente de clasificación V2 | — |
 | `sisyphus-junior-notepad` | Pendiente de clasificación V2 | — |
 | `stop-continuation-guard` | Pendiente de clasificación V2 | — |
