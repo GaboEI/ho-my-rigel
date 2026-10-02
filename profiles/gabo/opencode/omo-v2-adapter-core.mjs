@@ -192,6 +192,13 @@ function adaptLegacyClient(context, directory) {
     get(target, property) {
       if (property === "app") return app
       if (property === "session") return session
+      // Several V1 hooks notify best-effort through the TUI during ordinary
+      // chat.message processing. V2 setup contexts do not provide that RPC;
+      // return the explicit no-op facade rather than exposing `undefined` and
+      // aborting the entire provider turn on a cosmetic notification.
+      if (property === "tui") {
+        return target?.tui && typeof target.tui === "object" ? target.tui : fallbackClient.tui
+      }
       return Reflect.get(target, property, target)
     },
   })

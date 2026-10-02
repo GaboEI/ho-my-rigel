@@ -155,6 +155,19 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
     ])
   })
 
+  test("provides a harmless TUI facade when V2 has no legacy TUI RPC", async () => {
+    const runtime = fakeContext()
+    let legacyClient
+    const plugin = createRigelV2Plugin({
+      loadLegacyHooks: async ({ client }) => {
+        legacyClient = client
+        return { tool: {} }
+      },
+    })
+    await plugin.setup(runtime.context)
+    await expect(legacyClient.tui.showToast({ body: { title: "Cosmetic" } })).resolves.toBeUndefined()
+  })
+
   test("maps the V2 hooks that have a direct legacy equivalent", async () => {
     const runtime = fakeContext()
     const calls = []
