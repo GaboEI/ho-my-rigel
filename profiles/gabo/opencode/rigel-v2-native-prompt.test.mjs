@@ -1,14 +1,20 @@
 import { expect, test } from "bun:test"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 
-test("request-stage roster is fresh, replaces an old roster, and preserves ordinary system text", async () => {
+test("request-stage roster recovers from the startup two-agent race and replaces stale entries", async () => {
   let calls = 0
+  const loadedAfterStartup = [
+    "General", "Explore", "Sisyphus - ultraworker", "Prometheus - Plan Builder",
+    "Atlas - Plan Executor", "explore", "librarian", "oracle", "Metis - Plan Consultant",
+    "Momus - Plan Critic", "multimodal-looker", "Sisyphus-Junior", "judge", "forja",
+    "researcher", "reviewer", "writer", "architect",
+  ].map((name) => ({ name, mode: "subagent" }))
   const hook = createNativeRequestHook({
     getDelegationRoster: async () => {
       calls += 1
       return calls === 1
-        ? [{ name: "explore", mode: "subagent" }]
-        : [{ name: "oracle", mode: "subagent" }]
+        ? [{ name: "General", mode: "subagent" }, { name: "Explore", mode: "subagent" }]
+        : loadedAfterStartup
     },
     categories: ["quick"],
   })
@@ -27,13 +33,18 @@ test("request-stage roster is fresh, replaces an old roster, and preserves ordin
   let body = await input.request.clone().json()
   expect(body.messages).toHaveLength(3)
   expect(body.messages[0]).toEqual({ role: "system", content: "ordinary system text" })
-  expect(body.messages[1].content).toContain('"explore"')
+  expect(body.messages[1].content).toContain('"General"')
+  expect(body.messages[1].content).toContain('"Explore"')
+  expect(body.messages[1].content).not.toContain('"librarian"')
 
   await hook(input)
   body = await input.request.clone().json()
   expect(body.messages).toHaveLength(3)
-  expect(body.messages[1].content).toContain('"oracle"')
-  expect(body.messages[1].content).not.toContain('"explore"')
+  expect(body.messages[1].content).toContain('"librarian"')
+  expect(body.messages[1].content).toContain('"judge"')
+  expect(body.messages[1].content).toContain('"architect"')
+  expect((body.messages[1].content.match(/^-/gm) ?? [])).toHaveLength(19)
+  expect(calls).toBe(2)
 })
 
 test("request-stage roster is never injected into a child session", async () => {
