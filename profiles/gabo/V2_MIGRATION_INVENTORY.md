@@ -61,7 +61,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `runtime-fallback` | Pendiente de clasificación V2 | — |
 | `sisyphus-junior-notepad` | Pendiente de clasificación V2 | — |
 | `stop-continuation-guard` | Pendiente de clasificación V2 | — |
-| `task-reminder` | Migrado | El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima, igual que V1. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
+| `task-reminder` | Migrado parcialmente | El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima. V2 usa `rigel_task` en vez de la familia V1 `task_*`, por lo que el texto y el mecanismo de seguimiento se adaptan a la superficie disponible. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
 | `task-resume-info` | Migrado | `rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
 | `tasks-todowrite-disabler` | Pendiente de clasificación V2 | — |
 | `team-mailbox-injector` | Pendiente de clasificación V2 | — |
