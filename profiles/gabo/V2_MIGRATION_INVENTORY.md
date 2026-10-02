@@ -50,7 +50,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `native-edition-nudge` | Pendiente de clasificación V2 | — |
 | `no-hephaestus-non-gpt` | Pendiente de clasificación V2 | — |
 | `no-sisyphus-gpt` | Pendiente de clasificación V2 | — |
-| `non-interactive-env` | Pendiente de clasificación V2 | — |
+| `non-interactive-env` | Migrado | El guard nativo V2 antepone el entorno no interactivo a Git en `tool.execute.before` con prefijos por tipo de shell (unix/csh/powershell/cmd, detección de Windows igual que V1 #3607). Un comando interactivo baneado produce la misma advertencia observable de V1 en el output del shell en vez de colgar la sesión (V2 no permite adjuntar un mensaje en `execute.before`). Un servidor V2 aislado probó la reescritura de `git` y la advertencia del comando baneado. `rigel-v2-native-noninteractive.mjs`; `rigel-v2-native-noninteractive.test.mjs`; `qa-v2-noninteractive-contract.mjs` |
 | `notepad-write-guard` | Pendiente de clasificación V2 | — |
 | `plan-format-validator` | Pendiente de clasificación V2 | — |
 | `prometheus-md-only` | Pendiente de clasificación V2 | — |

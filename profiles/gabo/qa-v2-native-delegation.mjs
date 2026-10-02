@@ -60,7 +60,7 @@ try {
   fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(configHome, "opencode"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) copyRuntimeFile(name)
+  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) copyRuntimeFile(name)
   fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
   fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({
     defaultAgent: "Sisyphus - ultraworker",

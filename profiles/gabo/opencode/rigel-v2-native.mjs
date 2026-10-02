@@ -19,6 +19,7 @@ import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs
 import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
 import { createNativeRulesInjector } from "./rigel-v2-native-rules.mjs"
 import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guard.mjs"
+import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninteractive.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
@@ -72,6 +73,7 @@ export default {
     const reminders = createNativeToolResultReminders()
     const rules = createNativeRulesInjector({ directory: location.directory })
     const writeGuard = createNativeWriteExistingFileGuard({ directory: location.directory })
+    const nonInteractiveEnv = createNativeNonInteractiveEnvGuard()
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
     const handoffBackgroundChild = async (sessionID, status) => {
@@ -192,6 +194,9 @@ export default {
     const writeGuardRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => writeGuard.before(input))
       : undefined
+    const nonInteractiveRegistration = typeof context?.tool?.hook === "function"
+      ? await context.tool.hook("execute.before", async (input) => nonInteractiveEnv.before(input))
+      : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
@@ -219,7 +224,7 @@ export default {
       reminders.clearAll()
       rules.clearAll()
       writeGuard.clearAll()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }
