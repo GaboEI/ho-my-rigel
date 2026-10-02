@@ -4,6 +4,8 @@ import {
   resolveNamedAgent,
   taskResult,
   resumeDelegatedSessionFromClients,
+  completedChildText,
+  backgroundHandoffPrompt,
 } from "./rigel-v2-native-core.mjs"
 import {
   availableCategoryNames,
@@ -22,7 +24,7 @@ export function createTaskPresentation() {
 
 Use subagent_type for a named specialist when its role matches a discrete research, consultation, review, or audit need. Use category for an execution worker with a category-selected model. The main agent chooses the appropriate route based on the active V2 agent inventory; this tool does not impose a routing policy.
 
-By default this is foreground work: it waits and returns the child's final text, so use it when the result is needed for the next decision. Set run_in_background=true only for truly independent work: it returns a child-session reference, not a result that can be collected in the current turn. Prompts must state the child task, scope, constraints, and expected evidence clearly.`
+By default this is foreground work: it waits and returns the child's final text, so use it when the result is needed for the next decision. Set run_in_background=true for independent work: it returns immediately, then native V2 event delivery wakes the parent with the child's final result. Prompts must state the child task, scope, constraints, and expected evidence clearly.`
 }
 
 // V2 accepts a JSON Schema/Standard Schema/Effect codec. A raw V1 Zod shape
@@ -61,6 +63,47 @@ export default {
     // name is required for a real, callable Rigel delegation surface.
     const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "rigel_task"
     const childSessionIDs = new Set()
+    const backgroundChildren = new Map()
+    const abortBackgroundHandoffs = new AbortController()
+    const handoffBackgroundChild = async (sessionID, status) => {
+      const child = backgroundChildren.get(sessionID)
+      if (!child) return
+      backgroundChildren.delete(sessionID)
+      let result = ""
+      try {
+        if (status === "succeeded" && typeof context?.session?.context === "function") {
+          result = completedChildText(await context.session.context({ sessionID }))
+        }
+        await context.session.prompt({
+          sessionID: child.parentSessionID,
+          text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result }),
+          resume: true,
+        })
+        console.error(`[ho-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
+      } catch (error) {
+        backgroundChildren.set(sessionID, child)
+        console.error(`[ho-my-rigel] Native V2 background handoff failed: child=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    const eventSubscription = typeof context?.event?.subscribe === "function"
+      ? (async () => {
+        try {
+          for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
+            const sessionID = event?.data?.sessionID
+            if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
+            const status = event.type === "session.execution.succeeded" ? "succeeded"
+              : event.type === "session.execution.failed" ? "failed"
+                : event.type === "session.execution.interrupted" ? "interrupted"
+                  : undefined
+            if (status) await handoffBackgroundChild(sessionID, status)
+          }
+        } catch (error) {
+          if (!abortBackgroundHandoffs.signal.aborted) {
+            console.error(`[ho-my-rigel] Native V2 background event subscription failed: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }
+      })()
+      : undefined
     const registration = await context.tool.transform((editor) => {
       const before = editor.get?.(taskName)
       editor.add({
@@ -81,12 +124,16 @@ export default {
             ? `${input.prompt}\n\n<rigel-requested-skills>Before working, load these native skills if available: ${requestedSkills.join(", ")}</rigel-requested-skills>`
             : input.prompt
           if (input.task_id) {
-            return taskResult(await resumeDelegatedSessionFromClients({
+            const resumed = await resumeDelegatedSessionFromClients({
               clients,
               sessionID: input.task_id,
               prompt,
               background: input.run_in_background === true,
-            }))
+            })
+            if (resumed.background && toolContext?.sessionID) {
+              backgroundChildren.set(resumed.sessionID, { parentSessionID: toolContext.sessionID, agent: resumed.agent })
+            }
+            return taskResult(resumed)
           }
           const agents = await listCallableAgentsFromClients(clients, location)
           const category = input.category
@@ -105,6 +152,9 @@ export default {
             parentSessionID: toolContext?.sessionID,
             onChildSession: (sessionID) => childSessionIDs.add(sessionID),
           })
+          if (delegated.background && toolContext?.sessionID) {
+            backgroundChildren.set(delegated.sessionID, { parentSessionID: toolContext.sessionID, agent: delegated.agent })
+          }
           return taskResult(delegated)
         },
       })
@@ -131,7 +181,8 @@ export default {
     }))
     console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     return async () => {
-      await Promise.all([registration?.dispose?.(), rosterRegistration?.dispose?.()])
+      abortBackgroundHandoffs.abort()
+      await Promise.all([registration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }

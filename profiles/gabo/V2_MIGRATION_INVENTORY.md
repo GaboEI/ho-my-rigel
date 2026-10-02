@@ -11,7 +11,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | Superficie | Estado | Alcance actual | Evidencia |
 | --- | --- | --- | --- |
 | Agentes seleccionados | Migrado parcialmente | `agent.transform` + `agent.reload`; falta auditar todos los modos y permisos | `qa-v2-agent-transform-contract.mjs` |
-| Delegación nombrada | Migrado parcialmente | `rigel_task`; foreground probado; faltan continuaciones, categorías y background handoff | `qa-v2-native-delegation.mjs` |
+| Delegación nombrada | Migrado parcialmente | `rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación | `qa-v2-native-delegation.mjs` |
 | chat.message | Migrado parcialmente | Adaptación de la superficie V1; no implica los hooks dependientes | `qa-v2-chat-message-contract.mjs` |
 | Keyword detector | En curso | Ultrawork/ULW no estaba migrado; la primera adaptación nativa está en desarrollo | pendiente de contrato V2 final |
 
@@ -25,7 +25,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `atlas` | Pendiente de clasificación V2 | — |
 | `auto-slash-command` | Pendiente de clasificación V2 | — |
 | `auto-update-checker` | Pendiente de clasificación V2 | — |
-| `background-notification` | Pendiente de clasificación V2 | — |
+| `background-notification` | Migrado parcialmente | Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1 | `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
 | `category-skill-reminder` | Pendiente de clasificación V2 | — |
 | `claude-code-hooks` | Pendiente de clasificación V2 | — |
 | `comment-checker` | Pendiente de clasificación V2 | — |
@@ -78,7 +78,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 
 | Herramienta V1 | Estado | Equivalente / evidencia V2 |
 | --- | --- | --- |
-| `background-task` | Pendiente de clasificación V2 | — |
+| `background-task` | Migrado parcialmente | Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1 | `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
 | `call-omo-agent` | Pendiente de clasificación V2 | — |
 | `delegate-task` | Pendiente de clasificación V2 | — |
 | `glob` | Pendiente de clasificación V2 | — |
@@ -103,7 +103,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `Team mode` | Pendiente de clasificación V2 | — |
 | `Goal` | Pendiente de clasificación V2 | — |
 | `continuations` | Pendiente de clasificación V2 | — |
-| `background-task handoff` | Pendiente de clasificación V2 | — |
+| `background-task handoff` | Migrado parcialmente | Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1 | `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Criterio de cierre
 

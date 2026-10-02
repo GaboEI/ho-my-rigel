@@ -62,12 +62,13 @@ http.createServer(async (request, response) => {
   const hasTaskTool = Array.isArray(payload.tools) && payload.tools.some((entry) => entry?.function?.name === taskName)
   const hasToolResult = Array.isArray(payload.messages) && payload.messages.some((message) => message?.role === "tool")
   const systemText = payload.messages?.find((message) => message?.role === "system")?.content ?? ""
-  const latestUserText = [...(payload.messages ?? [])].reverse().find((message) => message?.role === "user")?.content ?? ""
+  const latestUserContent = [...(payload.messages ?? [])].reverse().find((message) => message?.role === "user")?.content ?? ""
+  const latestUserText = typeof latestUserContent === "string" ? latestUserContent : JSON.stringify(latestUserContent)
   const responseKind = systemText.includes("You are a title generator")
     ? "title"
-    : typeof latestUserText === "string" && /^(You MUST summarize|Update the existing checkpoint|The previous response did not fill)/.test(latestUserText)
+    : /^(You MUST summarize|Update the existing checkpoint|The previous response did not fill)/.test(latestUserText)
       ? "compaction"
-      : typeof latestUserText === "string" && latestUserText.includes(childMarker)
+      : latestUserText.includes(childMarker)
         ? "child"
         : hasTaskTool && !delegationIssued
           ? "delegate"

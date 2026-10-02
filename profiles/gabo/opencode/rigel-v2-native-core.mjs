@@ -195,3 +195,15 @@ export function taskResult({ sessionID, agent, background, result }) {
     metadata: { sessionID, agent, background },
   }
 }
+
+/**
+ * Turn a completed native child into a fresh parent turn. This is a prompt,
+ * because V2 already completed the original tool turn when a background child
+ * settles; a synthetic tool result would misrepresent that lifecycle.
+ */
+export function backgroundHandoffPrompt({ sessionID, agent, status, result }) {
+  const detail = status === "succeeded"
+    ? (result || "(The child completed without visible text.)")
+    : `(The child ${status ?? "ended"} before returning a result.)`
+  return `<rigel-native-background-result>\nagent: ${agent}\nsessionID: ${sessionID}\nstatus: ${status ?? "unknown"}\n${detail}\n</rigel-native-background-result>`
+}
