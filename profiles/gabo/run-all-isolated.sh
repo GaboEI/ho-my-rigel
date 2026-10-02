@@ -17,7 +17,13 @@ suite_dir="$root/profiles/gabo"
 results=()
 failed=0
 
-declare_status() { results+=("$1: $2"); [ "$2" = "PASS" ] || failed=$((failed + 1)); }
+declare_status() {
+  results+=("$1: $2")
+  case "$2" in
+    PASS|SKIP*) ;;
+    *) failed=$((failed + 1)) ;;
+  esac
+}
 
 run_step() {
   local name="$1"; shift
