@@ -20,7 +20,11 @@ describe("daemonLaunchProfileId", () => {
     const root = mkdtempSync(join(tmpdir(), "dh-profile-"))
     const real = join(root, "real", "plugin")
     mkdirSync(join(real, "extensions"), { recursive: true })
-    writeFileSync(join(real, "daemon-launch-spec.json"), SPEC)
+    // Explicit mode: under a group-write umask (e.g. 002) the default 0666
+    // mask would leave the spec group-writable and rejectInsecureMode would
+    // correctly refuse it, which is an environment artifact, not the
+    // behavior under test.
+    writeFileSync(join(real, "daemon-launch-spec.json"), SPEC, { mode: 0o644 })
     // The reader refuses a spec whose extensions are not on disk.
     writeFileSync(join(real, "extensions", "omo-member.js"), "export {}\n")
     symlinkSync(join(root, "real"), join(root, "link"))

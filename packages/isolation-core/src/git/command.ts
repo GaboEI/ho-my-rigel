@@ -89,7 +89,12 @@ export async function runGit(args: string[], options: GitOptions): Promise<{ cod
   let child
   try {
     child = spawn("git", args, {
-      cwd: options.cwd, env: { ...process.env, ...options.env },
+      cwd: options.cwd,
+      // Deterministic git output: message classification across the product
+      // (worktree cleanup recovery, conflict reporting) must not depend on the
+      // host locale, so English output is forced; an explicit caller env may
+      // still override it.
+      env: { ...process.env, ...options.env, ...(options.env?.LC_ALL === undefined ? { LC_ALL: "C" } : {}) },
       stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       signal: options.signal,
       detached: process.platform !== "win32",

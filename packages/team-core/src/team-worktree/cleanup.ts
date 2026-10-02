@@ -4,8 +4,13 @@ import path from "node:path"
 import type { TeamModeConfig } from "./manager"
 import { spawn as bunSpawn } from "@oh-my-opencode/utils/runtime"
 
+// Deterministic git output: cleanup recovery classifies stderr fragments
+// ("not a working tree", "already removed"), which must not depend on the
+// host locale.
+const GIT_ENV = { ...process.env, LC_ALL: "C" }
+
 async function runGit(args: string[]): Promise<{ code: number; stderr: string }> {
-  const process = bunSpawn({ cmd: ["git", ...args], stdout: "pipe", stderr: "pipe" })
+  const process = bunSpawn({ cmd: ["git", ...args], env: GIT_ENV, stdout: "pipe", stderr: "pipe" })
   const [exitCode, stderrText] = await Promise.all([process.exited, new Response(process.stderr).text()])
   return { code: exitCode, stderr: stderrText }
 }
@@ -15,6 +20,7 @@ export async function removeWorktree(worktreePath: string): Promise<void> {
 
   const rootLookup = bunSpawn({
     cmd: ["git", "-C", worktreePath, "rev-parse", "--show-superproject-working-tree"],
+    env: GIT_ENV,
     stdout: "pipe",
     stderr: "pipe",
   })

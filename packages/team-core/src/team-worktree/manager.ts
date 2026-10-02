@@ -17,8 +17,8 @@ function countParentSegments(spec: string): number {
 }
 
 async function runGit(args: string[], cwd?: string): Promise<{ code: number; stderr: string }> {
-  const process = bunSpawn({ cmd: ["git", ...args], cwd, stdout: "pipe", stderr: "pipe" })
-  const [exitCode, stderrBytes] = await Promise.all([process.exited, new Response(process.stderr).text()])
+  const child = bunSpawn({ cmd: ["git", ...args], cwd, env: { ...process.env, LC_ALL: "C" }, stdout: "pipe", stderr: "pipe" })
+  const [exitCode, stderrBytes] = await Promise.all([child.exited, new Response(child.stderr).text()])
   return { code: exitCode, stderr: stderrBytes }
 }
 
