@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 export const DIRECTORY_AGENTS_MARKER = "<rigel-native-directory-agents>"
+const DIRECTORY_CONTEXT_FILES = ["AGENTS.md", "README.md"]
 
 function inside(root, candidate) {
   const relative = path.relative(root, candidate)
@@ -38,16 +39,18 @@ export function createDirectoryInstructionStore({ directory, maxFiles = 32, maxC
     const file = requestedReadPath(input, workspace)
     if (!file || !inside(workspace, file)) return false
     const start = path.dirname(file)
-    const found = []
+    const directories = []
     for (let current = start; inside(workspace, current); current = path.dirname(current)) {
-      const agents = path.join(current, "AGENTS.md")
-      if (fs.existsSync(agents)) found.push(agents)
+      directories.unshift(current)
       if (current === workspace) break
     }
+    const found = directories.flatMap((current) => DIRECTORY_CONTEXT_FILES
+      .map((name) => path.join(current, name))
+      .filter((candidate) => fs.existsSync(candidate)))
     if (found.length === 0 || typeof input?.sessionID !== "string") return false
     const known = sessionFiles.get(input.sessionID) ?? new Map()
     // Parent rules are rendered first, then the closest directory rules.
-    for (const agents of found.reverse()) {
+    for (const agents of found) {
       if (known.has(agents) || known.size >= maxFiles) continue
       const text = readText(agents, maxCharsPerFile)
       if (text) known.set(agents, text)
@@ -60,7 +63,14 @@ export function createDirectoryInstructionStore({ directory, maxFiles = 32, maxC
   function guidance(sessionID) {
     const entries = sessionFiles.get(sessionID)
     if (!entries || entries.size === 0) return ""
-    return `${DIRECTORY_AGENTS_MARKER}\nDirectory-specific instructions discovered while reading files in this session. Follow them as applicable to the file currently being worked on:\n${[...entries].map(([file, text]) => `<agents-file path=${JSON.stringify(path.relative(workspace, file) || "AGENTS.md")}>\n${text}\n</agents-file>`).join("\n")}\n${DIRECTORY_AGENTS_MARKER}`
+    const rendered = [...entries].map(([file, text]) => {
+      const relative = path.relative(workspace, file) || path.basename(file)
+      if (path.basename(file).toLocaleLowerCase() === "readme.md") {
+        return `<project-readme path=${JSON.stringify(relative)}>\n${text}\n</project-readme>`
+      }
+      return `<agents-file path=${JSON.stringify(relative)}>\n${text}\n</agents-file>`
+    })
+    return `${DIRECTORY_AGENTS_MARKER}\nDirectory-specific rules and documentation discovered while reading files in this session. Follow AGENTS.md rules as applicable; use README.md as project context for the file currently being worked on:\n${rendered.join("\n")}\n${DIRECTORY_AGENTS_MARKER}`
   }
 
   function clear(sessionID) { sessionFiles.delete(sessionID) }

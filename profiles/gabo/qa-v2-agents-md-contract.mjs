@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Proves the native V2 replacement for Rigel's V1 directory-agents-injector:
- * a real V2 read tool call must make applicable AGENTS.md instructions reach
- * the next provider turn in that same session.
+ * Proves the native V2 replacement for Rigel's V1 directory instruction
+ * injectors: a real V2 read tool call must make applicable AGENTS.md and
+ * README.md context reach the next provider turn in that same session.
  */
 import childProcess from "node:child_process"
 import fs from "node:fs"
@@ -55,6 +55,7 @@ try {
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
   fs.writeFileSync(path.join(project, "AGENTS.md"), "# V2 AGENTS contract\n\nV2_AGENTS_MD_MARKER: this directive must reach the provider.\n", { mode: 0o600 })
+  fs.writeFileSync(path.join(project, "README.md"), "# V2 README contract\n\nV2_README_MD_MARKER: this documentation must reach the provider.\n", { mode: 0o600 })
   fs.writeFileSync(path.join(project, "sample.txt"), "sample\n", { mode: 0o600 })
   for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) {
     fs.copyFileSync(path.join(root, "profiles/gabo/opencode", name), path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name))
@@ -100,11 +101,14 @@ try {
     const sessionID = created.id ?? created.data?.id
     if (typeof sessionID !== "string") throw new Error("V2 did not create a session")
     await api(`${serverURL}/api/session/${sessionID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Read sample.txt, then reply only AGENTS_MD_OK.", resume: true }) })
-    await waitFor(() => fs.existsSync(traceFile) && fs.readFileSync(traceFile, "utf8").includes("V2_AGENTS_MD_MARKER"), "Native V2 directory instructions did not reach the provider after read")
+    await waitFor(() => {
+      const trace = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : ""
+      return trace.includes("V2_AGENTS_MD_MARKER") && trace.includes("V2_README_MD_MARKER")
+    }, "Native V2 AGENTS.md/README.md context did not reach the provider after read")
     const trace = fs.readFileSync(traceFile, "utf8")
     save("provider-trace.jsonl", trace)
     save("server.txt", logs.join(""))
-    const report = "# Rigel native V2 directory AGENTS.md contract\n\n- Real isolated V2 server: yes.\n- Native V2 runtime loaded: yes.\n- Read tool executed before injection: yes.\n- Project AGENTS.md reached the next provider turn: yes.\n- V1 configuration read: no.\n"
+    const report = "# Rigel native V2 directory context contract\n\n- Real isolated V2 server: yes.\n- Native V2 runtime loaded: yes.\n- Read tool executed before injection: yes.\n- Project AGENTS.md rules reached the next provider turn: yes.\n- Project README.md context reached the next provider turn: yes.\n- V1 configuration read: no.\n"
     save("validation.md", report)
     process.stdout.write(report)
   } catch (error) {
