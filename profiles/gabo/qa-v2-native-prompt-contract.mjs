@@ -7,8 +7,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const binary = "/home/gabodev/.opencode/bin/opencode"
-const liveConfig = "/home/gabodev/.config/opencode/opencode.json"
+const binary = process.env.RIGEL_OPENCODE_V2_BIN ?? path.join(os.homedir(), ".opencode/bin/opencode")
+const liveConfig = path.join(os.homedir(), ".config/opencode/opencode.json")
 const evidenceDir = path.join(sourceRoot, ".omo/evidence/20261001-rigel-v2-native-prompt-contract")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-native-prompt-v2-"))
 const configHome = path.join(temporary, "config")

@@ -8,7 +8,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-const binary = "/home/gabodev/.opencode/bin/opencode"
+const binary = process.env.RIGEL_OPENCODE_V2_BIN ?? path.join(os.homedir(), ".opencode/bin/opencode")
 const root = path.resolve(import.meta.dirname, "../..")
 const evidence = path.join(root, ".omo/evidence/20261001-rigel-v2-agent-domain")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-v2-agent-domain-"))

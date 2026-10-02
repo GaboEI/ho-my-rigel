@@ -3,12 +3,13 @@
  * Generates Rigel's native V2 agent manifest. This intentionally never writes
  * ~/.config/opencode: registration happens later through agent.transform.
  */
+import os from "node:os"
 import fs from "node:fs"
 import path from "node:path"
 import childProcess from "node:child_process"
 import { fileURLToPath } from "node:url"
 
-const labRoot = process.env.RIGEL_V2_LAB_ROOT || "/home/gabodev/.local/share/opencode-v2-lab"
+const labRoot = process.env.RIGEL_V2_LAB_ROOT || path.join(os.homedir(), ".local/share/opencode-v2-lab")
 const home = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const stateRoot = path.join(labRoot, "rigel")

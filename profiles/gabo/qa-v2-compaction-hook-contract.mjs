@@ -12,7 +12,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const binary = "/home/gabodev/.opencode/bin/opencode"
+const binary = process.env.RIGEL_OPENCODE_V2_BIN ?? path.join(os.homedir(), ".opencode/bin/opencode")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-v2-compaction-"))
 const configHome = path.join(temporary, "config")
 const home = path.join(temporary, "home")

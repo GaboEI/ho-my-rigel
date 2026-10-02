@@ -31,7 +31,7 @@ Before editing, determine:
   any approved writes.
 
 If the project defines stricter rules, follow them. For WatchdogVPN, the active
-vault is `/home/gabodev/Desktop/temporales`. The target standard is 100%
+vault is `~/Desktop/temporales`. The target standard is 100%
 English for persistent vault documentation. From 2026-08-24 onward, every new
 persistent vault document and every new prose block must be written in English.
 The 70% language threshold is only a temporary legacy bypass to avoid forcing a
@@ -213,9 +213,9 @@ After vault edits:
   `python3 .tools/language_audit.py`.
 - When structure, MOCs, or topology changed, run a second-brain audit if
   available. For WatchdogVPN:
-  `python3 /home/gabodev/.config/opencode/skills/obsidian-second-brain-audit/scripts/audit_vault.py . --json`
+  `python3 ~/.config/opencode/skills/obsidian-second-brain-audit/scripts/audit_vault.py . --json`
   (legacy fallback if the opencode path is missing:
-  `python3 /home/gabodev/.codex/skills/obsidian-second-brain-audit/scripts/audit_vault.py . --json`).
+  `python3 ~/.codex/skills/obsidian-second-brain-audit/scripts/audit_vault.py . --json`).
 - Scan touched files for language drift according to the vault language.
   For mixed legacy vaults, apply the 70% legacy bypass only to inherited text.
   Any new prose introduced after the policy must be English. Below-threshold

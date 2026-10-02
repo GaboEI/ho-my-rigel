@@ -120,6 +120,19 @@ const agentMaterialization = readFileSync(join(root, "apply-v2-agent-layer.mjs")
 if (!agentMaterialization.includes("rigel-v2-agent-manifest.mjs") || !agentMaterialization.includes("materialize-v2-skills.mjs") || /writeFileSync\(configFile/.test(agentMaterialization)) fail("agent materialization must refresh V2 skills and generate a runtime manifest without editing OpenCode config")
 if (!agentMaterialization.includes("opencode-v2-lab") || agentMaterialization.includes('path.join(home, ".config/opencode/opencode.json")')) fail("agent materialization must default to the isolated V2 configuration")
 
+// Personal-path scan: every tracked artifact under profiles/gabo (attic is
+// historical and exempt) must be machine-independent.
+function walkPersonalPaths(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "attic") continue
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) { walkPersonalPaths(path); continue }
+    if (!/\.(mjs|sh|md|json|jsonc)$/.test(entry.name)) continue
+    if (/\/home\/gabodev/.test(readFileSync(path, "utf8"))) fail(`personal path leaked into ${path.replace(root, "profiles/gabo")}`)
+  }
+}
+walkPersonalPaths(root)
+
 const profileSerialized = JSON.stringify({ omo, opencode })
 if (/WatchdogVPN|\/home\/gabodev|TAVILY_API_KEY|OPENAI_API_KEY|CODEX_AUTH/i.test(profileSerialized)) fail("profile contains a project rule, personal path, or secret marker")
 if (!manifest.nonGoals?.includes("copy WatchdogVPN skills or commands")) fail("WatchdogVPN exclusion must remain explicit")

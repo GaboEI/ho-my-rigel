@@ -9,11 +9,12 @@
  * skills are linked from this checkout.  The manifest makes every managed
  * entry auditable and lets a future uninstall remove only Rigel-owned links.
  */
+import os from "node:os"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const home = process.env.HOME || "/home/gabodev"
+const home = process.env.HOME || os.homedir()
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const rigelSkills = path.join(sourceRoot, "profiles/gabo/skills")
 const legacySkills = path.join(home, ".config/opencode/skills")

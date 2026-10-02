@@ -5,7 +5,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-binary="${RIGEL_V2_BINARY:-/home/gabodev/.opencode/bin/opencode}"
+binary="${RIGEL_V2_BINARY:-$HOME/.opencode/bin/opencode}"
 
 if [ ! -x "$binary" ]; then
   echo "OpenCode V2 is required at RIGEL_V2_BINARY (default: $binary)" >&2

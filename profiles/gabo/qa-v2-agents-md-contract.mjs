@@ -11,7 +11,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const binary = "/home/gabodev/.opencode/bin/opencode"
+const binary = process.env.RIGEL_OPENCODE_V2_BIN ?? path.join(os.homedir(), ".opencode/bin/opencode")
 const evidenceDir = path.join(root, ".omo/evidence/20261002-v2-agents-md-contract")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-v2-agents-md-"))
 const project = path.join(temporary, "project")

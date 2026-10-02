@@ -127,7 +127,7 @@ hace `chown` de vuelta al usuario real después de cada escritura
    primeros 1-2 minutos:
    ```python
    import json, time
-   path = '/home/gabodev/.config/opencode-multi-auth/accounts.json'
+   path = '~/.config/opencode-multi-auth/accounts.json'
    last = None
    for _ in range(240):
        d = json.load(open(path))['accounts']['personal']

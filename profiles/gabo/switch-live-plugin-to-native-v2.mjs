@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /** Install the native Rigel V2 runtime without loading OmO's V1 plugin API. */
+import os from "node:os"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const labRoot = process.env.RIGEL_V2_LAB_ROOT || "/home/gabodev/.local/share/opencode-v2-lab"
+const labRoot = process.env.RIGEL_V2_LAB_ROOT || path.join(os.homedir(), ".local/share/opencode-v2-lab")
 const home = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const stateRoot = path.join(labRoot, "rigel")

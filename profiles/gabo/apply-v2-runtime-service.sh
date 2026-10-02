@@ -4,7 +4,7 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-lab_root="${RIGEL_V2_LAB_ROOT:-/home/gabodev/.local/share/opencode-v2-lab}"
+lab_root="${RIGEL_V2_LAB_ROOT:-"$HOME/.local/share/opencode-v2-lab"}"
 lab_home="$lab_root/home"
 lab_config="$lab_root/config/opencode/opencode.json"
 service="${RIGEL_V2_SERVICE:-opencode-v2-lab.service}"

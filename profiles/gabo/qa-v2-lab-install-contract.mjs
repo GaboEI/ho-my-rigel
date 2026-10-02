@@ -12,8 +12,8 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const v1Config = "/home/gabodev/.config/opencode/opencode.json"
-const v2Config = "/home/gabodev/.local/share/opencode-v2-lab/config/opencode/opencode.json"
+const v1Config = path.join(os.homedir(), ".config/opencode/opencode.json")
+const v2Config = path.join(os.homedir(), ".local/share/opencode-v2-lab/config/opencode/opencode.json")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-v2-lab-install-"))
 const labRoot = path.join(temporary, "lab")
 const labConfig = path.join(labRoot, "config/opencode/opencode.json")

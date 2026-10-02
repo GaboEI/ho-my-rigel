@@ -16,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-opencode_binary="${RIGEL_V2_BINARY:-/home/gabodev/.opencode/bin/opencode}"
+opencode_binary="${RIGEL_V2_BINARY:-$HOME/.opencode/bin/opencode}"
 if [ ! -x "$opencode_binary" ]; then
   echo "OpenCode V2 binary is required at RIGEL_V2_BINARY (default: $opencode_binary)" >&2
   exit 2
@@ -76,7 +76,7 @@ node -e '
   const sources = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
   if (!String(openapi.openapi ?? "").startsWith("3.")) process.exit(1);
   if (!sources.some((source) => source.path?.startsWith("/sandbox/xdg/config/opencode"))) process.exit(1);
-  if (sources.some((source) => source.path?.startsWith("/home/gabodev"))) process.exit(1);
+  if (sources.some((source) => source.path?.startsWith(os.homedir()))) process.exit(1);
 ' "$sandbox/openapi.json" "$sandbox/config.json"
 
 docker run --rm \
