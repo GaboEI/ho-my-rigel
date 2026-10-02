@@ -36,13 +36,13 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `delegate-task-retry` | Pendiente de clasificación V2 | — |
 | `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
 | `directory-readme-injector` | Migrado parcialmente | El mismo hook V2 conserva los `README.md` aplicables a una lectura y los inyecta como contexto en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
-| `edit-error-recovery` | Pendiente de clasificación V2 | — |
+| `edit-error-recovery` | Migrado parcialmente | El reemplazo V2 detecta los tres errores de Edit V1 y anexa la misma instrucción de recuperación al resultado de herramienta mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un fallo real del editor V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
 | `fsync-skip-warning` | Pendiente de clasificación V2 | — |
 | `goal` | Pendiente de clasificación V2 | — |
 | `hashline-read-enhancer` | Pendiente de clasificación V2 | — |
 | `hephaestus-agents-md-injector` | Migrado parcialmente | Para cualquier manifiesto V2 que incluya Hephaestus, la petición inicial recibe el `AGENTS.md` raíz; contrato aislado V2 comprobado. El perfil de laboratorio de Gabo lo excluye de forma explícita, por lo que no es una capacidad visible allí. `rigel-v2-native.mjs`; `qa-v2-agents-md-contract.mjs`; `v2-agent-selection.json` |
 | `interactive-bash-session` | Pendiente de clasificación V2 | — |
-| `json-error-recovery` | Pendiente de clasificación V2 | — |
+| `json-error-recovery` | Migrado parcialmente | El reemplazo V2 conserva patrones, exclusiones y deduplicación de la instrucción V1 sobre el resultado mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un error JSON real del host V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
 | `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 | `legacy-plugin-toast` | Pendiente de clasificación V2 | — |
 | `model-fallback` | Pendiente de clasificación V2 | — |

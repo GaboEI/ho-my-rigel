@@ -16,6 +16,7 @@ import fs from "node:fs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
+import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
@@ -174,7 +175,10 @@ export default {
       })
       : undefined
     const remindersRegistration = typeof context?.tool?.hook === "function"
-      ? await context.tool.hook("execute.after", async (input) => reminders.after(input))
+      ? await context.tool.hook("execute.after", async (input) => {
+        reminders.after(input)
+        applyNativeRecoveryReminder(input)
+      })
       : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
