@@ -21,7 +21,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 
 | Hook V1 | Estado | Equivalente / evidencia V2 |
 | --- | --- | --- |
-| `agent-usage-reminder` | Pendiente de clasificación V2 | — |
+| `agent-usage-reminder` | Migrado parcialmente | El hook nativo V2 decora el mismo resultado de búsqueda para agentes orquestadores y se detiene tras `rigel_task`; falta la persistencia V1 tras reinicio. La mutabilidad real de `tool.execute.after` fue comprobada de forma aislada. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
 | `anthropic-context-window-limit-recovery` | Pendiente de clasificación V2 | — |
 | `ast-grep-sg-provision` | Pendiente de clasificación V2 | — |
 | `atlas` | Pendiente de clasificación V2 | — |
@@ -61,7 +61,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `runtime-fallback` | Pendiente de clasificación V2 | — |
 | `sisyphus-junior-notepad` | Pendiente de clasificación V2 | — |
 | `stop-continuation-guard` | Pendiente de clasificación V2 | — |
-| `task-reminder` | Pendiente de clasificación V2 | — |
+| `task-reminder` | Migrado | El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima, igual que V1. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
 | `task-resume-info` | Migrado | `rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
 | `tasks-todowrite-disabler` | Pendiente de clasificación V2 | — |
 | `team-mailbox-injector` | Pendiente de clasificación V2 | — |

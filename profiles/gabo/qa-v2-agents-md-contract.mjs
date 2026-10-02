@@ -57,7 +57,7 @@ try {
   fs.writeFileSync(path.join(project, "AGENTS.md"), "# V2 AGENTS contract\n\nV2_AGENTS_MD_MARKER: this directive must reach the provider.\n", { mode: 0o600 })
   fs.writeFileSync(path.join(project, "README.md"), "# V2 README contract\n\nV2_README_MD_MARKER: this documentation must reach the provider.\n", { mode: 0o600 })
   fs.writeFileSync(path.join(project, "sample.txt"), "sample\n", { mode: 0o600 })
-  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) {
+  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) {
     fs.copyFileSync(path.join(root, "profiles/gabo/opencode", name), path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name))
   }
   // The source manifest is generated during a profile install. This isolated

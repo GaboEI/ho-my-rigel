@@ -15,6 +15,7 @@ import {
 import fs from "node:fs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
+import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
@@ -65,6 +66,7 @@ export default {
     const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "rigel_task"
     const childSessionIDs = new Set()
     const directoryInstructions = createDirectoryInstructionStore({ directory: location.directory })
+    const reminders = createNativeToolResultReminders()
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
     const handoffBackgroundChild = async (sessionID, status) => {
@@ -92,6 +94,7 @@ export default {
         try {
           for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
             const sessionID = event?.data?.sessionID
+            if (event.type === "session.deleted" && typeof sessionID === "string") reminders.clear(sessionID)
             if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
               : event.type === "session.execution.failed" ? "failed"
@@ -170,6 +173,9 @@ export default {
         if (input?.status === "completed") directoryInstructions.recordRead(input)
       })
       : undefined
+    const remindersRegistration = typeof context?.tool?.hook === "function"
+      ? await context.tool.hook("execute.after", async (input) => reminders.after(input))
+      : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
@@ -194,7 +200,8 @@ export default {
     return async () => {
       abortBackgroundHandoffs.abort()
       directoryInstructions.clearAll()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      reminders.clearAll()
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }
