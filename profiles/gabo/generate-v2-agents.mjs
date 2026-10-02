@@ -34,6 +34,11 @@ try {
   for (const id of selection?.optionalAgentIds ?? []) {
     if (allAgents[id]) selected[id] = allAgents[id]
   }
+  for (const [id, mode] of Object.entries(selection?.nativeAgentModeOverrides ?? {})) {
+    if (selected[id] && ["primary", "subagent", "all"].includes(mode)) {
+      selected[id] = { ...selected[id], mode }
+    }
+  }
   const judge = judgePath ? JSON.parse(fs.readFileSync(judgePath, "utf8")) : null
   if (selection?.independentJudge?.id && !judge) throw new Error("Rigel Judge definition is required")
   if (judge) selected[selection?.independentJudge?.id ?? "judge"] = judge
@@ -41,6 +46,7 @@ try {
     defaultAgent: config.default_agent,
     agents: selected,
     metadata: { generatedBy: "Ho My Rigel V2 native runtime", profile: process.env.OMO_PROFILE || null },
+    modes: { defaultUltrawork: selection?.nativeModes?.defaultUltrawork === true },
   }
   fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true })
   fs.writeFileSync(outputPath, `// Generated; do not edit.\nexport default ${JSON.stringify(materialized, null, 2)}\n`)

@@ -3,12 +3,14 @@ import {
   listCallableAgentsFromClients,
   resolveNamedAgent,
   taskResult,
+  resumeDelegatedSessionFromClients,
 } from "./rigel-v2-native-core.mjs"
 import {
   availableCategoryNames,
   categoryTaskPrompt,
   resolveCategoryFromClients,
 } from "./rigel-v2-native-categories.mjs"
+import fs from "node:fs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
@@ -16,7 +18,7 @@ import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 export function createTaskPresentation() {
   return `Spawn one delegated task through the OpenCode V2 agent runtime.
 
-⚠️ CRITICAL: provide exactly one of category or subagent_type. Omitting both fails; providing both is invalid.
+⚠️ CRITICAL: provide exactly one of category, subagent_type, or task_id. A task_id resumes a prior Rigel child.
 
 Use subagent_type for a named specialist when its role matches a discrete research, consultation, review, or audit need. Use category for an execution worker with a category-selected model. The main agent chooses the appropriate route based on the active V2 agent inventory; this tool does not impose a routing policy.
 
@@ -28,15 +30,17 @@ By default this is foreground work: it waits and returns the child's final text,
 const taskInput = {
   type: "object",
   properties: {
-    subagent_type: { type: "string", description: "Exact callable agent name; omit when category is supplied." },
-    category: { type: "string", description: "OmO category; omit when subagent_type is supplied." },
+    subagent_type: { type: "string", description: "Exact callable agent name; omit when category or task_id is supplied." },
+    category: { type: "string", description: "OmO category; omit when subagent_type or task_id is supplied." },
+    task_id: { type: "string", description: "Existing Rigel child session ID to continue; omit for a new child." },
     description: { type: "string", description: "Short task description." },
     prompt: { type: "string", description: "Full task for the child agent." },
     run_in_background: { type: "boolean", description: "Set true only for independent work. Default false waits and returns the child result." },
+    load_skills: { type: "array", items: { type: "string" }, description: "Skills the child should load before working." },
   },
   required: ["prompt"],
   additionalProperties: false,
-  anyOf: [{ required: ["subagent_type"] }, { required: ["category"] }],
+  anyOf: [{ required: ["subagent_type"] }, { required: ["category"] }, { required: ["task_id"] }],
 }
 
 export default {
@@ -47,6 +51,11 @@ export default {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
     const registeredAgents = await registerNativeAgents(context.agent, manifest)
+    const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
+    const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
+    if (manifest.modes?.defaultUltrawork === true && !ultraworkPrompt.trim()) {
+      throw new Error("Rigel V2 default Ultrawork is enabled but its native prompt is missing")
+    }
     // V2 owns `task` after plugin transforms complete, so registering that
     // name here creates an editor entry the model never receives. A distinct
     // name is required for a real, callable Rigel delegation surface.
@@ -65,6 +74,20 @@ export default {
           // surface. Tool execution receives only turn metadata, not a second
           // API client. Do not assume the V1 `context.client` shape.
           const clients = [context, context.client, toolContext?.client]
+          const requestedSkills = Array.isArray(input.load_skills)
+            ? input.load_skills.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())
+            : []
+          const prompt = requestedSkills.length > 0
+            ? `${input.prompt}\n\n<rigel-requested-skills>Before working, load these native skills if available: ${requestedSkills.join(", ")}</rigel-requested-skills>`
+            : input.prompt
+          if (input.task_id) {
+            return taskResult(await resumeDelegatedSessionFromClients({
+              clients,
+              sessionID: input.task_id,
+              prompt,
+              background: input.run_in_background === true,
+            }))
+          }
           const agents = await listCallableAgentsFromClients(clients, location)
           const category = input.category
             ? await resolveCategoryFromClients(clients, location, input.category)
@@ -76,7 +99,7 @@ export default {
             clients,
             location,
             agent,
-            prompt: category ? categoryTaskPrompt(input.prompt, category) : input.prompt,
+            prompt: category ? categoryTaskPrompt(prompt, category) : prompt,
             background: input.run_in_background === true,
             model: category?.model,
             parentSessionID: toolContext?.sessionID,
@@ -98,6 +121,8 @@ export default {
         context.location,
       ),
       categories: availableCategoryNames(),
+      ultraworkPrompt,
+      defaultUltrawork: manifest.modes?.defaultUltrawork === true,
       // Every child created through this runtime is marked before prompting.
       // The active callable roster is a second guard: a subagent request is
       // never allowed to receive the parent's delegation menu.

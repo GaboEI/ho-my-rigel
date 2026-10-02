@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   delegateNamedAgent,
   completedChildText,
+  resumeDelegatedSession,
   listCallableAgents,
   resolveNamedAgent,
   taskResult,
@@ -72,5 +73,26 @@ describe("Rigel native OpenCode V2 delegation", () => {
       { type: "assistant", content: [{ type: "text", text: "old" }] },
       { type: "assistant", content: [{ type: "reasoning", text: "do not expose" }, { type: "text", text: "final evidence" }] },
     ] })).toBe("final evidence")
+  })
+
+  test("maps the V1 plan name and resumes a native V2 child session", async () => {
+    expect(resolveNamedAgent([{ id: "Prometheus - Plan Builder", name: "Prometheus - Plan Builder", mode: "subagent" }], "plan")).toMatchObject({ id: "Prometheus - Plan Builder" })
+    const calls = []
+    const resumed = await resumeDelegatedSession({
+      client: { session: {
+        create: async () => { throw new Error("not used") },
+        prompt: async (input) => { calls.push(["prompt", input]) },
+        wait: async (input) => { calls.push(["wait", input]) },
+        context: async (input) => { calls.push(["context", input]); return { data: [{ type: "assistant", content: [{ type: "text", text: "continued" }] }] } },
+      } },
+      sessionID: "ses_child",
+      prompt: "continue the analysis",
+    })
+    expect(resumed).toEqual({ sessionID: "ses_child", agent: "resumed", background: false, result: "continued" })
+    expect(calls).toEqual([
+      ["prompt", { sessionID: "ses_child", text: "<rigel-native-child-task>\ncontinue the analysis", resume: true }],
+      ["wait", { sessionID: "ses_child" }],
+      ["context", { sessionID: "ses_child" }],
+    ])
   })
 })

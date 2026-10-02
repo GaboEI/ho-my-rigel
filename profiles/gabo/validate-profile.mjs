@@ -34,6 +34,7 @@ if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthor
 if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")
 const v2Selection = readJson("v2-agent-selection.json")
 if ((v2Selection.optionalAgentIds ?? []).includes("Hephaestus - Deep Agent") || !v2Selection.excludedOmOAgentIds?.includes("Hephaestus - Deep Agent")) fail("the OpenAI-only Hephaestus agent must remain excluded")
+if (v2Selection.nativeAgentModeOverrides?.["Prometheus - Plan Builder"] !== "all") fail("Prometheus must be callable by the translated native V2 Ultrawork prompt")
 const judge = v2Selection.independentJudge
 if (judge?.id !== "judge" || judge.removeRigelLegacyAlias !== "juez") fail("Judge must use the canonical id and retire the duplicate Rigel alias")
 if (judge?.source !== "opencode/agents/judge.md" || judge.legacyExternalDefinitionPath !== ".config/opencode/agents/judge.md") fail("Judge must be packaged as a Rigel V2 source and migrate the former local definition")
