@@ -14,6 +14,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | Delegación nombrada | Migrado parcialmente | `rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación | `qa-v2-native-delegation.mjs` |
 | chat.message | Migrado parcialmente | Adaptación de la superficie V1; no implica los hooks dependientes | `qa-v2-chat-message-contract.mjs` |
 | Instrucciones por directorio | Migrado parcialmente | La sustitución nativa conserva `AGENTS.md` y `README.md` aplicables tras una lectura V2, y el `AGENTS.md` raíz antes del primer turno de Hephaestus | `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
+| Continuidad de compactación | Incompatible parcialmente | V2 conserva su resumen nativo, pero su hook de compactación no propaga contexto adicional al modelo; no se puede portar el inyector V1 sin sustituir el resumen | `qa-v2-compaction-hook-contract.mjs` |
 | Keyword detector | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación | `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Hooks V1 (54)
@@ -30,7 +31,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `category-skill-reminder` | Pendiente de clasificación V2 | — |
 | `claude-code-hooks` | Pendiente de clasificación V2 | — |
 | `comment-checker` | Pendiente de clasificación V2 | — |
-| `compaction-context-injector` | Pendiente de clasificación V2 | — |
+| `compaction-context-injector` | Incompatible (con evidencia) | V2.0.22 invoca `session.hook("compaction")`, pero las mutaciones de `event.system` no llegan a la petición real del proveedor que genera el resumen. No se usa `result`, pues reemplazaría el resumen nativo. `qa-v2-compaction-hook-contract.mjs` |
 | `compaction-todo-preserver` | Pendiente de clasificación V2 | — |
 | `delegate-task-retry` | Pendiente de clasificación V2 | — |
 | `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
