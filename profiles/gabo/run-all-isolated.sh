@@ -59,7 +59,12 @@ fi
 echo "layer 1: bun unit tests"
 run_step "bun: profiles unit tests" bun test "$suite_dir/opencode"
 
-echo "layer 2: isolated V2 contracts"
+echo "layer 2: isolated V2 contracts (node -> spawns the V2 binary)"
+# Boundary note (protect-opencode-v1.md): a node contract launches the V2
+# binary as its own subprocess. Replacing HOME/XDG/goal-state is not sufficient
+# proof of full isolation for that child (it still resolves real-home skill and
+# worktree paths), so these contracts are skipped by default and require an
+# explicit opt-in. The container runner in layer 3 is the approved path.
 for contract in \
   qa-v2-lab-install-contract.mjs \
   qa-v2-agent-domain.mjs \
@@ -73,7 +78,11 @@ for contract in \
   qa-v2-noninteractive-contract.mjs \
   qa-v2-tool-after-result-contract.mjs \
   qa-v2-tool-before-contract.mjs; do
-  run_step "node: $contract" node "$suite_dir/$contract"
+  if [ "${RIGEL_SUITE_ALLOW_NODE_CONTRACTS:-0}" = "1" ]; then
+    run_step "node: $contract" node "$suite_dir/$contract"
+  else
+    declare_status "node: $contract" "SKIP (RIGEL_SUITE_ALLOW_NODE_CONTRACTS!=1; node-spawned V2 child cannot be proven fully isolated, use the container runner)"
+  fi
 done
 
 echo "layer 3: docker lab runners"
