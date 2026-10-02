@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 
@@ -95,6 +95,24 @@ for (const file of [
 const nativeEntrypoint = readFileSync(join(root, "opencode/rigel-v2-native.mjs"), "utf8")
 if (/legacyModule|omo-v2-adapter/i.test(nativeEntrypoint)) fail("native V2 entrypoint must not load the V1 bridge")
 if (!nativeEntrypoint.includes("registerNativeAgents")) fail("native V2 entrypoint must register the generated agent manifest")
+
+// Single-runtime invariant: no active (non-attic) profile file may load the
+// quarantined V1 bridge. generate-v2-agents.mjs is exempt: it is a build-time
+// dependency (the V1 plugin dist feeds agent manifest generation) tracked as
+// technical debt until Fase 2 replaces generation; it never runs at runtime.
+const bridgeImport = /omo-v2-adapter|legacyModule|switch-live-plugin-to-(?:dist|v2-adapter)/
+const buildTimeGenerationExempt = new Set(["generate-v2-agents.mjs", "validate-profile.mjs"])
+for (const dir of ["opencode", "qa", "."]) {
+  const scanRoot = join(root, dir)
+  const entries = existsSync(scanRoot) ? readdirSync(scanRoot, { withFileTypes: true }) : []
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.(mjs|sh)$/.test(entry.name)) continue
+    if (buildTimeGenerationExempt.has(entry.name)) continue
+    if (bridgeImport.test(readFileSync(join(scanRoot, entry.name), "utf8"))) fail(`active file ${dir}/${entry.name} must not reference the quarantined V1 bridge`)
+  }
+}
+const atticMarkers = ["opencode/omo-v2-adapter.mjs", "switch-live-plugin-to-native-v2.mjs"]
+if (!existsSync(join(root, "attic", atticMarkers[0]))) fail("quarantined V1 bridge must remain under profiles/gabo/attic for history")
 const activation = readFileSync(join(root, "apply-v2-runtime-service.sh"), "utf8")
 if (!activation.includes("switch-live-plugin-to-native-v2.mjs") || activation.includes("switch-live-plugin-to-v2-adapter.mjs")) fail("runtime activation must select the native V2 entrypoint")
 if (!activation.includes("opencode-v2-lab.service") || /systemctl\s+(?:--user\s+)?(?:start|stop|restart)\s+opencode-lan\.service/.test(activation)) fail("native activation must address only the isolated V2 service")
