@@ -39,6 +39,7 @@ const known = [
   ["Agentes seleccionados", "Migrado parcialmente", "`agent.transform` + `agent.reload`; falta auditar todos los modos y permisos", "`qa-v2-agent-transform-contract.mjs`"],
   ["Delegación nombrada", "Migrado parcialmente", "`rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación", "`qa-v2-native-delegation.mjs`"],
   ["chat.message", "Migrado parcialmente", "Adaptación de la superficie V1; no implica los hooks dependientes", "`qa-v2-chat-message-contract.mjs`"],
+  ["Instrucciones por directorio", "Migrado parcialmente", "La sustitución nativa conserva los `AGENTS.md` aplicables tras una lectura V2; falta auditar el inyector README y la variante Hephaestus", "`rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs`"],
   ["Keyword detector", "Migrado parcialmente", "Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación", "`rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs`"],
 ]
 
@@ -47,6 +48,7 @@ const known = [
 // completed or partially-audited work back to "pending".
 const hookOverrides = {
   "background-notification": { status: "Migrado parcialmente", evidence: "Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs`" },
+  "directory-agents-injector": { status: "Migrado parcialmente", evidence: "Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado; falta auditar README y Hephaestus. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs`" },
   "keyword-detector": { status: "Migrado parcialmente", evidence: "Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs`" },
 }
 const toolOverrides = {

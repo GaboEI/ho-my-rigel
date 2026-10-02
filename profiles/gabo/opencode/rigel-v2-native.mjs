@@ -14,6 +14,7 @@ import {
 } from "./rigel-v2-native-categories.mjs"
 import fs from "node:fs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
+import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
@@ -63,6 +64,7 @@ export default {
     // name is required for a real, callable Rigel delegation surface.
     const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "rigel_task"
     const childSessionIDs = new Set()
+    const directoryInstructions = createDirectoryInstructionStore({ directory: location.directory })
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
     const handoffBackgroundChild = async (sessionID, status) => {
@@ -163,6 +165,11 @@ export default {
         console.error(`[ho-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
       }
     })
+    const directoryReadRegistration = typeof context?.tool?.hook === "function"
+      ? await context.tool.hook("execute.after", async (input) => {
+        if (input?.status === "completed") directoryInstructions.recordRead(input)
+      })
+      : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
@@ -173,6 +180,7 @@ export default {
       categories: availableCategoryNames(),
       ultraworkPrompt,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
+      getDirectoryInstructions: directoryInstructions.guidance,
       // Every child created through this runtime is marked before prompting.
       // The active callable roster is a second guard: a subagent request is
       // never allowed to receive the parent's delegation menu.
@@ -182,7 +190,8 @@ export default {
     console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     return async () => {
       abortBackgroundHandoffs.abort()
-      await Promise.all([registration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      directoryInstructions.clearAll()
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }

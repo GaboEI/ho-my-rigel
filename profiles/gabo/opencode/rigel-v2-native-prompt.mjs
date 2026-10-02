@@ -1,3 +1,5 @@
+import { isDirectoryInstructionMessage } from "./rigel-v2-directory-instructions.mjs"
+
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
 const ULTRAWORK_MARKER = "<ultrawork-mode>"
@@ -73,6 +75,7 @@ export function createNativeRequestHook({
   onDelegationRoster,
   ultraworkPrompt = "",
   defaultUltrawork = false,
+  getDirectoryInstructions,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
@@ -85,20 +88,33 @@ export function createNativeRequestHook({
     let body
     try { body = await input.request.clone().json() } catch { return }
     if (!Array.isArray(body?.messages)) return
+    const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
+    const directoryGuidance = sessionID && typeof getDirectoryInstructions === "function"
+      ? getDirectoryInstructions(sessionID)
+      : ""
     let agents
     try { agents = await getDelegationRoster() } catch {
       onDelegationRoster?.({ count: 0, available: false })
       return
     }
-    if (!await isRootSession(input, agents)) return
-    const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
+    const isRoot = await isRootSession(input, agents)
+    if (!isRoot && !directoryGuidance) return
+    if (!isRoot) {
+      const messages = body.messages.filter((message) => !isDirectoryInstructionMessage(message))
+      const index = messages.findIndex((message) => message?.role !== "system")
+      messages.splice(index < 0 ? messages.length : index, 0, { role: "system", content: directoryGuidance })
+      body.messages = messages
+      input.request = new Request(input.request, { body: JSON.stringify(body) })
+      return
+    }
     const explicitUltrawork = hasUltraworkKeyword(body.messages)
     if (sessionID && (defaultUltrawork || explicitUltrawork)) ultraworkSessions.add(sessionID)
     const ultraworkActive = defaultUltrawork || explicitUltrawork || Boolean(sessionID && ultraworkSessions.has(sessionID))
     const roster = formatDelegationRoster(agents, categories)
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
-    const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message))
+    const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
     const injections = []
+    if (directoryGuidance) injections.push({ role: "system", content: directoryGuidance })
     if (ultraworkActive && ultraworkPrompt.trim()) injections.push({ role: "system", content: ultraworkPrompt })
     if (roster) injections.push({ role: "system", content: roster })
     if (injections.length > 0) {
