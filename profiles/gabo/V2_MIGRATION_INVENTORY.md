@@ -41,7 +41,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `hephaestus-agents-md-injector` | Pendiente de clasificación V2 | — |
 | `interactive-bash-session` | Pendiente de clasificación V2 | — |
 | `json-error-recovery` | Pendiente de clasificación V2 | — |
-| `keyword-detector` | Pendiente de clasificación V2 | — |
+| `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación | `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 | `legacy-plugin-toast` | Pendiente de clasificación V2 | — |
 | `model-fallback` | Pendiente de clasificación V2 | — |
 | `monitor-status-injector` | Pendiente de clasificación V2 | — |

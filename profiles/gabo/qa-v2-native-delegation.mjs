@@ -24,6 +24,8 @@ const traceFile = path.join(temporary, "provider-trace.jsonl")
 const serverPassword = "rigel-disposable-server-only"
 const serverAuthorization = `Basic ${Buffer.from(`opencode:${serverPassword}`).toString("base64")}`
 const backgroundMode = process.env.RIGEL_QA_BACKGROUND_MODE === "1"
+const explicitUltraworker = process.env.RIGEL_QA_EXPLICIT_ULTRAWORKER === "1"
+const defaultUltrawork = !explicitUltraworker
 
 function writeEvidence(name, value) {
   fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 })
@@ -61,7 +63,7 @@ try {
   fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
   fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({
     defaultAgent: "Sisyphus - ultraworker",
-    modes: { defaultUltrawork: true },
+    modes: { defaultUltrawork },
     agents: {
       "Sisyphus - ultraworker": { mode: "primary", name: "Sisyphus - ultraworker", model: "rigel-fixture/fixture", prompt: "Coordinate the request." },
       explore: { mode: "subagent", name: "explore", model: "rigel-fixture/fixture", prompt: "Explore evidence." },
@@ -84,7 +86,10 @@ try {
     const created = await json(`${serverUrl}/api/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "Sisyphus - ultraworker", location: { directory: sourceRoot } }) })
     const parentID = created.id ?? created.data?.id
     if (typeof parentID !== "string") throw new Error(`V2 did not return a parent session ID: ${JSON.stringify(created)}`)
-    await json(`${serverUrl}/api/session/${parentID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Delegate the requested research using rigel_task, then report completion.", resume: true }) })
+    const userPrompt = explicitUltraworker
+      ? "Ultraworker: delegate the requested research using rigel_task, then report completion."
+      : "Delegate the requested research using rigel_task, then report completion."
+    await json(`${serverUrl}/api/session/${parentID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: userPrompt, resume: true }) })
     await waitFor(async () => {
       const trace = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : ""
       const rows = trace.trim().split("\n").filter(Boolean).map(JSON.parse)
@@ -121,7 +126,8 @@ try {
     const parentLinked = Boolean(childInfo?.parentID === parentID || childInfo?.data?.parentID === parentID)
     const backgroundHandoff = rows.some((row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-background-result>") && String(message.content).includes("SELF_AUDIT_PASS")))
     const parentReceivedChildText = backgroundMode ? backgroundHandoff : Boolean(toolResultText?.includes("<rigel-native-child-result>"))
-    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Mode: ${backgroundMode ? "background handoff" : "foreground"}.`, `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Default Ultrawork reached the root model request: ${parentReceivedUltrawork ? "yes" : "no"}.`, `- Default Ultrawork stayed out of the child: ${childDidNotReceiveUltrawork ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child is linked to its parent session: ${parentLinked ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received the child's visible text: ${parentReceivedChildText ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
+    const activation = explicitUltraworker ? "Explicit `Ultraworker` keyword" : "Default Ultrawork"
+    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Mode: ${backgroundMode ? "background handoff" : "foreground"}.`, `- Ultrawork activation: ${activation}.`, `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- ${activation} reached the root model request: ${parentReceivedUltrawork ? "yes" : "no"}.`, `- Default Ultrawork stayed out of the child: ${childDidNotReceiveUltrawork ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child is linked to its parent session: ${parentLinked ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received the child's visible text: ${parentReceivedChildText ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
     writeEvidence("validation.md", report)
     process.stdout.write(report)
     if (!runtimeLoaded || !parentReceivedUltrawork || !childDidNotReceiveUltrawork || !registeredSpecialistsVisible || !invokedTask || !resolved || !parentLinked || !childRanWithoutRoster || !childCompleted || !parentReceivedChildText || !completed) process.exitCode = 1
