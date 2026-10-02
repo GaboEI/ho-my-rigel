@@ -35,7 +35,10 @@ fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
 for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs"]) {
   fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), path.join(runtime, file === "rigel-v2-native.mjs" ? "index.js" : file))
 }
-fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
+const ultraworkSource = fs.readFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), "utf8")
+// The original prompt targets OmO's V1 `task` tool. V2 reserves that name,
+// so the native runtime exposes `rigel_task`; translate only actual calls.
+fs.writeFileSync(path.join(runtime, "prompts/ultrawork-default.md"), ultraworkSource.replace(/\btask\(/g, "rigel_task("), { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
 for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)

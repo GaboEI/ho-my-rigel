@@ -67,7 +67,12 @@ try {
   const agents = manifest.default?.agents
   assert.ok(agents?.oracle, "native manifest lacks oracle")
   assert.ok(agents?.judge, "native manifest lacks the independent judge")
+  assert.equal(agents?.["Prometheus - Plan Builder"]?.mode, "all", "Prometheus is not callable from the translated V2 Ultrawork prompt")
+  assert.equal(manifest.default?.modes?.defaultUltrawork, true, "native manifest lost the selected default Ultrawork mode")
   assert.ok(fs.existsSync(path.join(runtime, "index.js")), "native runtime was not materialized")
+  const stagedUltrawork = fs.readFileSync(path.join(runtime, "prompts/ultrawork-default.md"), "utf8")
+  assert.ok(stagedUltrawork.includes("rigel_task("), "staged Ultrawork prompt did not translate V1 task calls")
+  assert.ok(!/(?<!rigel_)\btask\(/.test(stagedUltrawork), "staged Ultrawork prompt still contains a V1 task call")
   assert.ok(fs.existsSync(path.join(home, ".agents/skills")), "V2 personal skills were not materialized")
   assert.ok(!fs.existsSync(path.join(home, ".omo")), "temporary generator profile leaked into the V2 lab home")
 

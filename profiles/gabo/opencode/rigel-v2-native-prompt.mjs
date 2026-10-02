@@ -1,5 +1,7 @@
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
+const ULTRAWORK_MARKER = "<ultrawork-mode>"
+const ULTRAWORK_KEYWORD = /\b(?:ultraworker|ultrawork|ulw)\b/i
 
 function safeSingleLine(value, limit = 120) {
   // Agent names come from user configuration. Keep their visible value useful
@@ -47,6 +49,18 @@ export function childTaskPrompt(prompt) {
   return `${CHILD_TASK_MARKER}\n${String(prompt)}`
 }
 
+function hasUltraworkKeyword(messages) {
+  return messages.some((message) => message?.role === "user"
+    && typeof message.content === "string"
+    && ULTRAWORK_KEYWORD.test(message.content))
+}
+
+function isUltraworkMessage(message) {
+  return message?.role === "system"
+    && typeof message.content === "string"
+    && message.content.includes(ULTRAWORK_MARKER)
+}
+
 /**
  * V2.0.22 exposes prompt/context hooks, but their mutations do not reach the
  * provider. The HTTP request hook does. Keep roster injection here, at that
@@ -57,10 +71,13 @@ export function createNativeRequestHook({
   categories = [],
   isRootSession = async () => true,
   onDelegationRoster,
+  ultraworkPrompt = "",
+  defaultUltrawork = false,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
   }
+  const ultraworkSessions = new Set()
   return async (input) => {
     // `http.request` is shared by primary, title, compaction, and child
     // requests. Its `kind` is not a stable primary-session discriminator in
@@ -74,12 +91,19 @@ export function createNativeRequestHook({
       return
     }
     if (!await isRootSession(input, agents)) return
+    const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
+    const explicitUltrawork = hasUltraworkKeyword(body.messages)
+    if (sessionID && (defaultUltrawork || explicitUltrawork)) ultraworkSessions.add(sessionID)
+    const ultraworkActive = defaultUltrawork || explicitUltrawork || Boolean(sessionID && ultraworkSessions.has(sessionID))
     const roster = formatDelegationRoster(agents, categories)
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
-    const messages = body.messages.filter((message) => !isRosterMessage(message))
-    if (roster) {
+    const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message))
+    const injections = []
+    if (ultraworkActive && ultraworkPrompt.trim()) injections.push({ role: "system", content: ultraworkPrompt })
+    if (roster) injections.push({ role: "system", content: roster })
+    if (injections.length > 0) {
       const insertionIndex = messages.findIndex((message) => message?.role !== "system")
-      messages.splice(insertionIndex < 0 ? messages.length : insertionIndex, 0, { role: "system", content: roster })
+      messages.splice(insertionIndex < 0 ? messages.length : insertionIndex, 0, ...injections)
     }
     body.messages = messages
     input.request = new Request(input.request, { body: JSON.stringify(body) })

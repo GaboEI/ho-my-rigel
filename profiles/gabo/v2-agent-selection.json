@@ -20,5 +20,12 @@
   },
   "optionalAgentIds": [],
   "disabledLegacyAgentIds": ["forja"],
-  "excludedOmOAgentIds": ["judge", "build", "plan", "Hephaestus - Deep Agent"]
+  "excludedOmOAgentIds": ["judge", "build", "plan", "Hephaestus - Deep Agent"],
+  "nativeModes": {
+    "defaultUltrawork": true
+  },
+  "nativeAgentModeOverrides": {
+    "Prometheus - Plan Builder": "all",
+    "Atlas - Plan Executor": "all"
+  }
 }

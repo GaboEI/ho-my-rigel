@@ -66,8 +66,9 @@ export function resolveNamedAgent(agents, requestedName) {
   // OmO's prompts use stable lowercase identifiers (`explore`, `oracle`),
   // while V2 can surface a display-cased builtin (`Explore`). Resolve names
   // case-insensitively, but preserve V2's stable `id` for session.create.
-  const agent = agents.find((candidate) => candidate.name === requested)
-    ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === requested.toLocaleLowerCase())
+  const alias = requested.toLocaleLowerCase() === "plan" ? "prometheus - plan builder" : requested
+  const agent = agents.find((candidate) => candidate.name === alias)
+    ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === alias.toLocaleLowerCase())
   if (agent) {
     console.error(`[ho-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}; id=${agent.id}`)
     return agent
@@ -147,6 +148,17 @@ export async function delegateNamedAgent({ client, location, agent, prompt, back
   return { sessionID, agent: agent.name, background, result }
 }
 
+export async function resumeDelegatedSession({ client, sessionID, prompt, background = false }) {
+  const sessions = sessionApi(client)
+  await sessions.prompt({ sessionID, text: childTaskPrompt(prompt), resume: true })
+  if (background) return { sessionID, agent: "resumed", background }
+  if (typeof sessions.wait !== "function" || typeof sessions.context !== "function") {
+    throw new Error("OpenCode V2 session.wait/session.context is unavailable for foreground continuation")
+  }
+  await sessions.wait({ sessionID })
+  return { sessionID, agent: "resumed", background, result: completedChildText(await sessions.context({ sessionID })) }
+}
+
 export async function delegateNamedAgentFromClients({ clients, ...input }) {
   const diagnostics = []
   for (const client of clients.filter(Boolean)) {
@@ -157,6 +169,18 @@ export async function delegateNamedAgentFromClients({ clients, ...input }) {
     }
   }
   throw new Error(`OpenCode V2 child session could not be created: ${diagnostics.join("; ")}`)
+}
+
+export async function resumeDelegatedSessionFromClients({ clients, ...input }) {
+  const diagnostics = []
+  for (const client of clients.filter(Boolean)) {
+    try {
+      return await resumeDelegatedSession({ ...input, client })
+    } catch (error) {
+      diagnostics.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(`OpenCode V2 child session could not be resumed: ${diagnostics.join("; ")}`)
 }
 
 export function taskResult({ sessionID, agent, background, result }) {

@@ -53,12 +53,14 @@ async function json(url, init) {
 }
 
 try {
-  fs.mkdirSync(runtime, { recursive: true, mode: 0o700 })
+  fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(configHome, "opencode"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
   for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) copyRuntimeFile(name)
+  fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
   fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({
     defaultAgent: "Sisyphus - ultraworker",
+    modes: { defaultUltrawork: true },
     agents: {
       "Sisyphus - ultraworker": { mode: "primary", name: "Sisyphus - ultraworker", model: "rigel-fixture/fixture", prompt: "Coordinate the request." },
       explore: { mode: "subagent", name: "explore", model: "rigel-fixture/fixture", prompt: "Explore evidence." },
@@ -100,6 +102,9 @@ try {
     const childRequest = rows.find((row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-child-task>")))
     const hasRoster = (row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-delegation-roster>"))
     const childRanWithoutRoster = Boolean(childRequest) && !hasRoster(childRequest)
+    const hasUltrawork = (row) => row.messages?.some((message) => String(message.content).includes("<ultrawork-mode>"))
+    const parentReceivedUltrawork = rows.some((row) => hasRoster(row) && hasUltrawork(row))
+    const childDidNotReceiveUltrawork = Boolean(childRequest) && !hasUltrawork(childRequest)
     const parentRoster = rows.find((row) => hasRoster(row))?.messages?.find((message) => String(message.content).includes("<rigel-native-delegation-roster>"))?.content ?? ""
     const registeredSpecialistsVisible = ["explore", "oracle", "librarian"].every((name) => parentRoster.includes(name))
     const childCompleted = rows.some((row) => row.responseKind === "complete" && !hasRoster(row))
@@ -112,10 +117,10 @@ try {
     const childID = toolResultText?.match(/sessionID: ([^;\s]+)/)?.[1]
     const childInfo = childID ? await json(`${serverUrl}/api/session/${childID}`, {}) : undefined
     const parentLinked = Boolean(childInfo?.parentID === parentID || childInfo?.data?.parentID === parentID)
-    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child is linked to its parent session: ${parentLinked ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received the child's visible text: ${Boolean(toolResultText) ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
+    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Default Ultrawork reached the root model request: ${parentReceivedUltrawork ? "yes" : "no"}.`, `- Default Ultrawork stayed out of the child: ${childDidNotReceiveUltrawork ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child is linked to its parent session: ${parentLinked ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received the child's visible text: ${Boolean(toolResultText) ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
     writeEvidence("validation.md", report)
     process.stdout.write(report)
-    if (!runtimeLoaded || !registeredSpecialistsVisible || !invokedTask || !resolved || !parentLinked || !childRanWithoutRoster || !childCompleted || !toolResultText || !completed) process.exitCode = 1
+    if (!runtimeLoaded || !parentReceivedUltrawork || !childDidNotReceiveUltrawork || !registeredSpecialistsVisible || !invokedTask || !resolved || !parentLinked || !childRanWithoutRoster || !childCompleted || !toolResultText || !completed) process.exitCode = 1
   } catch (error) {
     writeEvidence("startup-failure.txt", logs.join(""))
     writeEvidence("provider-trace.jsonl", fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : "")
