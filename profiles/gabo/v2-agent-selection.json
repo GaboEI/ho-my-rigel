@@ -18,7 +18,7 @@
     "legacyExternalDefinitionPath": ".config/opencode/agents/judge.md",
     "removeRigelLegacyAlias": "juez"
   },
-  "optionalAgentIds": ["Hephaestus - Deep Agent"],
+  "optionalAgentIds": [],
   "disabledLegacyAgentIds": ["forja"],
-  "excludedOmOAgentIds": ["judge", "build", "plan"]
+  "excludedOmOAgentIds": ["judge", "build", "plan", "Hephaestus - Deep Agent"]
 }

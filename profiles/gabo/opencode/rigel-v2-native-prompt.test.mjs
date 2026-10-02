@@ -1,32 +1,54 @@
-import { describe, expect, test } from "bun:test"
-import { childTaskPrompt, createNativePromptHook } from "./rigel-v2-native-prompt.mjs"
+import { expect, test } from "bun:test"
+import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 
-describe("Rigel native OpenCode V2 prompt orchestration", () => {
-  test("injects the default ultrawork directive once for a root session", async () => {
-    const hook = createNativePromptHook({ ultraworkDirective: "DIRECTIVE" })
-    const input = { sessionID: "ses_root", prompt: { text: "Inspect this repository." } }
-    await hook(input)
-    expect(input.prompt.text).toContain("<rigel-native-ultrawork>\nDIRECTIVE")
-    const first = input.prompt.text
-    await hook(input)
-    expect(input.prompt.text).toBe(first)
+test("request-stage roster is fresh, replaces an old roster, and preserves ordinary system text", async () => {
+  let calls = 0
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => {
+      calls += 1
+      return calls === 1
+        ? [{ name: "explore", mode: "subagent" }]
+        : [{ name: "oracle", mode: "subagent" }]
+    },
+    categories: ["quick"],
   })
+  const input = {
+    kind: "primary",
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "system", content: "ordinary system text" },
+        { role: "user", content: "research this" },
+      ] }),
+    }),
+  }
+  await hook(input)
+  let body = await input.request.clone().json()
+  expect(body.messages).toHaveLength(3)
+  expect(body.messages[0]).toEqual({ role: "system", content: "ordinary system text" })
+  expect(body.messages[1].content).toContain('"explore"')
 
-  test("strips the internal child marker without applying root orchestration", async () => {
-    const hook = createNativePromptHook({ ultraworkDirective: "DIRECTIVE" })
-    const input = { sessionID: "ses_child", prompt: { text: childTaskPrompt("List root files.") } }
-    await hook(input)
-    expect(input.prompt.text).toBe("List root files.")
-    expect(input.prompt.text).not.toContain("DIRECTIVE")
-  })
+  await hook(input)
+  body = await input.request.clone().json()
+  expect(body.messages).toHaveLength(3)
+  expect(body.messages[1].content).toContain('"oracle"')
+  expect(body.messages[1].content).not.toContain('"explore"')
+})
 
-  test("keeps explicit ultrawork available when default mode is disabled", async () => {
-    const hook = createNativePromptHook({ ultraworkDirective: "DIRECTIVE", defaultUltrawork: false })
-    const ordinary = { sessionID: "ses_a", prompt: { text: "Explain this." } }
-    const explicit = { sessionID: "ses_b", prompt: { text: "ulw: inspect this." } }
-    await hook(ordinary)
-    await hook(explicit)
-    expect(ordinary.prompt.text).toBe("Explain this.")
-    expect(explicit.prompt.text).toContain("DIRECTIVE")
+test("request-stage roster is never injected into a child session", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    isRootSession: async () => false,
   })
+  const input = {
+    kind: "primary",
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "child work" }] }),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).messages).toEqual([{ role: "user", content: "child work" }])
 })

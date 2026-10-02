@@ -11,7 +11,7 @@ It is deliberately not an installer. It contains no credentials, local host path
 ## Layout
 
 - `omo.jsonc` defines the OmO `gabo` profile: Tavily, one external Context7, external Goal ownership, Sisyphus as the merged orchestrator, and canonical Playwright.
-- `opencode/prompts/sisyphus-orchestration.md` adds the delegation and acceptance contract to upstream Sisyphus. `opencode/agents/judge.md` packages Gabo's independent Juez methodology, adapted to generic Rigel terminology and materialized as the V2 `judge` agent. During migration, a former local `judge.md` is archived under Rigel state and removed from OpenCode discovery so there is one canonical Juez. Momus is a distinct plan critic, never a Juez alias.
+- `opencode/prompts/sisyphus-orchestration.md` adds the delegation and acceptance contract to upstream Sisyphus. `opencode/agents/judge.md` packages Gabo's independent Juez methodology, adapted to generic Rigel terminology and registered as the V2 `judge` agent from the native manifest. Momus is a distinct plan critic, never a Juez alias.
 - `opencode/rigel-v2-native*.mjs` is the native OpenCode V2 runtime. It resolves agents and creates delegated sessions through V2 APIs directly; it does not execute OmO's V1 plugin hooks through a compatibility bridge.
 - `skills/` bundles portable governance/support skills, the complete Obsidian writing/audit/CLI suite, `tui-design` with its references and starter templates, and `skill-creator` with its evaluation resources.
 - `opencode/opencode.json` is a test template. The runner substitutes `__OMO_PLUGIN_ENTRY__` with the local plugin entrypoint; it bundles only the protective SSH MCP command. Docker remains an opt-in external MCP. It must never be copied unchanged to a user configuration.
@@ -31,7 +31,7 @@ Run `bash profiles/gabo/run-mcp-policy-preflight.sh` to validate singleton owner
 
 Run `bash profiles/gabo/run-all-isolated.sh` for the full non-account acceptance suite. See [UPSTREAM-MAINTENANCE.md](UPSTREAM-MAINTENANCE.md) for the isolated upstream-review and rollback procedure.
 
-For an already active Rigel trial, `sudo bash profiles/gabo/apply-v2-runtime-service.sh` refreshes the native V2 runtime and the static agent layer in one service stop/start. It preserves the protected model-auth plugins and Obsidian MCP fingerprint; it refuses the change if either differs from the frozen trial state.
+For the parallel V2 laboratory, `bash profiles/gabo/apply-v2-runtime-service.sh` refreshes the native V2 runtime and its generated agent manifest through `opencode-v2-lab.service`. The runtime registers the manifest through `agent.transform` and `agent.reload`; it does not write agents into OpenCode's V1 configuration. The script never addresses `opencode-lan.service`.
 
 ## Activation for a future isolated test
 

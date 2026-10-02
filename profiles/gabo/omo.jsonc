@@ -19,7 +19,7 @@
         },
         "default_mode": {
           "goal": false,
-          "ultrawork": false
+          "ultrawork": true
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
         "disabled_hooks": [

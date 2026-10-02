@@ -83,6 +83,8 @@ for (const file of [
   "opencode/rigel-v2-native.mjs",
   "opencode/rigel-v2-native-core.mjs",
   "opencode/rigel-v2-native-prompt.mjs",
+  "opencode/rigel-v2-native-agents.mjs",
+  "opencode/rigel-v2-native-agent-manifest.mjs",
   "opencode/rigel-v2-native-categories.mjs",
   "opencode/rigel-v2-category-manifest.mjs",
   "switch-live-plugin-to-native-v2.mjs",
@@ -91,8 +93,13 @@ for (const file of [
 }
 const nativeEntrypoint = readFileSync(join(root, "opencode/rigel-v2-native.mjs"), "utf8")
 if (/legacyModule|omo-v2-adapter/i.test(nativeEntrypoint)) fail("native V2 entrypoint must not load the V1 bridge")
+if (!nativeEntrypoint.includes("registerNativeAgents")) fail("native V2 entrypoint must register the generated agent manifest")
 const activation = readFileSync(join(root, "apply-v2-runtime-service.sh"), "utf8")
 if (!activation.includes("switch-live-plugin-to-native-v2.mjs") || activation.includes("switch-live-plugin-to-v2-adapter.mjs")) fail("runtime activation must select the native V2 entrypoint")
+if (!activation.includes("opencode-v2-lab.service") || /systemctl\s+(?:--user\s+)?(?:start|stop|restart)\s+opencode-lan\.service/.test(activation)) fail("native activation must address only the isolated V2 service")
+const agentMaterialization = readFileSync(join(root, "apply-v2-agent-layer.mjs"), "utf8")
+if (!agentMaterialization.includes("rigel-v2-agent-manifest.mjs") || !agentMaterialization.includes("materialize-v2-skills.mjs") || /writeFileSync\(configFile/.test(agentMaterialization)) fail("agent materialization must refresh V2 skills and generate a runtime manifest without editing OpenCode config")
+if (!agentMaterialization.includes("opencode-v2-lab") || agentMaterialization.includes('path.join(home, ".config/opencode/opencode.json")')) fail("agent materialization must default to the isolated V2 configuration")
 
 const profileSerialized = JSON.stringify({ omo, opencode })
 if (/WatchdogVPN|\/home\/gabodev|TAVILY_API_KEY|OPENAI_API_KEY|CODEX_AUTH/i.test(profileSerialized)) fail("profile contains a project rule, personal path, or secret marker")

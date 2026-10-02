@@ -15,6 +15,9 @@ const wrapper = path.join(home, ".local/bin/rigel-opencode")
 const rollbackWrapper = path.join(home, ".local/bin/rigel-rollback")
 
 function fail(message) { console.error(`Rigel rollback refused: ${message}`); process.exit(1) }
+if (process.env.RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL !== "1") {
+  fail("el rollback histórico está deshabilitado para proteger V1; no hay cambios de Rigel que restaurar en V1")
+}
 function hasOpenCodeProcess() {
   try { return childProcess.execFileSync("pgrep", ["-af", `${home}/.opencode/bin/opencode`], { encoding: "utf8" }).trim() }
   catch { return "" }

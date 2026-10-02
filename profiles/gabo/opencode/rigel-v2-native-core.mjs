@@ -15,9 +15,10 @@ export function normalizeAgentInventory(response) {
     if (!entry || typeof entry !== "object") return []
     const nested = entry.agent && typeof entry.agent === "object" ? entry.agent : {}
     const name = entry.name ?? entry.id ?? nested.name ?? nested.id
+    const id = entry.id ?? nested.id ?? name
     const mode = entry.mode ?? nested.mode ?? entry.config?.mode ?? nested.config?.mode
-    if (typeof name !== "string" || typeof mode !== "string") return []
-    return [{ name, mode, hidden: Boolean(entry.hidden ?? nested.hidden) }]
+    if (typeof name !== "string" || typeof id !== "string" || typeof mode !== "string") return []
+    return [{ id, name, mode, hidden: Boolean(entry.hidden ?? nested.hidden) }]
   })
 }
 
@@ -64,11 +65,11 @@ export function resolveNamedAgent(agents, requestedName) {
   const requested = String(requestedName ?? "").trim()
   // OmO's prompts use stable lowercase identifiers (`explore`, `oracle`),
   // while V2 can surface a display-cased builtin (`Explore`). Resolve names
-  // case-insensitively but keep the host's canonical name for session.create.
+  // case-insensitively, but preserve V2's stable `id` for session.create.
   const agent = agents.find((candidate) => candidate.name === requested)
     ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === requested.toLocaleLowerCase())
   if (agent) {
-    console.error(`[ho-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}`)
+    console.error(`[ho-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}; id=${agent.id}`)
     return agent
   }
   const available = agents.map((candidate) => candidate.name).sort()
@@ -97,19 +98,25 @@ function sessionIdFrom(response) {
   return id
 }
 
-export async function delegateNamedAgent({ client, location, agent, prompt, background = true, model }) {
+export async function delegateNamedAgent({ client, location, agent, prompt, background = true, model, onChildSession }) {
   const sessions = sessionApi(client)
-  const created = await sessions.create({ agent: agent.name, location, ...(model ? { model } : {}) })
+  const created = await sessions.create({ agent: agent.id ?? agent.name, location, ...(model ? { model } : {}) })
   const sessionID = sessionIdFrom(created)
+  onChildSession?.(sessionID)
   await sessions.prompt({
     sessionID,
     // Plugin V2's SessionDomain takes PromptInput fields directly. The SDK
     // client wraps this as `prompt: { text }`, but this domain does not.
     text: childTaskPrompt(prompt),
-    // A background task must be independently scheduled. The parent session
-    // receives the child ID and OpenCode owns its lifecycle thereafter.
-    resume: background,
+    // V2 schedules the agent loop unless `resume` is explicitly false. Both
+    // modes must therefore resume; foreground work is distinguished by the
+    // `wait()` boundary below, not by suppressing child execution.
+    resume: true,
   })
+  // Do not await `session.wait()` from this tool invocation. The child loop is
+  // scheduled after the current parent turn yields; waiting here deadlocks a
+  // foreground delegation. Completion is observed asynchronously by the
+  // session-event bridge, while this tool returns the real child session ID.
   return { sessionID, agent: agent.name, background }
 }
 

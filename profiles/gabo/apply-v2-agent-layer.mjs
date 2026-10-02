@@ -1,111 +1,54 @@
 #!/usr/bin/env node
-/** Applies only the proven static V2 agent layer to an active Rigel trial. */
+/**
+ * Generates Rigel's native V2 agent manifest. This intentionally never writes
+ * ~/.config/opencode: registration happens later through agent.transform.
+ */
 import fs from "node:fs"
 import path from "node:path"
-import crypto from "node:crypto"
 import childProcess from "node:child_process"
 import { fileURLToPath } from "node:url"
 
-const home = process.env.HOME || "/home/gabodev"
+const labRoot = process.env.RIGEL_V2_LAB_ROOT || "/home/gabodev/.local/share/opencode-v2-lab"
+const home = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const stateRoot = path.join(home, ".local/share/ho-my-rigel")
+const stateRoot = path.join(labRoot, "rigel")
 const stateFile = path.join(stateRoot, "active-trial.json")
-const configFile = path.join(home, ".config/opencode/opencode.json")
-const generatedFile = path.join(stateRoot, "runtime/v2-generated-agents.json")
-const selection = JSON.parse(fs.readFileSync(path.join(sourceRoot, "profiles/gabo/v2-agent-selection.json"), "utf8"))
-function fail(message) { console.error(`Rigel V2 agent layer refused: ${message}`); process.exit(1) }
-function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")) }
-function sha(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex") }
-function codexPlugin(config) { return (config.plugins || []).find(v => typeof v === "string" && v.startsWith("oc-codex-multi-auth")) || null }
-function fingerprint(config) { return { obsidian: sha(config.mcp?.obsidian), codexPlugin: sha(codexPlugin(config)) } }
-// The system refresh stops `opencode-lan.service`, but the desktop helper
-// (`serve --service`) can legitimately remain alive.  Only the LAN server
-// owns the config/runtime being replaced here, so do not mistake that helper
-// for an unsafe concurrent service instance.
-function hasOpenCode() {
-  try {
-    return childProcess.execFileSync("pgrep", ["-af", `${home}/.opencode/bin/opencode serve --hostname 0.0.0.0 --port 4096`], { encoding: "utf8" }).trim()
-  } catch { return "" }
-}
+const configFile = process.env.RIGEL_V2_CONFIG || path.join(labRoot, "config/opencode/opencode.json")
+const output = path.join(stateRoot, "runtime/rigel-v2-agent-manifest.mjs")
+const selectionFile = path.join(sourceRoot, "profiles/gabo/v2-agent-selection.json")
+const judgeFile = path.join(sourceRoot, "profiles/gabo/opencode/agents/judge.v2.json")
+function fail(message) { console.error(`Rigel V2 manifest refused: ${message}`); process.exit(1) }
 
-if (hasOpenCode()) fail("OpenCode sigue ejecutándose; el servicio debe estar detenido durante el cambio.")
-if (!fs.existsSync(stateFile)) fail("no hay una prueba Rigel activa.")
-const state = readJson(stateFile)
-const before = readJson(configFile)
-const beforeFingerprint = fingerprint(before)
-if (beforeFingerprint.obsidian !== state.protectedFingerprint.obsidian || beforeFingerprint.codexPlugin !== state.protectedFingerprint.codexPlugin) fail("un componente protegido no coincide con su huella congelada.")
+if (!fs.existsSync(configFile)) fail("no existe la configuración V2 activa")
+const selection = JSON.parse(fs.readFileSync(selectionFile, "utf8"))
+if (!selection.independentJudge?.id || !fs.existsSync(judgeFile)) fail("la definición del Juez independiente no está disponible")
 
-const skillMaterialization = childProcess.spawnSync(process.execPath, [
+// Keep the V2 discovery surface in sync as part of the same activation.
+// This links user-owned skills; it never rewrites the V1 configuration.
+const skills = childProcess.spawnSync(process.execPath, [
   path.join(sourceRoot, "profiles/gabo/materialize-v2-skills.mjs"),
 ], { cwd: sourceRoot, env: { ...process.env, HOME: home }, encoding: "utf8" })
-if (skillMaterialization.status !== 0) fail(`no se pudo exponer las skills V2: ${skillMaterialization.stderr || skillMaterialization.stdout}`)
+if (skills.status !== 0) fail(`no se pudieron exponer las skills V2: ${skills.stderr || skills.stdout}`)
 
-fs.mkdirSync(path.dirname(generatedFile), { recursive: true, mode: 0o700 })
-const generation = childProcess.spawnSync(process.execPath, [
-  path.join(sourceRoot, "profiles/gabo/generate-v2-agents.mjs"), "--input", configFile, "--output", generatedFile, "--directory", home,
-], { cwd: sourceRoot, env: { ...process.env, HOME: home, OMO_PROFILE: "gabo" }, encoding: "utf8" })
-if (generation.status !== 0) fail(`la generación de agentes falló: ${generation.stderr || generation.stdout}`)
-const generated = readJson(generatedFile)
-const selected = {}
-for (const id of selection.orchestratedAgentIds) {
-  if (!generated.agent?.[id]) fail(`OmO no generó el agente esperado: ${id}`)
-  selected[id] = generated.agent[id]
-}
-// Optional agents are installed when the generator produced them, and skipped
-// loudly when not. A provider-gated agent must never abort the whole refresh.
-const skippedOptional = []
-for (const id of selection.optionalAgentIds ?? []) {
-  const definition = generated.agent?.[id]
-  if (!definition) {
-    skippedOptional.push(id)
-    console.warn(`Rigel V2 agent layer: agente opcional no generado, se omite: ${id}`)
-    continue
-  }
-  selected[id] = definition
-}
-const candidate = structuredClone(before)
-const judge = selection.independentJudge
-if (!judge?.id || !judge.definition || !judge.source || !judge.legacyExternalDefinitionPath || !judge.removeRigelLegacyAlias) {
-  fail("la selección del Juez independiente está incompleta")
-}
-// `juez` was a Rigel V2 preview alias.  Remove it only when the active trial
-// recorded that Rigel installed it; never remove an unrelated user agent.
-if (state.v2AgentLayer?.agentIds?.includes(judge.removeRigelLegacyAlias)) {
-  delete candidate.agent?.[judge.removeRigelLegacyAlias]
-}
-const legacyJudge = path.join(home, judge.legacyExternalDefinitionPath)
-let migratedLegacyJudge = false
-if (fs.existsSync(legacyJudge)) {
-  const migrationRoot = path.join(stateRoot, "migrations", "judge-v2")
-  const backup = path.join(migrationRoot, "judge.pre-rigel.md")
-  fs.mkdirSync(migrationRoot, { recursive: true, mode: 0o700 })
-  if (!fs.existsSync(backup)) fs.copyFileSync(legacyJudge, backup)
-  // The original source is now packaged as Rigel's V2 Judge. Removing only
-  // this duplicate file prevents OpenCode from discovering a second agent.
-  fs.unlinkSync(legacyJudge)
-  migratedLegacyJudge = true
-}
-const source = path.join(sourceRoot, "profiles/gabo", judge.definition)
-if (!fs.existsSync(source)) fail(`no existe la definición V2 integrada del Juez: ${judge.definition}`)
-const agent = readJson(source)
-if (agent.mode !== "primary" || agent.permission?.edit !== "deny" || agent.permission?.task !== "ask") {
-  fail("la definición V2 integrada del Juez debe ser un auditor independiente sin edición ni delegación automática")
-}
-selected[judge.id] = agent
-candidate.agent = { ...(candidate.agent || {}), ...selected }
-for (const id of selection.disabledLegacyAgentIds) candidate.agent[id] = { mode: "subagent", hidden: true }
-candidate.default_agent = generated.default_agent
-const afterFingerprint = fingerprint(candidate)
-if (afterFingerprint.obsidian !== beforeFingerprint.obsidian || afterFingerprint.codexPlugin !== beforeFingerprint.codexPlugin) fail("la capa de agentes alteraría un componente protegido.")
-fs.writeFileSync(configFile, JSON.stringify(candidate, null, 2) + "\n")
-state.v2AgentLayer = {
-  appliedAt: new Date().toISOString(),
-  defaultAgent: generated.default_agent,
-  agentIds: Object.keys(selected),
-  migratedLegacyAgentIds: migratedLegacyJudge ? [judge.id] : [],
-  removedRigelLegacyAgentIds: state.v2AgentLayer?.agentIds?.includes(judge.removeRigelLegacyAlias) ? [judge.removeRigelLegacyAlias] : [],
-  disabledLegacyAgentIds: selection.disabledLegacyAgentIds,
-  skippedOptionalAgentIds: skippedOptional,
-}
+fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 })
+const generatorHome = fs.mkdtempSync(path.join(path.dirname(output), "generator-home-"))
+const generatorProfile = path.join(generatorHome, ".omo")
+fs.mkdirSync(path.join(generatorProfile, "opencode/prompts"), { recursive: true, mode: 0o700 })
+fs.writeFileSync(
+  path.join(generatorProfile, "omo.jsonc"),
+  fs.readFileSync(path.join(sourceRoot, "profiles/gabo/omo.jsonc"), "utf8").replaceAll("__OMO_PROFILE_ROOT__", generatorProfile),
+  { mode: 0o600 },
+)
+fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/prompts/sisyphus-orchestration.md"), path.join(generatorProfile, "opencode/prompts/sisyphus-orchestration.md"))
+const generated = childProcess.spawnSync(process.execPath, [
+  path.join(sourceRoot, "profiles/gabo/generate-v2-agents.mjs"),
+  "--input", configFile, "--output", output,
+  "--selection", selectionFile, "--judge", judgeFile,
+  "--directory", home,
+], { cwd: sourceRoot, env: { ...process.env, HOME: generatorHome, XDG_CONFIG_HOME: path.dirname(path.dirname(configFile)), OMO_PROFILE: "gabo" }, encoding: "utf8" })
+fs.rmSync(generatorHome, { recursive: true, force: true })
+if (generated.status !== 0) fail(`la generación del manifiesto falló: ${generated.stderr || generated.stdout}`)
+const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, "utf8")) : { activatedAt: new Date().toISOString(), configFile, labRoot, pluginEntry: null }
+state.v2AgentManifest = { generatedAt: new Date().toISOString(), output, agentIds: [...selection.orchestratedAgentIds, selection.independentJudge.id] }
 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 })
-console.log(JSON.stringify({ defaultAgent: generated.default_agent, installedAgents: Object.keys(selected), skippedOptionalAgents: skippedOptional, disabledLegacy: selection.disabledLegacyAgentIds }))
+console.log(generated.stdout.trim())

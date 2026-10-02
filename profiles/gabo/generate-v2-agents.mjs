@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Materializes OmO's V1-generated agents as OpenCode V2 static agent config.
- * It never edits OpenCode configuration; callers choose an output path.
+ * Materializes selected OmO V1-generated agents as a data-only manifest for
+ * the native V2 AgentEditor runtime. It never edits OpenCode configuration.
  */
 import fs from "node:fs"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import legacyModule from "../../dist/index.js"
 
 const args = process.argv.slice(2)
@@ -13,29 +12,39 @@ const take = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 
 const inputPath = take("--input")
 const outputPath = take("--output")
 const directory = take("--directory") || process.cwd()
+const selectionPath = take("--selection")
+const judgePath = take("--judge")
 if (!inputPath || !outputPath) {
-  console.error("Usage: OMO_PROFILE=gabo node generate-v2-agents.mjs --input <opencode.json> --output <rigel-agents.json> [--directory <cwd>]")
+  console.error("Usage: OMO_PROFILE=gabo node generate-v2-agents.mjs --input <opencode.json> --output <rigel-agent-manifest.mjs> --selection <v2-agent-selection.json> --judge <judge.v2.json> [--directory <cwd>]")
   process.exit(2)
 }
 const config = JSON.parse(fs.readFileSync(inputPath, "utf8"))
 const client = { app: { log: async () => undefined }, session: { messages: async () => ({ data: [] }) } }
 const hooks = await legacyModule.server({ directory, client, serverUrl: new URL("http://127.0.0.1:4096") }, {})
+
 try {
   await hooks.config(config)
-  const agents = config.agent || {}
+  const allAgents = config.agent || {}
+  const selection = selectionPath ? JSON.parse(fs.readFileSync(selectionPath, "utf8")) : null
+  const selected = {}
+  for (const id of selection?.orchestratedAgentIds ?? Object.keys(allAgents)) {
+    if (!allAgents[id]) throw new Error(`OmO did not generate the required agent: ${id}`)
+    selected[id] = allAgents[id]
+  }
+  for (const id of selection?.optionalAgentIds ?? []) {
+    if (allAgents[id]) selected[id] = allAgents[id]
+  }
+  const judge = judgePath ? JSON.parse(fs.readFileSync(judgePath, "utf8")) : null
+  if (selection?.independentJudge?.id && !judge) throw new Error("Rigel Judge definition is required")
+  if (judge) selected[selection?.independentJudge?.id ?? "judge"] = judge
   const materialized = {
-    "$schema": "https://opencode.ai/config.json",
-    "default_agent": config.default_agent,
-    "agent": agents,
-    "_rigel": {
-      "generatedBy": "Ho My Rigel V2 migration",
-      "profile": process.env.OMO_PROFILE || null,
-      "agentIds": Object.keys(agents),
-    },
+    defaultAgent: config.default_agent,
+    agents: selected,
+    metadata: { generatedBy: "Ho My Rigel V2 native runtime", profile: process.env.OMO_PROFILE || null },
   }
   fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true })
-  fs.writeFileSync(outputPath, JSON.stringify(materialized, null, 2) + "\n")
-  console.log(JSON.stringify({ defaultAgent: materialized.default_agent, agentCount: Object.keys(agents).length, output: path.resolve(outputPath) }))
+  fs.writeFileSync(outputPath, `// Generated; do not edit.\nexport default ${JSON.stringify(materialized, null, 2)}\n`)
+  console.log(JSON.stringify({ defaultAgent: materialized.defaultAgent, agentCount: Object.keys(selected).length, output: path.resolve(outputPath) }))
 } finally {
   await hooks.dispose?.()
 }

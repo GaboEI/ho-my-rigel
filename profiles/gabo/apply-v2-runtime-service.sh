@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-# Run as: sudo bash profiles/gabo/apply-v2-runtime-service.sh
-# Atomically refreshes the native V2 runtime and static agent layer for an
-# already-active Rigel trial. It intentionally never changes authentication
-# plugins or the Obsidian MCP block; both are fingerprint-guarded by the
-# called scripts.
+# Refresh Rigel only inside the parallel OpenCode V2 laboratory. This script
+# never addresses opencode-lan.service, which is the user's V1 service.
 set -euo pipefail
 
-if [[ ${EUID:-} -ne 0 ]]; then
-  echo "Run with sudo: sudo bash profiles/gabo/apply-v2-runtime-service.sh" >&2
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+lab_root="${RIGEL_V2_LAB_ROOT:-/home/gabodev/.local/share/opencode-v2-lab}"
+lab_home="$lab_root/home"
+lab_config="$lab_root/config/opencode/opencode.json"
+service="${RIGEL_V2_SERVICE:-opencode-v2-lab.service}"
+
+if [[ ! -f "$lab_config" ]]; then
+  echo "Rigel V2 refresh refused: isolated V2 config not found: $lab_config" >&2
   exit 1
 fi
 
-root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 completed=false
-trap 'if [[ "$completed" != true ]]; then systemctl start opencode-lan.service >/dev/null 2>&1 || true; fi' EXIT
+trap 'if [[ "$completed" != true ]]; then systemctl --user start "$service" >/dev/null 2>&1 || true; fi' EXIT
 
-systemctl stop opencode-lan.service
-runuser -u gabodev -- env HOME=/home/gabodev node "$root/profiles/gabo/switch-live-plugin-to-native-v2.mjs"
-runuser -u gabodev -- env HOME=/home/gabodev node "$root/profiles/gabo/apply-v2-agent-layer.mjs"
-systemctl start opencode-lan.service
+systemctl --user stop "$service"
+env RIGEL_V2_LAB_ROOT="$lab_root" RIGEL_V2_HOME="$lab_home" RIGEL_V2_CONFIG="$lab_config" \
+  node "$root/profiles/gabo/apply-v2-agent-layer.mjs"
+env RIGEL_V2_LAB_ROOT="$lab_root" RIGEL_V2_HOME="$lab_home" RIGEL_V2_CONFIG="$lab_config" \
+  node "$root/profiles/gabo/switch-live-plugin-to-native-v2.mjs"
+systemctl --user start "$service"
 completed=true
 
-echo "Rigel native V2 runtime and static agent layer are active through opencode-lan.service."
+echo "Rigel native V2 runtime and agent manifest are active through $service. V1 was not addressed."
