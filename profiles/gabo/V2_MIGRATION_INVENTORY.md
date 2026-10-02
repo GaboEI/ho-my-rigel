@@ -13,7 +13,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | Agentes seleccionados | Migrado parcialmente | `agent.transform` + `agent.reload`; falta auditar todos los modos y permisos | `qa-v2-agent-transform-contract.mjs` |
 | Delegación nombrada | Migrado parcialmente | `rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación | `qa-v2-native-delegation.mjs` |
 | chat.message | Migrado parcialmente | Adaptación de la superficie V1; no implica los hooks dependientes | `qa-v2-chat-message-contract.mjs` |
-| Keyword detector | En curso | Ultrawork/ULW no estaba migrado; la primera adaptación nativa está en desarrollo | pendiente de contrato V2 final |
+| Keyword detector | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación | `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Hooks V1 (54)
 
@@ -25,7 +25,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `atlas` | Pendiente de clasificación V2 | — |
 | `auto-slash-command` | Pendiente de clasificación V2 | — |
 | `auto-update-checker` | Pendiente de clasificación V2 | — |
-| `background-notification` | Migrado parcialmente | Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1 | `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
+| `background-notification` | Migrado parcialmente | Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
 | `category-skill-reminder` | Pendiente de clasificación V2 | — |
 | `claude-code-hooks` | Pendiente de clasificación V2 | — |
 | `comment-checker` | Pendiente de clasificación V2 | — |
@@ -41,7 +41,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `hephaestus-agents-md-injector` | Pendiente de clasificación V2 | — |
 | `interactive-bash-session` | Pendiente de clasificación V2 | — |
 | `json-error-recovery` | Pendiente de clasificación V2 | — |
-| `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación | `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
+| `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 | `legacy-plugin-toast` | Pendiente de clasificación V2 | — |
 | `model-fallback` | Pendiente de clasificación V2 | — |
 | `monitor-status-injector` | Pendiente de clasificación V2 | — |
@@ -78,7 +78,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 
 | Herramienta V1 | Estado | Equivalente / evidencia V2 |
 | --- | --- | --- |
-| `background-task` | Migrado parcialmente | Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1 | `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
+| `background-task` | Migrado parcialmente | Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
 | `call-omo-agent` | Pendiente de clasificación V2 | — |
 | `delegate-task` | Pendiente de clasificación V2 | — |
 | `glob` | Pendiente de clasificación V2 | — |
@@ -97,13 +97,13 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 
 | Modo / flujo | Estado | Equivalente / evidencia V2 |
 | --- | --- | --- |
-| `default Ultrawork` | Pendiente de clasificación V2 | — |
-| `keyword Ultrawork / ULW` | Pendiente de clasificación V2 | — |
+| `default Ultrawork` | Migrado parcialmente | Inyección raíz predeterminada probada; falta restauración tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
+| `keyword Ultrawork / ULW` | Migrado parcialmente | Alias `Ultraworker`/`ultrawork`/`ulw` llegan al proveedor V2 y no a hijos. `qa-v2-native-delegation.mjs` |
 | `Hyperplan` | Pendiente de clasificación V2 | — |
 | `Team mode` | Pendiente de clasificación V2 | — |
 | `Goal` | Pendiente de clasificación V2 | — |
 | `continuations` | Pendiente de clasificación V2 | — |
-| `background-task handoff` | Migrado parcialmente | Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1 | `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
+| `background-task handoff` | Migrado parcialmente | Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Criterio de cierre
 

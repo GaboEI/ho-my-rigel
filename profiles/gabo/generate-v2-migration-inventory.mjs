@@ -23,8 +23,13 @@ function directoriesWithIndex(directory) {
   return result.sort()
 }
 
-function markdownRows(items) {
-  return items.map((item) => `| \`${item}\` | Pendiente de clasificación V2 | — |`).join("\n")
+function markdownRows(items, overrides = {}) {
+  return items.map((item) => {
+    const override = overrides[item]
+    return override
+      ? `| \`${item}\` | ${override.status} | ${override.evidence} |`
+      : `| \`${item}\` | Pendiente de clasificación V2 | — |`
+  }).join("\n")
 }
 
 const hooks = directoriesWithIndex(hooksRoot)
@@ -32,10 +37,26 @@ const tools = directoriesWithIndex(toolsRoot)
 const modes = ["default Ultrawork", "keyword Ultrawork / ULW", "Hyperplan", "Team mode", "Goal", "continuations", "background-task handoff"]
 const known = [
   ["Agentes seleccionados", "Migrado parcialmente", "`agent.transform` + `agent.reload`; falta auditar todos los modos y permisos", "`qa-v2-agent-transform-contract.mjs`"],
-  ["Delegación nombrada", "Migrado parcialmente", "`rigel_task`; foreground probado; faltan continuaciones, categorías y background handoff", "`qa-v2-native-delegation.mjs`"],
+  ["Delegación nombrada", "Migrado parcialmente", "`rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación", "`qa-v2-native-delegation.mjs`"],
   ["chat.message", "Migrado parcialmente", "Adaptación de la superficie V1; no implica los hooks dependientes", "`qa-v2-chat-message-contract.mjs`"],
-  ["Keyword detector", "En curso", "Ultrawork/ULW no estaba migrado; la primera adaptación nativa está en desarrollo", "pendiente de contrato V2 final"],
+  ["Keyword detector", "Migrado parcialmente", "Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación", "`rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs`"],
 ]
+
+// Overrides are source-controlled instead of hand edits in the generated
+// document.  A successful regeneration therefore cannot silently downgrade
+// completed or partially-audited work back to "pending".
+const hookOverrides = {
+  "background-notification": { status: "Migrado parcialmente", evidence: "Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs`" },
+  "keyword-detector": { status: "Migrado parcialmente", evidence: "Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs`" },
+}
+const toolOverrides = {
+  "background-task": { status: "Migrado parcialmente", evidence: "Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs`" },
+}
+const modeOverrides = {
+  "default Ultrawork": { status: "Migrado parcialmente", evidence: "Inyección raíz predeterminada probada; falta restauración tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs`" },
+  "keyword Ultrawork / ULW": { status: "Migrado parcialmente", evidence: "Alias `Ultraworker`/`ultrawork`/`ulw` llegan al proveedor V2 y no a hijos. `qa-v2-native-delegation.mjs`" },
+  "background-task handoff": { status: "Migrado parcialmente", evidence: "Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs`" },
+}
 
 const document = [
   "# Rigel — inventario de migración V1 → V2",
@@ -56,19 +77,19 @@ const document = [
   "",
   "| Hook V1 | Estado | Equivalente / evidencia V2 |",
   "| --- | --- | --- |",
-  markdownRows(hooks),
+  markdownRows(hooks, hookOverrides),
   "",
   `## Herramientas V1 (${tools.length})`,
   "",
   "| Herramienta V1 | Estado | Equivalente / evidencia V2 |",
   "| --- | --- | --- |",
-  markdownRows(tools),
+  markdownRows(tools, toolOverrides),
   "",
   "## Modos y flujos transversales",
   "",
   "| Modo / flujo | Estado | Equivalente / evidencia V2 |",
   "| --- | --- | --- |",
-  markdownRows(modes),
+  markdownRows(modes, modeOverrides),
   "",
   "## Criterio de cierre",
   "",
