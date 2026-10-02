@@ -32,6 +32,8 @@ Run `bash profiles/gabo/run-mcp-policy-preflight.sh` to validate singleton owner
 
 Run `bash profiles/gabo/run-all-isolated.sh` for the full non-account acceptance suite. See [UPSTREAM-MAINTENANCE.md](UPSTREAM-MAINTENANCE.md) for the isolated upstream-review and rollback procedure.
 
+Run `bash profiles/gabo/run-lab-acceptance.sh` to validate the isolated V2 laboratory (`opencode-v2-lab.service`, roots under `~/.local/share/opencode-v2-lab`). It never launches OpenCode, never uses Docker, and never addresses V1: it checks the unit's isolation, the service binary and port, the lab API, that every config source resolves inside the lab (no V1 path), and read-only V1 integrity before/after. Add `--refresh` to rebuild the lab runtime first through `apply-v2-runtime-service.sh`.
+
 For the parallel V2 laboratory, `bash profiles/gabo/apply-v2-runtime-service.sh` refreshes the native V2 runtime and its generated agent manifest through `opencode-v2-lab.service`. The runtime registers the manifest through `agent.transform` and `agent.reload`; it does not write agents into OpenCode's V1 configuration. The script never addresses `opencode-lan.service`.
 
 ## Activation for a future isolated test
