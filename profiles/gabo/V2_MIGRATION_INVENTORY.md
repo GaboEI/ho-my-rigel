@@ -32,7 +32,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `claude-code-hooks` | Pendiente de clasificación V2 | — |
 | `comment-checker` | Pendiente de clasificación V2 | — |
 | `compaction-context-injector` | Incompatible (con evidencia) | V2.0.22 invoca `session.hook("compaction")`, pero las mutaciones de `event.system` no llegan a la petición real del proveedor que genera el resumen. No se usa `result`, pues reemplazaría el resumen nativo. `qa-v2-compaction-hook-contract.mjs` |
-| `compaction-todo-preserver` | Pendiente de clasificación V2 | — |
+| `compaction-todo-preserver` | Incompatible (con evidencia) | La superficie V2 real de `context.session` no expone `todo`, y el catálogo de herramientas del turno V2 no contiene `todowrite`; por tanto no existe lectura ni escritura nativa de todos que permita preservar la lista V1. `qa-v2-compaction-hook-contract.mjs` |
 | `delegate-task-retry` | Pendiente de clasificación V2 | — |
 | `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
 | `directory-readme-injector` | Migrado parcialmente | El mismo hook V2 conserva los `README.md` aplicables a una lectura y los inyecta como contexto en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
@@ -62,13 +62,13 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `sisyphus-junior-notepad` | Pendiente de clasificación V2 | — |
 | `stop-continuation-guard` | Pendiente de clasificación V2 | — |
 | `task-reminder` | Pendiente de clasificación V2 | — |
-| `task-resume-info` | Pendiente de clasificación V2 | — |
+| `task-resume-info` | Migrado | `rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
 | `tasks-todowrite-disabler` | Pendiente de clasificación V2 | — |
 | `team-mailbox-injector` | Pendiente de clasificación V2 | — |
 | `team-mode-status-injector` | Pendiente de clasificación V2 | — |
 | `team-tool-gating` | Pendiente de clasificación V2 | — |
 | `think-mode` | Pendiente de clasificación V2 | — |
-| `todo-continuation-enforcer` | Pendiente de clasificación V2 | — |
+| `todo-continuation-enforcer` | Incompatible (con evidencia) | La superficie V2 real no publica `session.todo` ni `todowrite`, que son requisitos de la condición de continuidad V1. `qa-v2-compaction-hook-contract.mjs` |
 | `todo-description-override` | Pendiente de clasificación V2 | — |
 | `tool-pair-validator` | Pendiente de clasificación V2 | — |
 | `ulw-execute` | Pendiente de clasificación V2 | — |
