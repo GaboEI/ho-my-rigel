@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-/** Proves Rigel's native V2 named delegation in a disposable XDG sandbox. */
+/**
+ * Proves the full native V2 named-delegation loop in a disposable V2 server.
+ * A local provider calls rigel_task; the server must run the named child and
+ * continue the parent afterwards. No V1 configuration is read or modified.
+ */
 import childProcess from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -8,83 +12,111 @@ import { fileURLToPath } from "node:url"
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const binary = "/home/gabodev/.opencode/bin/opencode"
-const liveConfig = "/home/gabodev/.config/opencode/opencode.json"
-const evidenceDir = path.join(sourceRoot, ".omo/evidence/20261001-rigel-v2-native-delegation")
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-native-v2-"))
+const evidenceDir = path.join(sourceRoot, ".omo/evidence/20261002-rigel-v2-native-delegation")
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-native-v2-delegation-"))
 const configHome = path.join(temporary, "config")
 const home = path.join(temporary, "home")
 const runtime = path.join(temporary, "plugin")
-const category = process.env.RIGEL_NATIVE_TEST_CATEGORY
-const nativeTaskName = "rigel_v2_task"
+const providerPort = 41234
+const serverPort = 41235
+const serverUrl = `http://127.0.0.1:${serverPort}`
+const traceFile = path.join(temporary, "provider-trace.jsonl")
+const serverPassword = "rigel-disposable-server-only"
+const serverAuthorization = `Basic ${Buffer.from(`opencode:${serverPassword}`).toString("base64")}`
 
 function writeEvidence(name, value) {
   fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 })
   fs.writeFileSync(path.join(evidenceDir, name), value, { mode: 0o600 })
 }
 
+function copyRuntimeFile(name) {
+  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", name), path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name))
+}
+
+function waitFor(check, message, timeout = 12_000) {
+  const deadline = Date.now() + timeout
+  return new Promise((resolve, reject) => {
+    const attempt = async () => {
+      try { if (await check()) return resolve() } catch { /* still starting */ }
+      if (Date.now() >= deadline) return reject(new Error(message))
+      setTimeout(attempt, 100)
+    }
+    attempt()
+  })
+}
+
+async function json(url, init) {
+  const response = await fetch(url, { ...init, headers: { authorization: serverAuthorization, ...init?.headers } })
+  const body = await response.text()
+  if (!response.ok) throw new Error(`${init?.method ?? "GET"} ${url} failed: ${response.status} ${body}`)
+  return body ? JSON.parse(body) : {}
+}
+
 try {
-  const live = JSON.parse(fs.readFileSync(liveConfig, "utf8"))
-  const agent = live.agent?.["Sisyphus - ultraworker"]
-  if (!agent) throw new Error("No se encontró Sisyphus - ultraworker en la configuración activa")
   fs.mkdirSync(runtime, { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(configHome, "opencode"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native.mjs"), path.join(runtime, "index.js"))
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-core.mjs"), path.join(runtime, "rigel-v2-native-core.mjs"))
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-prompt.mjs"), path.join(runtime, "rigel-v2-native-prompt.mjs"))
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-categories.mjs"), path.join(runtime, "rigel-v2-native-categories.mjs"))
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-category-manifest.mjs"), path.join(runtime, "rigel-v2-category-manifest.mjs"))
-  fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
-  fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
+  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) copyRuntimeFile(name)
+  fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({
+    defaultAgent: "Sisyphus - ultraworker",
+    agents: {
+      "Sisyphus - ultraworker": { mode: "primary", name: "Sisyphus - ultraworker", model: "rigel-fixture/fixture", prompt: "Coordinate the request." },
+      explore: { mode: "subagent", name: "explore", model: "rigel-fixture/fixture", prompt: "Explore evidence." },
+      oracle: { mode: "subagent", name: "oracle", model: "rigel-fixture/fixture", prompt: "Give technical judgement." },
+      librarian: { mode: "subagent", name: "librarian", model: "rigel-fixture/fixture", prompt: "Research sources." },
+    },
+  })}\n`, { mode: 0o600 })
   fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
   fs.writeFileSync(path.join(configHome, "opencode/opencode.json"), JSON.stringify({
-    model: live.model,
-    small_model: live.small_model,
-    provider: live.provider,
-    plugins: live.plugins,
-    plugin: [runtime],
-    tools: { subagent: false },
-    default_agent: "Sisyphus - ultraworker",
-    agent: live.agent,
+    provider: { "rigel-fixture": { name: "Rigel deterministic test provider", npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "rigel-fixture-no-secret" }, models: { fixture: { name: "Rigel fixture", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 16384, output: 2048 } } } } },
+    model: "rigel-fixture/fixture", plugin: [runtime], default_agent: "Sisyphus - ultraworker",
   }, null, 2) + "\n", { mode: 0o600 })
-  const env = {
-    ...process.env,
-    HOME: home,
-    XDG_CONFIG_HOME: configHome,
-    XDG_DATA_HOME: path.join(temporary, "data"),
-    XDG_STATE_HOME: path.join(temporary, "state"),
-    XDG_CACHE_HOME: path.join(temporary, "cache"),
-    RIGEL_NATIVE_DEFAULT_ULTRAWORK: "0",
-    RIGEL_NATIVE_TASK_NAME: nativeTaskName,
+  const commonEnv = { ...process.env, HOME: home, XDG_CONFIG_HOME: configHome, XDG_DATA_HOME: path.join(temporary, "data"), XDG_STATE_HOME: path.join(temporary, "state"), XDG_CACHE_HOME: path.join(temporary, "cache"), OPENCODE_SERVER_PASSWORD: serverPassword, RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION: "1" }
+  const provider = childProcess.spawn(process.execPath, [path.join(sourceRoot, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...commonEnv, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile }, stdio: ["ignore", "pipe", "pipe"] })
+  const server = childProcess.spawn(binary, ["--print-logs", "--log-level", "debug", "serve", "--hostname", "127.0.0.1", "--port", String(serverPort)], { cwd: sourceRoot, env: commonEnv, stdio: ["ignore", "pipe", "pipe"] })
+  const logs = []
+  for (const stream of [provider.stderr, server.stdout, server.stderr]) stream?.on("data", (data) => logs.push(data.toString()))
+  try {
+    await waitFor(() => fetch(`${serverUrl}/api/session/active`, { headers: { authorization: serverAuthorization } }).then((response) => response.ok), "The disposable V2 server did not start")
+    const created = await json(`${serverUrl}/api/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "Sisyphus - ultraworker", location: { directory: sourceRoot } }) })
+    const parentID = created.id ?? created.data?.id
+    if (typeof parentID !== "string") throw new Error(`V2 did not return a parent session ID: ${JSON.stringify(created)}`)
+    await json(`${serverUrl}/api/session/${parentID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Delegate the requested research using rigel_task, then report completion.", resume: true }) })
+    await waitFor(async () => {
+      const trace = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : ""
+      const rows = trace.trim().split("\n").filter(Boolean).map(JSON.parse)
+      const isChild = (row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-child-task>"))
+      const hasRoster = (row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-delegation-roster>"))
+      return rows.some(isChild) && rows.some((row) => row.responseKind === "complete" && !hasRoster(row)) && rows.some((row) => row.responseKind === "complete" && hasRoster(row))
+    }, "The parent and child did not complete the delegation loop", 20_000)
+    const providerTrace = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : ""
+    const transcript = logs.join("")
+    writeEvidence("native-delegation.txt", transcript)
+    writeEvidence("provider-trace.jsonl", providerTrace)
+    const rows = providerTrace.trim().split("\n").filter(Boolean).map(JSON.parse)
+    const runtimeLoaded = transcript.includes("Native OpenCode V2 runtime active")
+    const invokedTask = transcript.includes("Native V2 task context: name=rigel_task")
+    const resolved = /Native V2 agent resolved: requested=explore; canonical=explore/i.test(transcript)
+    const childRequest = rows.find((row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-child-task>")))
+    const hasRoster = (row) => row.messages?.some((message) => String(message.content).includes("<rigel-native-delegation-roster>"))
+    const childRanWithoutRoster = Boolean(childRequest) && !hasRoster(childRequest)
+    const parentRoster = rows.find((row) => hasRoster(row))?.messages?.find((message) => String(message.content).includes("<rigel-native-delegation-roster>"))?.content ?? ""
+    const registeredSpecialistsVisible = ["explore", "oracle", "librarian"].every((name) => parentRoster.includes(name))
+    const childCompleted = rows.some((row) => row.responseKind === "complete" && !hasRoster(row))
+    const parentToolResult = rows.some((row) => row.hasToolResult)
+    const completed = rows.some((row) => row.responseKind === "complete" && hasRoster(row))
+    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received tool result: ${parentToolResult ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
+    writeEvidence("validation.md", report)
+    process.stdout.write(report)
+    if (!runtimeLoaded || !registeredSpecialistsVisible || !invokedTask || !resolved || !childRanWithoutRoster || !childCompleted || !parentToolResult || !completed) process.exitCode = 1
+  } catch (error) {
+    writeEvidence("startup-failure.txt", logs.join(""))
+    writeEvidence("provider-trace.jsonl", fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : "")
+    throw error
+  } finally {
+    server.kill("SIGTERM")
+    provider.kill("SIGTERM")
   }
-  const prompt = category
-    ? `Use the tool named ${nativeTaskName} exactly once. Delegate through category ${category}: list only the root files and directories of this repository, without editing anything. After the tool returns successfully, reply exactly RIGEL_NATIVE_V2_TASK_OK.`
-    : `Use the tool named ${nativeTaskName} exactly once. Delegate to explore in the background: list only the root files and directories of this repository, without editing anything. After the tool returns successfully, reply exactly RIGEL_NATIVE_V2_TASK_OK.`
-  const result = childProcess.spawnSync(binary, [
-    "--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", "Sisyphus - ultraworker", prompt,
-  ], { cwd: sourceRoot, env, encoding: "utf8", timeout: 60_000 })
-  const transcript = [`exit=${result.status}; signal=${result.signal}; error=${result.error?.message ?? ""}`, "--- stdout ---", result.stdout ?? "", "--- stderr ---", result.stderr ?? ""].join("\n")
-  writeEvidence("native-delegation.txt", transcript)
-  const runtimeLoaded = transcript.includes("[ho-my-rigel] Native OpenCode V2 runtime active:")
-  const usedTask = new RegExp(`"tool":"${nativeTaskName}"|name=${nativeTaskName}`).test(transcript)
-  const toolFailure = /"error":true|OpenCode V2 (callable-agent|agent inventory|category model inventory|child session could not be created)|Category ".+" requires/i.test(transcript)
-  const resolved = !toolFailure
-  const childCreated = /The subagent (is working|has been started).*sessionID:\s*ses_/i.test(transcript)
-  const replied = transcript.includes("RIGEL_NATIVE_V2_TASK_OK")
-  const report = [
-    `# Ho My Rigel — native V2 ${category ? `category (${category})` : "named"} delegation`,
-    "",
-    "- Surface: real OpenCode V2 process with disposable HOME/XDG and native Rigel plugin only.",
-    `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`,
-    `- Native task invoked: ${usedTask ? "yes" : "no"}.`,
-    `- Named agent/category resolved without tool error: ${resolved ? "yes" : "no"}.`,
-    `- Child session observed: ${childCreated ? "yes" : "no"}.`,
-    `- Expected model acknowledgement: ${replied ? "yes" : "no"}.`,
-    "- The native host subagent tool was disabled only in this sandbox so the proof cannot accidentally use it.",
-  ].join("\n") + "\n"
-  writeEvidence("validation.md", report)
-  process.stdout.write(report)
-  if (!runtimeLoaded || !usedTask || toolFailure || !resolved || !childCreated || !replied) process.exitCode = 1
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true })
 }

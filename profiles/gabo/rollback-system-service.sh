@@ -2,6 +2,10 @@
 # Run as: sudo bash profiles/gabo/rollback-system-service.sh
 # Returns opencode-lan.service and user-owned OpenCode state to the freeze.
 set -euo pipefail
+if [[ "${RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL:-}" != "1" ]]; then
+  echo "Historical V1 rollback is disabled; Rigel must not alter the V1 environment." >&2
+  exit 1
+fi
 
 if [[ ${EUID:-} -ne 0 ]]; then
   echo "Run with sudo: sudo bash profiles/gabo/rollback-system-service.sh" >&2

@@ -9,7 +9,9 @@ installable and updatable dependency.
 ## What Rigel adds
 
 - A V2 bridge for verified OmO tool and lifecycle surfaces.
-- Static V2 materialization for Sisyphus and its delegated specialists.
+- Native V2 registration for Sisyphus and its delegated specialists through
+  `agent.transform` and `agent.reload`; no agent definitions are written into
+  OpenCode configuration.
 - A single integrated `Judge` acceptance auditor, based on the generic core
   of the original Gabo workflow and separated from project-specific rules.
 - A portable profile kit covering agent governance, skill policy, MCP
@@ -28,7 +30,10 @@ suite:
 ```bash
 node profiles/gabo/validate-profile.mjs
 bun test profiles/gabo/opencode/omo-v2-adapter-core.test.mjs
-node profiles/gabo/qa-v2-runtime-bridge.mjs
+node profiles/gabo/qa-v2-agent-transform-contract.mjs
+node profiles/gabo/qa-v2-chat-message-contract.mjs
+node profiles/gabo/qa-v2-legacy-session-facade-contract.mjs
+node profiles/gabo/qa-v2-native-delegation.mjs
 bash profiles/gabo/run-v2-isolated.sh
 bash profiles/gabo/run-delegation-e2e.sh
 ```
@@ -47,10 +52,10 @@ The system-service wrappers are intentionally specific to the local trial
 host; adapt them before using them on another machine.
 
 Before applying any V2 refresh, close all OpenCode processes. The refresh
-stops the service, validates protected configuration, updates the V2 bridge and
-static agent layer, then restarts the service. The integrated `Judge` replaces
-the previous locally discovered Judge definition; the previous file is retained
-in Rigel's migration archive and the frozen configuration remains rollbackable.
+stops the service, validates protected configuration, generates the native
+agent manifest, updates the V2 runtime, then restarts the service. `Judge` is
+registered from Rigel's manifest alongside the other selected agents; it does
+not remove or rewrite a locally discovered user file.
 
 ## License and attribution
 

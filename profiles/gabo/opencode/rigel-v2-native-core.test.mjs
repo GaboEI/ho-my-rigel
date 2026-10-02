@@ -12,7 +12,7 @@ describe("Rigel native OpenCode V2 delegation", () => {
     const client = {
       agent: { list: async (input) => { calls.push(input); return { data: [
         { name: "Sisyphus - ultraworker", mode: "primary" },
-        { name: "explore", mode: "subagent" },
+        { id: "explore", name: "Explore", mode: "subagent" },
         { name: "oracle", mode: "subagent" },
         { name: "forja", mode: "subagent", hidden: true },
       ] } } },
@@ -20,7 +20,8 @@ describe("Rigel native OpenCode V2 delegation", () => {
     const location = { directory: "/isolated/project" }
     const agents = await listCallableAgents(client, location)
     expect(calls).toEqual([{ location }])
-    expect(agents.map((agent) => agent.name)).toEqual(["explore", "oracle"])
+    expect(agents.map((agent) => agent.name)).toEqual(["Explore", "oracle"])
+    expect(resolveNamedAgent(agents, "explore")).toMatchObject({ id: "explore", name: "Explore" })
     expect(resolveNamedAgent(agents, "oracle")).toMatchObject({ name: "oracle", mode: "subagent" })
     expect(resolveNamedAgent([{ name: "Explore", mode: "subagent" }], "explore")).toMatchObject({ name: "Explore" })
   })
@@ -49,14 +50,14 @@ describe("Rigel native OpenCode V2 delegation", () => {
     const delegated = await delegateNamedAgent({
       client,
       location: { directory: "/isolated/project" },
-      agent: { name: "explore", mode: "subagent" },
+      agent: { id: "explore", name: "Explore", mode: "subagent" },
       prompt: "List root files only.",
     })
-    expect(delegated).toEqual({ sessionID: "ses_child", agent: "explore", background: true })
+    expect(delegated).toEqual({ sessionID: "ses_child", agent: "Explore", background: true })
     expect(calls).toEqual([
       ["create", { agent: "explore", location: { directory: "/isolated/project" } }],
       ["prompt", { sessionID: "ses_child", text: "<rigel-native-child-task>\nList root files only.", resume: true }],
     ])
-    expect(taskResult(delegated)).toMatchObject({ metadata: { sessionID: "ses_child", agent: "explore", background: true } })
+    expect(taskResult(delegated)).toMatchObject({ metadata: { sessionID: "ses_child", agent: "Explore", background: true } })
   })
 })

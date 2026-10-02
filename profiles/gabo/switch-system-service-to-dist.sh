@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Run as: sudo bash profiles/gabo/switch-system-service-to-dist.sh
 set -euo pipefail
+if [[ "${RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL:-}" != "1" ]]; then
+  echo "Historical V1 distribution switch is disabled; use apply-v2-runtime-service.sh." >&2
+  exit 1
+fi
 if [[ ${EUID:-} -ne 0 ]]; then
   echo "Run with sudo: sudo bash profiles/gabo/switch-system-service-to-dist.sh" >&2
   exit 1

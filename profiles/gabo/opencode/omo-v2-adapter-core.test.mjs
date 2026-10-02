@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createRigelV2Plugin } from "./omo-v2-adapter-core.mjs"
+import { z } from "zod"
+import { createRigelV2Plugin, legacyArgsToJsonSchema } from "./omo-v2-adapter-core.mjs"
 
 function fakeContext() {
   const added = []
@@ -35,6 +36,21 @@ function fakeContext() {
 }
 
 describe("Ho My Rigel OpenCode V2 bridge", () => {
+  test("converts the V1 Zod field shape into the one JSON Schema V2 accepts", () => {
+    expect(legacyArgsToJsonSchema("search", {
+      query: z.string().describe("Query to search"),
+      limit: z.number().int().optional(),
+    })).toMatchObject({
+      type: "object",
+      required: ["query"],
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", description: "Query to search" },
+        limit: { type: "integer" },
+      },
+    })
+  })
+
   test("registers legacy tools and converts their execution context and result", async () => {
     const runtime = fakeContext()
     const calls = []
@@ -44,7 +60,7 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
         tool: {
           rigel_probe: {
             description: "probe",
-            args: { value: { _zod: { def: { type: "string" } } } },
+            args: { value: z.string() },
             execute: async (input, context) => {
               calls.push({ input, context })
               return { title: "Probe", output: "ok", metadata: { source: "test" } }
@@ -57,7 +73,13 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
 
     const dispose = await plugin.setup(runtime.context)
     expect(runtime.added).toHaveLength(1)
-    expect(runtime.added[0].input).toEqual({ value: { _zod: { def: { type: "string" } } } })
+    expect(runtime.added[0].options).toEqual({ codemode: false })
+    expect(runtime.added[0].input).toEqual({
+      type: "object",
+      properties: { value: { type: "string" } },
+      required: ["value"],
+      additionalProperties: false,
+    })
     const result = await runtime.added[0].execute({ value: "hello" }, {
       sessionID: "ses_1", messageID: "msg_1", agent: "Sisyphus - ultraworker", signal: "abort", progress: () => undefined,
     })
@@ -71,12 +93,10 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
   test("adapts V2 agent.list to the legacy app.agents contract used by task", async () => {
     const runtime = fakeContext()
     const calls = []
-    runtime.context.client = {
-      agent: {
-        list: async (input) => {
-          calls.push(input)
-          return { data: [{ name: "explore", mode: "subagent" }] }
-        },
+    runtime.context.agent = {
+      list: async (input) => {
+        calls.push(input)
+        return { data: [{ id: "explore", name: "explore", mode: "subagent" }] }
       },
     }
     const plugin = createRigelV2Plugin({
@@ -98,6 +118,43 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
     expect(calls).toEqual([{ location: { directory: "/isolated/project" } }])
   })
 
+  test("uses context.session for the legacy child-session operations", async () => {
+    const runtime = fakeContext()
+    const calls = []
+    runtime.context.session = {
+      ...runtime.context.session,
+      get: async (input) => { calls.push(["get", input]); return { id: input.sessionID, directory: "/isolated/project" } },
+      create: async (input) => { calls.push(["create", input]); return { id: "ses_child" } },
+      prompt: async (input) => { calls.push(["prompt", input]); return {} },
+    }
+    const plugin = createRigelV2Plugin({
+      loadLegacyHooks: async ({ client }) => ({
+        tool: {
+          session_probe: {
+            description: "native V2 session facade probe",
+            args: {},
+            execute: async () => {
+              await client.session.get({ path: { id: "ses_parent" } })
+              const created = await client.session.create({ body: { parentID: "ses_parent", title: "child" }, query: { directory: "/isolated/project" } })
+              await client.session.prompt({ path: { id: created.data.id }, body: { parts: [{ type: "text", text: "do work" }] } })
+              return "ok"
+            },
+          },
+        },
+      }),
+    })
+    await plugin.setup(runtime.context)
+    const result = await runtime.added[0].execute({}, {
+      sessionID: "ses_6", messageID: "msg_6", agent: "Sisyphus - ultraworker", signal: "abort", progress: () => undefined,
+    })
+    expect(result.content).toBe("ok")
+    expect(calls).toEqual([
+      ["get", { sessionID: "ses_parent" }],
+      ["create", { parentID: "ses_parent", title: "child", location: { directory: "/isolated/project" } }],
+      ["prompt", { parts: [{ type: "text", text: "do work" }], sessionID: "ses_child", text: "do work", resume: true }],
+    ])
+  })
+
   test("maps the V2 hooks that have a direct legacy equivalent", async () => {
     const runtime = fakeContext()
     const calls = []
@@ -106,7 +163,11 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
         tool: {},
         "tool.execute.before": async (input, output) => calls.push(["before", input, output]),
         "tool.execute.after": async (input, output) => calls.push(["after", input, output]),
-        "chat.message": async (input, output) => calls.push(["prompt", input, output]),
+        "chat.message": async (input, output) => {
+          output.parts = [{ type: "text", text: "transformado" }]
+          output.message.model = { providerID: "test", modelID: "replacement-model" }
+          calls.push(["chat", input, output])
+        },
         "experimental.chat.system.transform": async (_input, output) => { output.system.push("Rigel system guidance") },
         "experimental.session.compacting": async (_input, output) => { output.context.push("Rigel continuity") },
       }),
@@ -118,18 +179,34 @@ describe("Ho My Rigel OpenCode V2 bridge", () => {
       tool: "write", sessionID: "ses_2", id: "call_2", input: { path: "a" }, status: "completed",
       result: { content: [{ type: "text", text: "done" }], metadata: { title: "Write" } },
     })
-    await runtime.sessionHooks.get("prompt")({ sessionID: "ses_2", messageID: "msg_2", prompt: [{ type: "text", text: "investiga" }] })
-    const contextInput = { sessionID: "ses_2", model: "test", system: [{ type: "text", text: "base" }] }
-    await runtime.sessionHooks.get("context")(contextInput)
-    const compactionInput = { sessionID: "ses_2", result: {} }
-    await runtime.sessionHooks.get("compaction")(compactionInput)
+    const requestInput = {
+      kind: "primary",
+      sessionID: "ses_2",
+      agent: "Sisyphus - ultraworker",
+      model: { providerID: "test", id: "model" },
+      request: new Request("https://example.invalid/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "initial-model", messages: [
+          { role: "system", content: "base" },
+          { role: "user", content: "investiga" },
+        ] }),
+      }),
+    }
+    await runtime.sessionHooks.get("http.request")(requestInput)
 
+    expect(runtime.sessionHooks.size).toBe(1)
     expect(calls).toEqual([
       ["before", { tool: "write", sessionID: "ses_2", callID: "call_2" }, { args: { path: "a" } }],
       ["after", { tool: "write", sessionID: "ses_2", callID: "call_2", args: { path: "a" } }, { title: "Write", output: "done", metadata: { title: "Write" } }],
-      ["prompt", { sessionID: "ses_2", messageID: "msg_2" }, { message: [{ type: "text", text: "investiga" }], parts: [{ type: "text", text: "investiga" }] }],
+      ["chat", { sessionID: "ses_2", agent: "Sisyphus - ultraworker", model: { providerID: "test", modelID: "model" } }, { message: { model: { providerID: "test", modelID: "replacement-model" } }, parts: [{ type: "text", text: "transformado" }] }],
     ])
-    expect(contextInput.system).toEqual([{ type: "text", text: "base" }, { type: "text", text: "Rigel system guidance" }])
-    expect(compactionInput.result).toEqual({ summary: "Rigel continuity" })
+    const rewritten = await requestInput.request.json()
+    expect(rewritten.model).toBe("replacement-model")
+    expect(rewritten.messages).toEqual([
+      { role: "system", content: "base" },
+      { role: "system", content: "Rigel system guidance" },
+      { role: "user", content: "transformado" },
+    ])
   })
 })

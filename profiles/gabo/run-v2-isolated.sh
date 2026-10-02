@@ -16,13 +16,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-command -v opencode >/dev/null 2>&1 || {
-  echo "OpenCode V2 binary is required on PATH" >&2
+opencode_binary="${RIGEL_V2_BINARY:-/home/gabodev/.opencode/bin/opencode}"
+if [ ! -x "$opencode_binary" ]; then
+  echo "OpenCode V2 binary is required at RIGEL_V2_BINARY (default: $opencode_binary)" >&2
   exit 2
-}
-
-opencode_binary="$(command -v opencode)"
-version="$(opencode --version)"
+fi
+version="$("$opencode_binary" --version)"
 case "$version" in
   *"v2."*) ;;
   *) echo "Expected OpenCode V2, got: $version" >&2; exit 2 ;;
@@ -55,7 +54,7 @@ docker run -d --rm --name "$container_name" -p "127.0.0.1:${port}:${port}" \
   -e OPENCODE_CONFIG_DIR=/sandbox/xdg/config/opencode \
   -e OMO_PROFILE=gabo \
   -e OPENCODE_SERVER_PASSWORD="$password" \
-  omo-dev opencode serve --hostname 0.0.0.0 --port "$port" >/dev/null
+  omo-dev /usr/local/bin/opencode serve --hostname 0.0.0.0 --port "$port" >/dev/null
 
 for _ in $(seq 1 40); do
   if curl -fsS -u "opencode:$password" "http://127.0.0.1:$port/openapi.json" >"$sandbox/openapi.json" 2>/dev/null; then
@@ -96,7 +95,6 @@ docker run --rm \
     if (contract !== "file:///sandbox/home/.omo/opencode/prompts/sisyphus-orchestration.md") process.exit(1);
     const judge = JSON.parse(fs.readFileSync("./profiles/gabo/opencode/agents/judge.v2.json", "utf8"));
     if (judge.mode !== "primary" || judge.permission?.edit !== "deny" || judge.permission?.task !== "ask") process.exit(1);
-    if (result.config.agents?.hephaestus?.model !== "openai/gpt-5.6-sol") process.exit(1);
   '
 
 if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*credential*' | grep -q .; then
@@ -104,4 +102,4 @@ if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*creden
   exit 1
 fi
 
-echo "Ho My Rigel V2 isolated smoke passed: $version (Sisyphus contract, integrated Judge and the Hephaestus model pin verified)"
+echo "Ho My Rigel V2 isolated smoke passed: $version (profile contract and portable Judge source verified)"

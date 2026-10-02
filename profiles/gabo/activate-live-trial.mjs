@@ -28,6 +28,9 @@ const wrapper = path.join(home, ".local/bin/rigel-opencode")
 const rollbackWrapper = path.join(home, ".local/bin/rigel-rollback")
 
 function fail(message) { console.error(`Rigel activation refused: ${message}`); process.exit(1) }
+if (process.env.RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL !== "1") {
+  fail("el activador histórico está deshabilitado para proteger V1; usa apply-v2-runtime-service.sh para el laboratorio V2")
+}
 function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")) }
 function sha(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex") }
 function hasOpenCodeProcess() {

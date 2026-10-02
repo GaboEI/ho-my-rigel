@@ -66,12 +66,16 @@ The portable profile and the V2 bridge live under
 
 ```bash
 node profiles/gabo/validate-profile.mjs
-bun test profiles/gabo/opencode/omo-v2-adapter-core.test.mjs
-node profiles/gabo/qa-v2-runtime-bridge.mjs
+bun test profiles/gabo/opencode/omo-v2-adapter-core.test.mjs profiles/gabo/opencode/rigel-v2-native-*.test.mjs
+node profiles/gabo/qa-v2-agent-transform-contract.mjs
+node profiles/gabo/qa-v2-chat-message-contract.mjs
+node profiles/gabo/qa-v2-system-transform-contract.mjs
+node profiles/gabo/qa-v2-legacy-session-facade-contract.mjs
+node profiles/gabo/qa-v2-native-delegation.mjs
 ```
 
-The last command starts a real OpenCode V2 process with temporary `HOME` and
-XDG directories. It does not modify the active OpenCode service or session
+Each contract command starts a real OpenCode V2 process with temporary `HOME`
+and XDG directories. They do not modify the active OpenCode service or session
 database. Evidence is written under ignored `.omo/evidence/`.
 
 ## Upstream, attribution and license

@@ -4,8 +4,24 @@ import {
   resolveNamedAgent,
   taskResult,
 } from "./rigel-v2-native-core.mjs"
-import { createNativePromptHook, loadUltraworkDirective } from "./rigel-v2-native-prompt.mjs"
-import { categoryTaskPrompt, resolveCategoryFromClients } from "./rigel-v2-native-categories.mjs"
+import {
+  availableCategoryNames,
+  categoryTaskPrompt,
+  resolveCategoryFromClients,
+} from "./rigel-v2-native-categories.mjs"
+import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
+import manifest from "./rigel-v2-native-agent-manifest.mjs"
+import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
+
+export function createTaskPresentation() {
+  return `Spawn one delegated task through the OpenCode V2 agent runtime.
+
+⚠️ CRITICAL: provide exactly one of category or subagent_type. Omitting both fails; providing both is invalid.
+
+Use subagent_type for a named specialist when its role matches a discrete research, consultation, review, or audit need. Use category for an execution worker with a category-selected model. The main agent chooses the appropriate route based on the active V2 agent inventory; this tool does not impose a routing policy.
+
+For independent work, use run_in_background=true so several lanes can proceed in parallel. Use false only when the result is immediately required before the next action. Prompts must state the child task, scope, constraints, and expected evidence clearly.`
+}
 
 // V2 accepts a JSON Schema/Standard Schema/Effect codec. A raw V1 Zod shape
 // becomes `unknown` to the model, which silently produces V1 argument names.
@@ -30,11 +46,18 @@ export default {
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
-    const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "task"
+    const registeredAgents = await registerNativeAgents(context.agent, manifest)
+    // V2 owns `task` after plugin transforms complete, so registering that
+    // name here creates an editor entry the model never receives. A distinct
+    // name is required for a real, callable Rigel delegation surface.
+    const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "rigel_task"
+    const childSessionIDs = new Set()
     const registration = await context.tool.transform((editor) => {
+      const before = editor.get?.(taskName)
       editor.add({
         name: taskName,
-        description: "Delegate a task to a callable OpenCode V2 subagent or an OmO category.",
+        options: { codemode: false },
+        description: createTaskPresentation(),
         input: taskInput,
         execute: async (input, toolContext) => {
           console.error(`[ho-my-rigel] Native V2 task context: name=${taskName}; setup=${Object.keys(context ?? {}).sort().join(",")}; tool=${Object.keys(toolContext ?? {}).sort().join(",")}`)
@@ -56,22 +79,33 @@ export default {
             prompt: category ? categoryTaskPrompt(input.prompt, category) : input.prompt,
             background: input.run_in_background !== false,
             model: category?.model,
+            onChildSession: (sessionID) => childSessionIDs.add(sessionID),
           })
           return taskResult(delegated)
         },
       })
+      if (process.env.RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION === "1") {
+        const after = editor.get?.(taskName)
+        console.error(`[ho-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
+      }
     })
-    const promptRegistration = await context.session.hook("prompt", createNativePromptHook({
-      ultraworkDirective: loadUltraworkDirective(),
-      // The normal Rigel profile is automatic. The explicit false switch is
-      // reserved for isolated delegation QA, where the test must select the
-      // native `task` tool without a large orchestration directive competing
-      // for the same turn.
-      defaultUltrawork: process.env.RIGEL_NATIVE_DEFAULT_ULTRAWORK !== "0",
+    const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
+      // Read on every provider request. This uses exactly the inventory that
+      // task() resolves at execution time, not a startup-time copy.
+      getDelegationRoster: () => listCallableAgentsFromClients(
+        [context, context?.client],
+        context.location,
+      ),
+      categories: availableCategoryNames(),
+      // Every child created through this runtime is marked before prompting.
+      // The active callable roster is a second guard: a subagent request is
+      // never allowed to receive the parent's delegation menu.
+      isRootSession: (input, agents) => !childSessionIDs.has(input.sessionID)
+        && !agents.some((agent) => agent.name.toLocaleLowerCase() === String(input.agent ?? "").toLocaleLowerCase()),
     }))
-    console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
+    console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     return async () => {
-      await Promise.all([registration?.dispose?.(), promptRegistration?.dispose?.()])
+      await Promise.all([registration?.dispose?.(), rosterRegistration?.dispose?.()])
     }
   },
 }

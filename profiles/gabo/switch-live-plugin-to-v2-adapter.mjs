@@ -13,6 +13,9 @@ const configFile = path.join(home, ".config/opencode/opencode.json")
 const adapterDir = path.join(stateRoot, "runtime/omo-v2-plugin")
 const distEntry = `file://${path.join(sourceRoot, "dist/index.js")}`
 function fail(message) { console.error(`Rigel V2 adapter refused: ${message}`); process.exit(1) }
+if (process.env.RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL !== "1") {
+  fail("el adaptador histórico está deshabilitado para proteger V1; usa el runtime nativo del laboratorio V2")
+}
 function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")) }
 function sha(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex") }
 function codexPlugin(config) { return (config.plugins || []).find(v => typeof v === "string" && v.startsWith("oc-codex-multi-auth")) || null }
