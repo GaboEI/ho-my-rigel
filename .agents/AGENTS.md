@@ -8,7 +8,7 @@ Project-scope skills + slash commands under the new `.agents/` directory name. D
 
 Loaded alongside `.opencode/` by [`packages/omo-opencode/src/features/opencode-skill-loader/`](../packages/omo-opencode/src/features/opencode-skill-loader/). When both directories declare the same skill or command name, the higher-priority scope wins per the loader's deduplication rules.
 
-## SKILLS (13, superset of `.opencode/`)
+## SKILLS (14, superset of `.opencode/`)
 
 | Skill | Also in `.opencode/`? | Purpose |
 |-------|------------------------|---------|
@@ -23,6 +23,7 @@ Loaded alongside `.opencode/` by [`packages/omo-opencode/src/features/opencode-s
 | `security-research/` | NEW | Team Mode security research audit: 3 vulnerability hunters + 2 PoC engineers |
 | `codex-qa/` | no | Isolated Codex Light QA: real `codex app-server` against an isolated `CODEX_HOME` + local mock model, hook-fired assertions; helper scripts each ship `--self-test` |
 | `opencode-qa/` | no | opencode CLI/TUI/event-stream QA: hook-fired assertions via SSE, session DB inspection, tmux TUI smoke; helper scripts each ship `--self-test` |
+| `rigel-session-start/` | no | Mandatory Ho My Rigel session bootstrap: loads the permanent V1-protection and isolated-V2 rules before any project action and after resumed or compacted sessions |
 | `senpi-qa/` | no | Live Senpi adapter + task-engine QA against the real `senpi` binary in an isolated `SENPI_CODING_AGENT_DIR`; `scripts/resolve-evidence-dir.mjs` pins every artifact to the gitignored `.omo/evidence/omo-senpi-adapter/<slug>/` (local only; the PR body carries the summary) |
 | `tech-debt-audit/` | no | Technical-debt audit across 9 dimensions via AST-grep/grep; emits `TECH_DEBT_AUDIT.md` |
 
