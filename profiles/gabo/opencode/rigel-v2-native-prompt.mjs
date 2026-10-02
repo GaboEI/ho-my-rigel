@@ -76,6 +76,7 @@ export function createNativeRequestHook({
   ultraworkPrompt = "",
   defaultUltrawork = false,
   getDirectoryInstructions,
+  getInitialDirectoryInstructions,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
@@ -91,6 +92,9 @@ export function createNativeRequestHook({
     const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
     const directoryGuidance = sessionID && typeof getDirectoryInstructions === "function"
       ? getDirectoryInstructions(sessionID)
+      : ""
+    const initialDirectoryGuidance = sessionID && typeof getInitialDirectoryInstructions === "function"
+      ? getInitialDirectoryInstructions({ sessionID, agent: input.agent })
       : ""
     let agents
     try { agents = await getDelegationRoster() } catch {
@@ -114,6 +118,7 @@ export function createNativeRequestHook({
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
     const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
     const injections = []
+    if (initialDirectoryGuidance) injections.push({ role: "system", content: initialDirectoryGuidance })
     if (directoryGuidance) injections.push({ role: "system", content: directoryGuidance })
     if (ultraworkActive && ultraworkPrompt.trim()) injections.push({ role: "system", content: ultraworkPrompt })
     if (roster) injections.push({ role: "system", content: roster })

@@ -13,7 +13,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | Agentes seleccionados | Migrado parcialmente | `agent.transform` + `agent.reload`; falta auditar todos los modos y permisos | `qa-v2-agent-transform-contract.mjs` |
 | Delegación nombrada | Migrado parcialmente | `rigel_task`; foreground, continuación y handoff básico en background probados; faltan paridad de categorías y la capa V1 de cola/reintento/deduplicación | `qa-v2-native-delegation.mjs` |
 | chat.message | Migrado parcialmente | Adaptación de la superficie V1; no implica los hooks dependientes | `qa-v2-chat-message-contract.mjs` |
-| Instrucciones por directorio | Migrado parcialmente | La sustitución nativa conserva `AGENTS.md` y `README.md` aplicables tras una lectura V2; falta auditar la variante Hephaestus | `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
+| Instrucciones por directorio | Migrado parcialmente | La sustitución nativa conserva `AGENTS.md` y `README.md` aplicables tras una lectura V2, y el `AGENTS.md` raíz antes del primer turno de Hephaestus | `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
 | Keyword detector | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación | `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Hooks V1 (54)
@@ -33,13 +33,13 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `compaction-context-injector` | Pendiente de clasificación V2 | — |
 | `compaction-todo-preserver` | Pendiente de clasificación V2 | — |
 | `delegate-task-retry` | Pendiente de clasificación V2 | — |
-| `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado; falta auditar la variante Hephaestus. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
+| `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
 | `directory-readme-injector` | Migrado parcialmente | El mismo hook V2 conserva los `README.md` aplicables a una lectura y los inyecta como contexto en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
 | `edit-error-recovery` | Pendiente de clasificación V2 | — |
 | `fsync-skip-warning` | Pendiente de clasificación V2 | — |
 | `goal` | Pendiente de clasificación V2 | — |
 | `hashline-read-enhancer` | Pendiente de clasificación V2 | — |
-| `hephaestus-agents-md-injector` | Pendiente de clasificación V2 | — |
+| `hephaestus-agents-md-injector` | Migrado parcialmente | Para cualquier manifiesto V2 que incluya Hephaestus, la petición inicial recibe el `AGENTS.md` raíz; contrato aislado V2 comprobado. El perfil de laboratorio de Gabo lo excluye de forma explícita, por lo que no es una capacidad visible allí. `rigel-v2-native.mjs`; `qa-v2-agents-md-contract.mjs`; `v2-agent-selection.json` |
 | `interactive-bash-session` | Pendiente de clasificación V2 | — |
 | `json-error-recovery` | Pendiente de clasificación V2 | — |
 | `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |

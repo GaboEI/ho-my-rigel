@@ -29,3 +29,17 @@ test("records applicable AGENTS.md rules and README.md context in root-to-leaf o
   expect(store.recordRead({ tool: "read", sessionID: "ses_1", input: { path: "../outside.txt" } })).toBe(false)
   expect(store.guidance("ses_1")).not.toContain("outside")
 })
+
+test("renders only root AGENTS.md for the Hephaestus session-start path", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-hephaestus-rules-"))
+  temporary.push(root)
+  fs.mkdirSync(path.join(root, "src"), { recursive: true })
+  fs.writeFileSync(path.join(root, "AGENTS.md"), "ROOT_HEPHAESTUS_RULE")
+  fs.writeFileSync(path.join(root, "README.md"), "ROOT_README_MUST_NOT_BE_INCLUDED")
+  fs.writeFileSync(path.join(root, "src", "AGENTS.md"), "NESTED_RULE_MUST_NOT_BE_INCLUDED")
+  const store = createDirectoryInstructionStore({ directory: root })
+  const injected = store.rootAgentsGuidance()
+  expect(injected).toContain("ROOT_HEPHAESTUS_RULE")
+  expect(injected).not.toContain("ROOT_README_MUST_NOT_BE_INCLUDED")
+  expect(injected).not.toContain("NESTED_RULE_MUST_NOT_BE_INCLUDED")
+})

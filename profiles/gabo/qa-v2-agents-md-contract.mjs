@@ -73,6 +73,12 @@ try {
       model: "rigel-fixture/fixture",
       prompt: "Coordinate the request through available tools.",
     },
+    "Hephaestus - Deep Agent": {
+      mode: "primary",
+      name: "Hephaestus - Deep Agent",
+      model: "rigel-fixture/fixture",
+      prompt: "Implement carefully.",
+    },
   },
 }\n`, { mode: 0o600 })
   fs.copyFileSync(path.join(root, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
@@ -97,6 +103,11 @@ try {
   for (const stream of [fixture.stderr, server.stdout, server.stderr]) stream?.on("data", (data) => logs.push(data.toString()))
   try {
     await waitFor(() => fetch(`${serverURL}/api/session/active`, { headers: { authorization } }).then((response) => response.ok), "V2 AGENTS.md contract server did not start")
+    const hephaestus = await api(`${serverURL}/api/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "Hephaestus - Deep Agent", location: { directory: project } }) })
+    const hephaestusID = hephaestus.id ?? hephaestus.data?.id
+    if (typeof hephaestusID !== "string") throw new Error("V2 did not create a Hephaestus session")
+    await api(`${serverURL}/api/session/${hephaestusID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Reply only HEPAESTUS_ROOT_CONTEXT_OK.", resume: true }) })
+    await waitFor(() => fs.existsSync(traceFile) && fs.readFileSync(traceFile, "utf8").includes("Workspace-root AGENTS.md instructions for this Hephaestus session"), "Native V2 Hephaestus root AGENTS.md context did not reach the provider")
     const created = await api(`${serverURL}/api/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "Sisyphus - ultraworker", location: { directory: project } }) })
     const sessionID = created.id ?? created.data?.id
     if (typeof sessionID !== "string") throw new Error("V2 did not create a session")
@@ -108,7 +119,7 @@ try {
     const trace = fs.readFileSync(traceFile, "utf8")
     save("provider-trace.jsonl", trace)
     save("server.txt", logs.join(""))
-    const report = "# Rigel native V2 directory context contract\n\n- Real isolated V2 server: yes.\n- Native V2 runtime loaded: yes.\n- Read tool executed before injection: yes.\n- Project AGENTS.md rules reached the next provider turn: yes.\n- Project README.md context reached the next provider turn: yes.\n- V1 configuration read: no.\n"
+    const report = "# Rigel native V2 directory context contract\n\n- Real isolated V2 server: yes.\n- Native V2 runtime loaded: yes.\n- Hephaestus received root AGENTS.md before its first provider turn: yes.\n- Read tool executed before injection: yes.\n- Project AGENTS.md rules reached the next provider turn: yes.\n- Project README.md context reached the next provider turn: yes.\n- V1 configuration read: no.\n"
     save("validation.md", report)
     process.stdout.write(report)
   } catch (error) {

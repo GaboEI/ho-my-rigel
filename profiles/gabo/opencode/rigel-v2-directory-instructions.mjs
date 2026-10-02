@@ -25,6 +25,18 @@ function requestedReadPath(input, workspace) {
   return path.resolve(workspace, raw)
 }
 
+function renderContext(workspace, entries, introduction) {
+  if (entries.length === 0) return ""
+  const rendered = entries.map(([file, text]) => {
+    const relative = path.relative(workspace, file) || path.basename(file)
+    if (path.basename(file).toLocaleLowerCase() === "readme.md") {
+      return `<project-readme path=${JSON.stringify(relative)}>\n${text}\n</project-readme>`
+    }
+    return `<agents-file path=${JSON.stringify(relative)}>\n${text}\n</agents-file>`
+  })
+  return `${DIRECTORY_AGENTS_MARKER}\n${introduction}\n${rendered.join("\n")}\n${DIRECTORY_AGENTS_MARKER}`
+}
+
 /**
  * Native V2 replacement for the V1 directory-agents-injector. V2 exposes a
  * post-execution tool hook but does not mutate the completed read output, so
@@ -63,20 +75,23 @@ export function createDirectoryInstructionStore({ directory, maxFiles = 32, maxC
   function guidance(sessionID) {
     const entries = sessionFiles.get(sessionID)
     if (!entries || entries.size === 0) return ""
-    const rendered = [...entries].map(([file, text]) => {
-      const relative = path.relative(workspace, file) || path.basename(file)
-      if (path.basename(file).toLocaleLowerCase() === "readme.md") {
-        return `<project-readme path=${JSON.stringify(relative)}>\n${text}\n</project-readme>`
-      }
-      return `<agents-file path=${JSON.stringify(relative)}>\n${text}\n</agents-file>`
-    })
-    return `${DIRECTORY_AGENTS_MARKER}\nDirectory-specific rules and documentation discovered while reading files in this session. Follow AGENTS.md rules as applicable; use README.md as project context for the file currently being worked on:\n${rendered.join("\n")}\n${DIRECTORY_AGENTS_MARKER}`
+    return renderContext(workspace, [...entries], "Directory-specific rules and documentation discovered while reading files in this session. Follow AGENTS.md rules as applicable; use README.md as project context for the file currently being worked on:")
+  }
+
+  // Hephaestus' V1 hook injects only the workspace-root AGENTS.md before its
+  // first model turn. Keep that behavior separate from file-read context.
+  function rootAgentsGuidance() {
+    const file = path.join(workspace, "AGENTS.md")
+    const text = readText(file, maxCharsPerFile)
+    return text
+      ? renderContext(workspace, [[file, text]], "Workspace-root AGENTS.md instructions for this Hephaestus session:")
+      : ""
   }
 
   function clear(sessionID) { sessionFiles.delete(sessionID) }
   function clearAll() { sessionFiles.clear() }
 
-  return { recordRead, guidance, clear, clearAll }
+  return { recordRead, guidance, rootAgentsGuidance, clear, clearAll }
 }
 
 export function isDirectoryInstructionMessage(message) {

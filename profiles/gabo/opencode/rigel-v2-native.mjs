@@ -181,6 +181,9 @@ export default {
       ultraworkPrompt,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
       getDirectoryInstructions: directoryInstructions.guidance,
+      getInitialDirectoryInstructions: ({ agent }) => /\bhephaestus\b/i.test(String(agent ?? ""))
+        ? directoryInstructions.rootAgentsGuidance()
+        : "",
       // Every child created through this runtime is marked before prompting.
       // The active callable roster is a second guard: a subagent request is
       // never allowed to receive the parent's delegation menu.
