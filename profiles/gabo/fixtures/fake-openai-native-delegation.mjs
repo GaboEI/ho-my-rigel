@@ -94,6 +94,8 @@ http.createServer(async (request, response) => {
     hasTaskTool,
     toolNames: payload.tools?.map((entry) => entry?.function?.name).filter(Boolean) ?? [],
     hasToolResult,
+    model: payload.model ?? null,
+    variant: payload.variant ?? null,
     priorChildID,
     observedChildID,
     responseKind,

@@ -67,7 +67,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `team-mailbox-injector` | Pendiente de clasificación V2 | — |
 | `team-mode-status-injector` | Pendiente de clasificación V2 | — |
 | `team-tool-gating` | Pendiente de clasificación V2 | — |
-| `think-mode` | Pendiente de clasificación V2 | — |
+| `think-mode` | Incompatible (con evidencia) | V1 requiere mutar `chat.message.output.message.variant` por turno. En V2.0.22 la variante se selecciona antes de la frontera `http.request`; la mutación se rechaza y el proveedor no recibe cambio de variante. Las variantes fijas por agente no preservan semántica por mensaje. `qa-v2-chat-message-variant-contract.mjs` |
 | `todo-continuation-enforcer` | Incompatible (con evidencia) | La superficie V2 real no publica `session.todo` ni `todowrite`, que son requisitos de la condición de continuidad V1. `qa-v2-compaction-hook-contract.mjs` |
 | `todo-description-override` | Pendiente de clasificación V2 | — |
 | `tool-pair-validator` | Pendiente de clasificación V2 | — |
