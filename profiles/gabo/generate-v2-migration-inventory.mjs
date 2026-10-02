@@ -3,15 +3,50 @@
  * Produces the authoritative migration ledger from the V1 source tree.
  * A V2 feature is not considered migrated until it is explicitly mapped here
  * and backed by an isolated V2 contract.
+ *
+ * The ledger has two distinct readings of "hook":
+ *   1. The V1 directory inventory (capability migration tracking).
+ *   2. The real runtime composition, derived from the composer return objects.
+ * The runtime count is the authoritative one; the repository prose disagrees
+ * with itself and is not used as a source.
  */
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const hooksRoot = path.join(root, "packages/omo-opencode/src/hooks")
-const toolsRoot = path.join(root, "packages/omo-opencode/src/tools")
+const srcRoot = path.join(root, "packages/omo-opencode/src")
+const hooksRoot = path.join(srcRoot, "hooks")
+const toolsRoot = path.join(srcRoot, "tools")
 const output = path.join(root, "profiles/gabo/V2_MIGRATION_INVENTORY.md")
+
+const SURFACE_DIRS = ["features", "plugin", "agents", "mcp", "config", "cli"]
+
+// ---------------------------------------------------------------------------
+// Surfaces
+// ---------------------------------------------------------------------------
+
+// One row per immediate surface of a subsystem directory: subdirectories, plus
+// non-test TypeScript modules that are behavior surfaces. Test files, AGENTS.md
+// prose, barrel `index.ts`, ambient declarations and type-only `types.ts` are
+// not surfaces to classify. `zauc-*` directories are mock setup, not surfaces.
+function surfaceEntries(directory) {
+  if (!fs.existsSync(directory)) return []
+  const result = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith("zauc-")) continue
+    if (entry.name === "AGENTS.md") continue
+    if (entry.isDirectory()) {
+      result.push(entry.name)
+      continue
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue
+    if (entry.name.endsWith(".test.ts") || entry.name.endsWith(".d.ts")) continue
+    if (entry.name === "index.ts" || entry.name === "types.ts") continue
+    result.push(entry.name.slice(0, -3))
+  }
+  return [...new Set(result)].sort()
+}
 
 function directoriesWithIndex(directory) {
   const result = []
@@ -23,13 +58,145 @@ function directoriesWithIndex(directory) {
   return result.sort()
 }
 
-function markdownRows(items, overrides = {}) {
+// ---------------------------------------------------------------------------
+// Runtime hook composition, derived from the composer return objects
+// ---------------------------------------------------------------------------
+
+// The tier composers return a flat object whose keys are the wired hook slots.
+// The keys are read back out of the literal, so the count follows the code.
+const COMPOSERS = [
+  { tier: "session", label: "Session", file: "plugin/hooks/create-session-hooks.ts" },
+  { tier: "tool-guard", label: "Tool guard", file: "plugin/hooks/create-tool-guard-hooks.ts" },
+  { tier: "transform", label: "Transform", file: "plugin/hooks/create-transform-hooks.ts" },
+  { tier: "continuation", label: "Continuation", file: "plugin/hooks/create-continuation-hooks.ts" },
+  { tier: "skill", label: "Skill", file: "plugin/hooks/create-skill-hooks.ts" },
+]
+
+// The tier return objects list every key uniformly, so which slots are gated by
+// `team_mode.enabled` or `monitor.enabled` is not visible in the return object;
+// the gating lives in the factory assignments. It therefore cannot be derived
+// from the composer return value and is declared here, next to the tiers that
+// own it. Keys are the composer return-object keys.
+const TEAM_GATED = {
+  "tool-guard": ["teamToolGating"],
+  transform: ["teamModeStatusInjector", "teamMailboxInjector"],
+}
+const MONITOR_GATED = {
+  transform: ["monitorStatusInjector"],
+}
+
+// Handlers wired directly on the OpenCode `event` hook by plugin/event.ts when
+// team_mode is enabled. Derived from the team-session-events directory.
+function teamEventHandlers() {
+  const dir = path.join(hooksRoot, "team-session-events")
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    .map((name) => name.slice(0, -3))
+    .sort()
+}
+
+// Standalone handler entrypoints at the hooks/ top level. The remaining
+// top-level .ts files are helpers or monitors of these five entrypoints, not
+// handlers, so they are not enumerated as hooks.
+const STANDALONE_HOOKS = [
+  "bash-file-read-guard",
+  "empty-task-response-detector",
+  "preemptive-compaction",
+  "session-notification",
+  "tool-output-truncator",
+]
+
+// Transform hooks whose implementation lives under features/ instead of hooks/.
+const FEATURE_TRANSFORM_HOOKS = [
+  { feature: "btw-side", symbol: "btwSideContextInjector" },
+  { feature: "context-injector", symbol: "contextInjectorMessagesTransform" },
+]
+
+// Reads the keys of the last top-level `return { ... }` object in a source file.
+function returnObjectKeys(source) {
+  const start = source.lastIndexOf("return {")
+  if (start === -1) throw new Error("no return object literal found")
+  const open = source.indexOf("{", start)
+  let depth = 0
+  let end = -1
+  for (let index = open; index < source.length; index += 1) {
+    const char = source[index]
+    if (char === "{") depth += 1
+    else if (char === "}") {
+      depth -= 1
+      if (depth === 0) {
+        end = index
+        break
+      }
+    }
+  }
+  if (end === -1) throw new Error("unbalanced return object literal")
+  return source
+    .slice(open + 1, end)
+    .split("\n")
+    .flatMap((line) => line.split(","))
+    .map((part) => part.trim())
+    .filter((part) => /^[A-Za-z_$][\w$]*$/.test(part))
+}
+
+const runtimeTiers = COMPOSERS.map(({ tier, label, file }) => {
+  const keys = returnObjectKeys(fs.readFileSync(path.join(srcRoot, file), "utf8"))
+  const teamGated = new Set(TEAM_GATED[tier] ?? [])
+  const monitorGated = new Set(MONITOR_GATED[tier] ?? [])
+  for (const key of [...teamGated, ...monitorGated]) {
+    if (!keys.includes(key)) {
+      throw new Error(`gating key ${key} is not a ${tier} composer key`)
+    }
+  }
+  return {
+    tier,
+    label,
+    file,
+    keys,
+    base: keys.filter((key) => !teamGated.has(key) && !monitorGated.has(key)).length,
+    team: keys.filter((key) => !monitorGated.has(key)).length,
+    monitor: keys.filter((key) => !teamGated.has(key)).length,
+    both: keys.length,
+  }
+})
+
+const eventHandlers = teamEventHandlers()
+const totalBase = runtimeTiers.reduce((sum, tier) => sum + tier.base, 0)
+const totalTeam = runtimeTiers.reduce((sum, tier) => sum + tier.team, 0) + eventHandlers.length
+const totalMonitor = runtimeTiers.reduce((sum, tier) => sum + tier.monitor, 0)
+const totalBoth = runtimeTiers.reduce((sum, tier) => sum + tier.both, 0) + eventHandlers.length
+
+// A hook directory that the runtime never wires is not a runtime hook. It is
+// excluded from the wired count and marked as such in the inventory instead of
+// being left pending.
+const UNWIRED_UPSTREAM = new Set(["task-reminder", "ralph-loop"])
+
+// ---------------------------------------------------------------------------
+// Ledger rows
+// ---------------------------------------------------------------------------
+
+function markdownRows(items, overrides = {}, unwired = new Set()) {
   return items.map((item) => {
+    if (unwired.has(item)) {
+      const preserved = overrides[item]
+      const retained = preserved
+        ? ` Capacidad V2 relacionada (clasificación retenida en el generador): ${preserved.evidence}`
+        : ""
+      return `| \`${item}\` | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en \`createHooks\`). No se cuenta entre los hooks cableados.${retained} |`
+    }
     const override = overrides[item]
     return override
       ? `| \`${item}\` | ${override.status} | ${override.evidence} |`
-      : `| \`${item}\` | Pendiente de clasificación V2 | — |`
+      : `| \`${item}\` | Pendiente de clasificación V2 | - |`
   }).join("\n")
+}
+
+function surfaceRows(items) {
+  return items
+    .map((item) => `| \`${item}\` | Pendiente de clasificación V2 | - |`)
+    .join("\n")
 }
 
 const hooks = directoriesWithIndex(hooksRoot)
@@ -57,6 +224,8 @@ const hookOverrides = {
   "edit-error-recovery": { status: "Migrado parcialmente", evidence: "El reemplazo V2 detecta los tres errores de Edit V1 y anexa la misma instrucción de recuperación al resultado de herramienta mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un fallo real del editor V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs`" },
   "hephaestus-agents-md-injector": { status: "Migrado parcialmente", evidence: "Para cualquier manifiesto V2 que incluya Hephaestus, la petición inicial recibe el `AGENTS.md` raíz; contrato aislado V2 comprobado. El perfil de laboratorio de Gabo lo excluye de forma explícita, por lo que no es una capacidad visible allí. `rigel-v2-native.mjs`; `qa-v2-agents-md-contract.mjs`; `v2-agent-selection.json`" },
   "task-resume-info": { status: "Migrado", evidence: "`rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs`" },
+  // Retained even though the hook itself is unwired upstream, so the V2 work
+  // stays recorded if the hook is ever wired again.
   "task-reminder": { status: "Migrado parcialmente", evidence: "El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima. V2 usa `rigel_task` en vez de la familia V1 `task_*`, por lo que el texto y el mecanismo de seguimiento se adaptan a la superficie disponible. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs`" },
   "think-mode": { status: "Incompatible (con evidencia)", evidence: "V1 requiere mutar `chat.message.output.message.variant` por turno. En V2.0.22 la variante se selecciona antes de la frontera `http.request`; la mutación se rechaza y el proveedor no recibe cambio de variante. Las variantes fijas por agente no preservan semántica por mensaje. `qa-v2-chat-message-variant-contract.mjs`" },
   "todo-continuation-enforcer": { status: "Incompatible (con evidencia)", evidence: "La superficie V2 real no publica `session.todo` ni `todowrite`, que son requisitos de la condición de continuidad V1. `qa-v2-compaction-hook-contract.mjs`" },
@@ -75,8 +244,27 @@ const modeOverrides = {
   "background-task handoff": { status: "Migrado parcialmente", evidence: "Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs`" },
 }
 
+// ---------------------------------------------------------------------------
+// Document assembly
+// ---------------------------------------------------------------------------
+
+const compositionRows = runtimeTiers.map((tier) =>
+  `| ${tier.label} | ${tier.base} | ${tier.team} | ${tier.monitor} | ${tier.both} | ${tier.keys.map((key) => `\`${key}\``).join(", ")} |`,
+)
+const surfaceSections = SURFACE_DIRS.flatMap((name) => {
+  const items = surfaceEntries(path.join(srcRoot, name))
+  return [
+    `## Superficies \`${name}/\` (${items.length})`,
+    "",
+    "| Superficie | Estado | Equivalente / evidencia V2 |",
+    "| --- | --- | --- |",
+    surfaceRows(items),
+    "",
+  ]
+})
+
 const document = [
-  "# Rigel — inventario de migración V1 → V2",
+  "# Rigel: inventario de migración V1 a V2",
   "",
   "> Estado: **no completado**. Este documento se genera desde las superficies reales de OmO V1. Ninguna fila marcada como pendiente puede presentarse como migrada.",
   "",
@@ -90,11 +278,31 @@ const document = [
   "| --- | --- | --- | --- |",
   ...known.map((row) => `| ${row.join(" | ")} |`),
   "",
-  `## Hooks V1 (${hooks.length})`,
+  "## Composición de hooks en runtime (derivada del código)",
+  "",
+  `Recuento derivado de los objetos de retorno de los compositores, no de la prosa del repositorio. Cada cifra es un recuento de **slots cableados registrados por el compositor**, incluidos los slots condicionados por configuración; no es un recuento de hooks activos por defecto. Base (team off, monitor off): **${totalBase}**; solo team mode: **${totalTeam}**; solo monitor (team off): **${totalMonitor}**; team mode + monitor: **${totalBoth}**.`,
+  "",
+  "| Tier | Base (team off, monitor off) | team mode | monitor (team off) | team mode + monitor | Hooks cableados (claves del compositor) |",
+  "| --- | --- | --- | --- | --- | --- |",
+  ...compositionRows,
+  `| Handlers de evento directos (\`plugin/event.ts\`) | 0 | ${eventHandlers.length} | 0 | ${eventHandlers.length} | ${eventHandlers.map((name) => `\`${name}\``).join(", ")} |`,
+  `| **Total** | **${totalBase}** | **${totalTeam}** | **${totalMonitor}** | **${totalBoth}** | |`,
+  "",
+  "Handlers enumerados fuera del escaneo de directorios de `hooks/`:",
+  "",
+  "| Grupo | Handlers |",
+  "| --- | --- |",
+  `| Archivos sueltos en \`hooks/\` | ${STANDALONE_HOOKS.map((name) => `\`${name}\``).join(", ")} |`,
+  `| \`hooks/team-session-events/\` | ${eventHandlers.map((name) => `\`${name}\``).join(", ")} |`,
+  `| Transform hooks en \`features/\` | ${FEATURE_TRANSFORM_HOOKS.map((hook) => `\`${hook.feature}\`:\`${hook.symbol}\``).join(", ")} |`,
+  "",
+  `Hooks no cableados upstream, excluidos del recuento cableado: ${[...UNWIRED_UPSTREAM].sort().map((name) => `\`${name}\``).join(", ")}.`,
+  "",
+  `## Hooks V1 (inventario de directorios, ${hooks.length})`,
   "",
   "| Hook V1 | Estado | Equivalente / evidencia V2 |",
   "| --- | --- | --- |",
-  markdownRows(hooks, hookOverrides),
+  markdownRows(hooks, hookOverrides, UNWIRED_UPSTREAM),
   "",
   `## Herramientas V1 (${tools.length})`,
   "",
@@ -102,6 +310,7 @@ const document = [
   "| --- | --- | --- |",
   markdownRows(tools, toolOverrides),
   "",
+  ...surfaceSections,
   "## Modos y flujos transversales",
   "",
   "| Modo / flujo | Estado | Equivalente / evidencia V2 |",
@@ -115,4 +324,19 @@ const document = [
 ].join("\n")
 
 fs.writeFileSync(output, document, { mode: 0o600 })
-process.stdout.write(JSON.stringify({ output, hooks: hooks.length, tools: tools.length, modes: modes.length }) + "\n")
+process.stdout.write(JSON.stringify({
+  output,
+  hooks: hooks.length,
+  tools: tools.length,
+  modes: modes.length,
+  runtime: {
+    unit: "composer-slot",
+    countsConfigGatedSlots: true,
+    countsDefaultActiveOnly: false,
+    base: totalBase,
+    team: totalTeam,
+    monitor: totalMonitor,
+    teamAndMonitor: totalBoth,
+  },
+  surfaces: Object.fromEntries(SURFACE_DIRS.map((name) => [name, surfaceEntries(path.join(srcRoot, name)).length])),
+}) + "\n")
