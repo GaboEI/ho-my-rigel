@@ -20,7 +20,7 @@ export function createTaskPresentation() {
 
 Use subagent_type for a named specialist when its role matches a discrete research, consultation, review, or audit need. Use category for an execution worker with a category-selected model. The main agent chooses the appropriate route based on the active V2 agent inventory; this tool does not impose a routing policy.
 
-For independent work, use run_in_background=true so several lanes can proceed in parallel. Use false only when the result is immediately required before the next action. Prompts must state the child task, scope, constraints, and expected evidence clearly.`
+By default this is foreground work: it waits and returns the child's final text, so use it when the result is needed for the next decision. Set run_in_background=true only for truly independent work: it returns a child-session reference, not a result that can be collected in the current turn. Prompts must state the child task, scope, constraints, and expected evidence clearly.`
 }
 
 // V2 accepts a JSON Schema/Standard Schema/Effect codec. A raw V1 Zod shape
@@ -32,7 +32,7 @@ const taskInput = {
     category: { type: "string", description: "OmO category; omit when subagent_type is supplied." },
     description: { type: "string", description: "Short task description." },
     prompt: { type: "string", description: "Full task for the child agent." },
-    run_in_background: { type: "boolean", description: "Run independently and return the child session ID." },
+    run_in_background: { type: "boolean", description: "Set true only for independent work. Default false waits and returns the child result." },
   },
   required: ["prompt"],
   additionalProperties: false,
@@ -77,8 +77,9 @@ export default {
             location,
             agent,
             prompt: category ? categoryTaskPrompt(input.prompt, category) : input.prompt,
-            background: input.run_in_background !== false,
+            background: input.run_in_background === true,
             model: category?.model,
+            parentSessionID: toolContext?.sessionID,
             onChildSession: (sessionID) => childSessionIDs.add(sessionID),
           })
           return taskResult(delegated)

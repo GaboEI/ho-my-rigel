@@ -98,9 +98,30 @@ function sessionIdFrom(response) {
   return id
 }
 
-export async function delegateNamedAgent({ client, location, agent, prompt, background = true, model, onChildSession }) {
+function contextData(response) {
+  return Array.isArray(response) ? response : (response?.data ?? [])
+}
+
+export function completedChildText(response) {
+  const messages = contextData(response)
+  if (!Array.isArray(messages)) return ""
+  const assistant = [...messages].reverse().find((message) => message?.type === "assistant")
+  const text = assistant?.content
+    ?.filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n\n")
+  return text ?? ""
+}
+
+export async function delegateNamedAgent({ client, location, agent, prompt, background = false, model, parentSessionID, onChildSession }) {
   const sessions = sessionApi(client)
-  const created = await sessions.create({ agent: agent.id ?? agent.name, location, ...(model ? { model } : {}) })
+  const created = await sessions.create({
+    agent: agent.id ?? agent.name,
+    location,
+    ...(parentSessionID ? { parentID: parentSessionID } : {}),
+    ...(model ? { model } : {}),
+  })
   const sessionID = sessionIdFrom(created)
   onChildSession?.(sessionID)
   await sessions.prompt({
@@ -113,11 +134,17 @@ export async function delegateNamedAgent({ client, location, agent, prompt, back
     // `wait()` boundary below, not by suppressing child execution.
     resume: true,
   })
-  // Do not await `session.wait()` from this tool invocation. The child loop is
-  // scheduled after the current parent turn yields; waiting here deadlocks a
-  // foreground delegation. Completion is observed asynchronously by the
-  // session-event bridge, while this tool returns the real child session ID.
-  return { sessionID, agent: agent.name, background }
+  if (background) return { sessionID, agent: agent.name, background }
+
+  // `wait` is the native V2 foreground boundary. It is deliberately exercised
+  // by the isolated V2 delegation contract: only after it resolves do we read
+  // the child's final text and hand it back as the actual tool result.
+  if (typeof sessions.wait !== "function" || typeof sessions.context !== "function") {
+    throw new Error("OpenCode V2 session.wait/session.context is unavailable for foreground delegation")
+  }
+  await sessions.wait({ sessionID })
+  const result = completedChildText(await sessions.context({ sessionID }))
+  return { sessionID, agent: agent.name, background, result }
 }
 
 export async function delegateNamedAgentFromClients({ clients, ...input }) {
@@ -132,12 +159,15 @@ export async function delegateNamedAgentFromClients({ clients, ...input }) {
   throw new Error(`OpenCode V2 child session could not be created: ${diagnostics.join("; ")}`)
 }
 
-export function taskResult({ sessionID, agent, background }) {
+export function taskResult({ sessionID, agent, background, result }) {
   const lifecycle = background
     ? "The subagent is working in the background."
     : "The subagent has been started."
+  const returned = background
+    ? `${lifecycle} sessionID: ${sessionID}; agent: ${agent}.`
+    : `The subagent completed. sessionID: ${sessionID}; agent: ${agent}.\n\n<rigel-native-child-result>\n${result || "(The child returned no text.)"}\n</rigel-native-child-result>`
   return {
-    content: `${lifecycle} sessionID: ${sessionID}; agent: ${agent}.`,
+    content: returned,
     metadata: { sessionID, agent, background },
   }
 }

@@ -105,10 +105,17 @@ try {
     const childCompleted = rows.some((row) => row.responseKind === "complete" && !hasRoster(row))
     const parentToolResult = rows.some((row) => row.hasToolResult)
     const completed = rows.some((row) => row.responseKind === "complete" && hasRoster(row))
-    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received tool result: ${parentToolResult ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
+    const toolResultText = rows.flatMap((row) => row.messages ?? [])
+      .filter((message) => message.role === "tool")
+      .map((message) => String(message.content ?? ""))
+      .find((content) => content.includes("<rigel-native-child-result>"))
+    const childID = toolResultText?.match(/sessionID: ([^;\s]+)/)?.[1]
+    const childInfo = childID ? await json(`${serverUrl}/api/session/${childID}`, {}) : undefined
+    const parentLinked = Boolean(childInfo?.parentID === parentID || childInfo?.data?.parentID === parentID)
+    const report = ["# Rigel V2 native delegation contract", "", "- Real isolated V2 server: yes.", `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`, `- Agent manifest registered multiple specialists through agent.transform: ${registeredSpecialistsVisible ? "yes" : "no"}.`, `- Parent invoked rigel_task: ${invokedTask ? "yes" : "no"}.`, `- Named agent resolved: ${resolved ? "yes" : "no"}.`, `- Child is linked to its parent session: ${parentLinked ? "yes" : "no"}.`, `- Child ran without parent roster: ${childRanWithoutRoster ? "yes" : "no"}.`, `- Child completed: ${childCompleted ? "yes" : "no"}.`, `- Parent received the child's visible text: ${Boolean(toolResultText) ? "yes" : "no"}.`, `- Parent completed after delegation: ${completed ? "yes" : "no"}.`].join("\n") + "\n"
     writeEvidence("validation.md", report)
     process.stdout.write(report)
-    if (!runtimeLoaded || !registeredSpecialistsVisible || !invokedTask || !resolved || !childRanWithoutRoster || !childCompleted || !parentToolResult || !completed) process.exitCode = 1
+    if (!runtimeLoaded || !registeredSpecialistsVisible || !invokedTask || !resolved || !parentLinked || !childRanWithoutRoster || !childCompleted || !toolResultText || !completed) process.exitCode = 1
   } catch (error) {
     writeEvidence("startup-failure.txt", logs.join(""))
     writeEvidence("provider-trace.jsonl", fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : "")
