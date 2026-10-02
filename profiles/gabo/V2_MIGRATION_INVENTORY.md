@@ -74,7 +74,7 @@ Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra Open
 | `ulw-execute` | Pendiente de clasificación V2 | — |
 | `unstable-agent-babysitter` | Pendiente de clasificación V2 | — |
 | `webfetch-redirect-guard` | Pendiente de clasificación V2 | — |
-| `write-existing-file-guard` | Pendiente de clasificación V2 | — |
+| `write-existing-file-guard` | Migrado parcialmente | El guard nativo V2 bloquea escribir un archivo existente sin lectura previa del mismo sessionID, consume la autorización una vez y conserva bypass `overwrite`/`.omo`. Un contrato V2 aislado confirma que `tool.execute.before` puede cancelar la ejecución real; falta una prueba completa contra el `write` builtin de V2. `rigel-v2-native-write-guard.mjs`; `rigel-v2-native-write-guard.test.mjs`; `qa-v2-tool-before-contract.mjs` |
 
 ## Herramientas V1 (14)
 

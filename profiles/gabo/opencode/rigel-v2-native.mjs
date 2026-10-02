@@ -18,6 +18,7 @@ import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructio
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
 import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
 import { createNativeRulesInjector } from "./rigel-v2-native-rules.mjs"
+import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guard.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
@@ -70,6 +71,7 @@ export default {
     const directoryInstructions = createDirectoryInstructionStore({ directory: location.directory })
     const reminders = createNativeToolResultReminders()
     const rules = createNativeRulesInjector({ directory: location.directory })
+    const writeGuard = createNativeWriteExistingFileGuard({ directory: location.directory })
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
     const handoffBackgroundChild = async (sessionID, status) => {
@@ -100,6 +102,7 @@ export default {
             if (event.type === "session.deleted" && typeof sessionID === "string") {
               reminders.clear(sessionID)
               rules.clear(sessionID)
+              writeGuard.clear(sessionID)
             }
             if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
@@ -186,6 +189,9 @@ export default {
         rules.after(input)
       })
       : undefined
+    const writeGuardRegistration = typeof context?.tool?.hook === "function"
+      ? await context.tool.hook("execute.before", async (input) => writeGuard.before(input))
+      : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
@@ -212,7 +218,8 @@ export default {
       directoryInstructions.clearAll()
       reminders.clearAll()
       rules.clearAll()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      writeGuard.clearAll()
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }
