@@ -44,9 +44,9 @@ describe("CATEGORY_MODEL_REQUIREMENTS", () => {
     ])
   })
 
-  test("deep-high routes GPT-6 Astra xhigh only", () => {
+  test("deep-high routes GPT-6 Astra high only", () => {
     expect(CATEGORY_MODEL_REQUIREMENTS["deep-high"].fallbackChain).toEqual([
-      { providers: ["openai", "chatgpt-subscription", "github-copilot", "opencode"], model: "gpt-6-astra", variant: "xhigh" },
+      { providers: ["openai", "chatgpt-subscription", "github-copilot", "opencode"], model: "gpt-6-astra", variant: "high" },
     ])
   })
 

@@ -1,3 +1,63 @@
+## 2026-10-01 - A child whose host connection drops resumes or fails within a bound; task_cancel really stops it (#9403)
+
+Builds on #9406 (Dante-dan), which reports a recovery `continued` only after the host takes the continuation; this entry is the rest of #9403.
+
+- `runners/rpc-host/transport-recovery.ts` + `handle-recovery.ts`: every lost-transport recovery runs under a bound (`TRANSPORT_RECOVERY_BOUND_MS`, 180 s, armed only by a closed connection, so a quiet healthy child is never failed). When the bound runs out first the child ends `error` with `transport lost: ...` (was: waiting forever on a reopen that never answered), its lane lease is released, and a connection a late reattach still produces ends the session on the host (abort + `close_session`) instead of being adopted, so the child's own processes end with it. The exhausted-retries exit carries the same readable reason instead of `transport_gone`.
+- `task_cancel` on a child whose connection is down answers `cancel_pending` ("cancel requested, child unreachable", also on `task_output`) instead of a false `cancelled`. The stop is applied on the recovered connection before anything else (no continuation is sent); only then is the record `cancelled`, the child torn down and its lane released. Cancelling a child this process holds no handle for (parked, or let go) now closes its session on the host (`lifecycle/destroy.ts`), and a cancelled task releases every lease it holds at any epoch (`TaskConcurrency.releaseTask`).
+- `task_send` to a parked child that was still `running` reopens its session and delivers the message as a follow-up. Before, the send reserved the run's next lane slot and the revival's reattach then refused that same slot, so every send answered `lane_capacity` even on an empty lane. A child that ended `transport lost` answers `not_continuable` naming the loss.
+- Lane leases are held only in the parent's in-memory lane manager (`manager/concurrency.ts`); none are persisted, so a parent restart already starts with none. A dead child's lease is now released by its bounded failure or its cancel, without restarting the parent; a live child's lease is never touched.
+- Tests (real unix sockets to the fake host, a hand-driven recovery clock, no sleeps): `rpc-host-transport-loss.test.ts` (socket close + rejoin, silent reopen -> `transport lost` + next child admitted, host restart with an unanswered continuation, the session process closed on the host, the quiet healthy child, the stopped host with a pending child), `rpc-host-cancel-stop.test.ts` (cancel while unreachable, cancel of a parked live session) and one `rpc-host-host-park.test.ts` case (send to a parked running child). The fake host can give each session a real long-running process (`sessionProcesses`) and re-allow a withheld reply.
+- Review round (#9407): an accepted cancel is final on every path. A pending cancel is durable (`cancel_requested` on the record): a parent that shuts down, or a host shard that crashes, before the stop lands no longer gets the child back - every revival (`lifecycle/reconcile-reclamation.ts` `reviveClaimed`, via `lifecycle/pending-cancel.ts`) finishes the cancel instead, closing the session on its host. A cancel accepted while the child is reachable marks the handle stopping first, so crash recovery that reopens the session ends it there rather than resuming it (a live repro: a cancelled child's shard crashed and recovery ran it on for ~20 minutes). The deferred stop always settles: a recovery that exhausts its attempts or is refused stops the child locally, the cancel's record write is covered by a `finally`, and the outcome tracker waits on the stop and writes `cancelled` itself if that write failed (`manager/pending-stops.ts`). `interruptTask` and a repeat `task_cancel` defer to the pending cancel; `task_send` refuses a child whose cancel is pending; a parent shutdown no longer waits out the recovery bound on such a child's abort. `task_send` to a parked running child (`steering/revive-running.ts`) fences delivery on the reopened run before and after the follow-up, and a refused message hands the child back parked with its lanes free. A deadline-edge result is reported expired (`withinBound`, the reattach race). `abort: "skip"` releases every lease of a task with no live handle. `task_output` shows the pending-cancel note only while the record is running. Steering reads the loss reason from the shared `state/transport-loss.ts`. Tests: `rpc-host-cancel-pending.test.ts`, `rpc-host-cancel-crash.test.ts`, `rpc-host-revive-running.test.ts`, `rpc-host/transport-recovery.test.ts`, a `cancel_pending` renderer row.
+
+## 2026-10-01 - Builtin chain rungs name thinking levels their models accept (#9378)
+
+- `category/fallback-chains.ts`: `quick` opencode-go `minimax-m3` / `minimax-m2.7` drop `variant: "max"` (the child now inherits the
+  `quick` lane's `low`); `unspecified-low` `mimo-v2.6-pro`, `qwen3.8-max-preview` and `mimo-v2.5-pro` go from `max` to `high`, the level
+  senpi already clamped them to. Every other rung in this file and in `agents/builtin/fallback-chains.ts` names a level its catalog model
+  accepts. A new header bullet records the deliberate divergence from `model-core`, which keeps `max` for OpenCode.
+- `runners/builtin-chain-thinking-level.test.ts` drives `resolveCategory` -> the child's thinking level and child-local
+  `retry.fallbackChains` into a real senpi `AgentSession` over the real catalog, faking only the logged-in providers: the `quick` child runs
+  `minimax-m3` at `low` (was a silent clamp to `high`); repeated loads of every category an opencode-go plus xiaomi machine serves leave
+  `fallback.log` free of `validation_warning` (four on the pre-fix chains); a user `models[]` entry with an unsupported level still warns once
+  and still runs at an accepted level. The fixture's `assistant`/`streamMessage` helpers are exported for that last case.
+- Pins updated to the new variants: `fallback-chains`, `category-routing-policy`, `unspecified-low-chain`,
+  `in-process-runtime-fallback`, `manager-runtime-fallback`.
+
+## 2026-10-01 - In-process task children honor the caller's settings (#9353)
+
+- `runners/in-process/runtime-fallback-settings.ts` `createRuntimeFallbackSettings` now takes the caller's settings source (`cwd`, `agentDir`, `projectTrusted`) and gives the child a private in-memory copy of the caller's global and project settings, replacing only the fallback policy: `retry.modelFallback`, `retry.fallbackChains` and `retry.fallbackRevertPolicy` come from the child's own chain, and the child's `maxRetries`/`baseDelayMs` override wins over both caller scopes. Before, the child got an in-memory manager holding only that policy (#6478), so `retry.provider.streamStartTimeoutMs`, `retry.provider.timeoutMs`, `httpIdleTimeoutMs`, `compaction.*` and `thinkingBudgets` fell back to the engine defaults (a 300 s first-event guard and a 300 s request idle timeout). Children now also honor the caller's compaction and thinking settings, matching process children.
+- The project layer reaches the child only when the parent session trusted the project: `ChildSpec.projectTrusted` comes from the parent's `ctx.isProjectTrusted()` through `InProcessSessionContext`; an unknown decision counts as untrusted. Child writes stay in the in-memory copy, so the caller's settings files are never written.
+- `in-process-caller-settings.test.ts` drives a real child through `InProcessRunner`: a caller `streamStartTimeoutMs` of 150 ms cuts a silent provider at 150 ms (on the base the guard never fired within 10 s), the request carries the caller's `httpIdleTimeoutMs` (base: 300000), a caller fallback chain is never used by a child without its own chain, a child with its own chain falls back only to it, and the caller's settings file stays byte-identical.
+
+## 2026-10-01 - Repeated Bun Windows advisories remain external termination output (#9228)
+
+- `runners/rpc/exit-mapping.ts` accepts any positive number of known Bun child-reaper startup advisory lines in the Windows exit-code-1/no-signal case. A different stderr line still classifies the child as crashed.
+- Focused cases pin N advisory-only lines to `killed: true` and advisory lines plus one real error to `crashed`.
+
+## 2026-10-01 - Windows child parity regression (#9274, #6709)
+
+- `builtin-tool-parity.integration.test.ts` reloads the in-process child loader beside the `DefaultResourceLoader` policy used by process children and compares their builtin registrations directly. This removes both Windows CLI cold starts while pinning equal platform-specific builtin counts, exact names, and `web_search`; shared parent and session-default tool policy remains covered by the existing surface tests.
+
+## 2026-09-30 - In-process task children load senpi's builtin tools (#9274, #6709)
+
+- `runners/in-process/child-loader.ts` now uses senpi's `DefaultResourceLoader` with every path-loaded extension and resource disabled, so in-process children receive the same builtin extension factories as process children without re-running the parent's omo-senpi or project extensions. The child binds the loaded extensions so model-aware variants settle before its first request, keeps process-mode's `--no-ask-user` flag, and preserves category/agent allow and deny policy. Shared task/workpool tools now follow process mode; lead-only workflow/team and question tools remain excluded.
+- `builtin-tool-parity.integration.test.ts` drives both execution modes through a local OpenAI-compatible provider and compares the actual tool payloads. Before the fix the in-process child had 11 tools versus 27 in process mode and lacked `web_search`; after bundle regeneration both payloads are identical.
+
+## 2026-10-01 - deep-high runs GPT-6 Astra at high (#9372)
+
+- `category/fallback-chains.ts` `deep-high` and `category/openai-categories.ts` (builtin default
+  `chatgpt-subscription/gpt-6-astra`): variant `high` (was `xhigh`). The chain stays one Astra rung on all four GPT lanes and the
+  gate stays `gpt-6-astra`, so the two deep lanes still never substitute each other's model.
+- Tests that pinned `xhigh` for deep-high (`fallback-chains`, `openai-categories`, `openai-lane`, `gating`, `resolve-category`)
+  now expect `high`.
+- `manager/credential-failure.ts` `terminalFailureMessage`: a task that ends on a spent usage limit no longer ends on the bare
+  provider error. The text adds `<provider>/<model> reached its usage limit, so this task stopped.`, then
+  `No other model in its fallback chain could take over.` when `runtimeFallbackCandidates` leaves nothing (a deep-high child
+  whose every Astra lane is spent), then the recovery: retry after the reset or point the category elsewhere in omo.json. A
+  live deep-high run against a ChatGPT-subscription Astra that answers `access_terminated_error` returns exactly that text to
+  the parent. `credential-failure.test.ts` covers the exhausted chain, a limit with rungs left (no exhaustion claim) and an
+  ordinary error (unchanged).
+
 ## 2026-09-30 - The foreground task wait is bounded at 900 s (#8759 cluster, senpi#2323)
 
 - `tools/task/foreground-wait.ts` `waitForForegroundTask`: the wait before a foreground child is promoted to background

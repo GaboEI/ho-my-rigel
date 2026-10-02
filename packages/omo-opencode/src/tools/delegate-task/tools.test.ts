@@ -188,7 +188,7 @@ describe("sisyphus-task", () => {
       expect(low.variant).toBe("medium")
       expect(high).toBeDefined()
       expect(high.model).toBe("openai/gpt-6-astra")
-      expect(high.variant).toBe("xhigh")
+      expect(high.variant).toBe("high")
     })
 
     test("unspecified-high category uses Claude Opus 5.5 medium as primary", () => {
@@ -939,7 +939,7 @@ describe("sisyphus-task", () => {
       // #then
       const resolved = expectResolvedCategoryConfig(result)
       expect(resolved.config.model).toBe("openai/gpt-6-astra")
-      expect(resolved.config.variant).toBe("xhigh")
+      expect(resolved.config.variant).toBe("high")
     })
 
     test("bypasses requiresModel when explicit user config provided", () => {

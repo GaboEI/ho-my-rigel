@@ -19,9 +19,9 @@ export type ChildExitInput = {
 const WINDOWS_TERMINATION_EXIT_CODE = 1
 const WINDOWS_BUN_REAPER_ADVISORY = "child reaper unavailable under Bun on win32: children orphaned by a terminated worker thread stay as zombies until this"
 
-function hasOnlyWindowsStartupAdvisory(stderr: string): boolean {
+function hasOnlyWindowsStartupAdvisories(stderr: string): boolean {
   const lines = stderr.trim().split(/\r?\n/).filter((line) => line.trim().length > 0)
-  return lines.length === 1 && lines[0]?.startsWith(WINDOWS_BUN_REAPER_ADVISORY) === true
+  return lines.length > 0 && lines.every((line) => line.startsWith(WINDOWS_BUN_REAPER_ADVISORY))
 }
 
 /**
@@ -38,7 +38,7 @@ function isWindowsExternalTermination(input: ChildExitInput, platform: NodeJS.Pl
     platform === "win32"
     && input.signal === null
     && input.code === WINDOWS_TERMINATION_EXIT_CODE
-    && (input.stderr.trim().length === 0 || hasOnlyWindowsStartupAdvisory(input.stderr))
+    && (input.stderr.trim().length === 0 || hasOnlyWindowsStartupAdvisories(input.stderr))
   )
 }
 

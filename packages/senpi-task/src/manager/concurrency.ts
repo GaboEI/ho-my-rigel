@@ -178,6 +178,17 @@ export class TaskConcurrency {
     this.#dispatch()
   }
 
+  // Every lease a task holds or has parked, at any epoch: a task that can never run again (cancelled)
+  // owns no lane slot, whichever run took it (omo#9403).
+  releaseTask(taskId: string): void {
+    const owned = [...this.#leases.values()].filter((lease) => lease.taskId === taskId)
+    for (const lease of owned) this.#dropLease(lease)
+    for (const lane of [...this.#parked.values()]) {
+      for (const entry of [...lane.values()]) if (entry.lease.taskId === taskId) this.#dropParked(entry)
+    }
+    this.#dispatch()
+  }
+
   #dropParked(entry: ParkedEntry): void {
     const lane = this.#parked.get(entry.lease.laneKey)
     lane?.delete(leaseKeyOf(entry.lease.taskId, entry.lease.runEpoch))

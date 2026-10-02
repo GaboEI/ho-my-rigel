@@ -6,6 +6,10 @@ import type { DelegateFallbackEntry } from "@oh-my-opencode/delegate-core"
 // no such providers):
 //   - kimi rungs carry BOTH provider ids ("kimi-coding" senpi registry id and the "kimi-for-coding"
 //     models.dev/opencode id); model-core carries "kimi-for-coding" only.
+//   - every rung names a thinking level senpi's model catalog accepts for that model (#9378). The
+//     quick lane's opencode-go minimax-m3 and minimax-m2.7 take no `max`, so they carry no variant and
+//     run at the model's default; unspecified-low's mimo-v2.6-pro, qwen3.8-max-preview and mimo-v2.5-pro
+//     stop at `high`. model-core keeps `max` on all five: OpenCode derives its own variants.
 //   - glm rungs use engine ids "zai" and "zai-coding-cn". model-core carries OpenCode's
 //     "zai-coding-plan"; `omo setup` imports that key as "zai" (#8799, #8824).
 //   - every claude-* rung is headed by "anthropic-subscription", senpi's Claude subscription lane
@@ -71,7 +75,7 @@ export const CATEGORY_FALLBACK_CHAINS: Readonly<Record<string, readonly Delegate
     {
       providers: ["chatgpt-subscription", "openai", "github-copilot", "opencode"],
       model: "gpt-6-astra",
-      variant: "xhigh",
+      variant: "high",
     }
   ],
   artistry: [
@@ -99,8 +103,8 @@ export const CATEGORY_FALLBACK_CHAINS: Readonly<Record<string, readonly Delegate
       model: "qwen3.6-flash",
       variant: "low",
     },
-    { providers: ["opencode-go"], model: "minimax-m3", variant: "max" },
-    { providers: ["opencode-go"], model: "minimax-m2.7", variant: "max" },
+    { providers: ["opencode-go"], model: "minimax-m3" },
+    { providers: ["opencode-go"], model: "minimax-m2.7" },
     { providers: ["xai"], model: "grok-4.20-0309-non-reasoning" },
     {
       providers: ["anthropic-subscription", "anthropic", "anthropic-api", "github-copilot"],
@@ -120,7 +124,7 @@ export const CATEGORY_FALLBACK_CHAINS: Readonly<Record<string, readonly Delegate
       model: "claude-sonnet-5-5",
       variant: "medium",
     },
-    { providers: ["xiaomi", "opencode-go"], model: "mimo-v2.6-pro", variant: "max" },
+    { providers: ["xiaomi", "opencode-go"], model: "mimo-v2.6-pro", variant: "high" },
     { providers: ["xai", "github-copilot", "opencode-go"], model: "grok-4.7", variant: "xhigh" },
     {
       providers: ["chatgpt-subscription", "openai", "github-copilot", "opencode"],
@@ -135,10 +139,10 @@ export const CATEGORY_FALLBACK_CHAINS: Readonly<Record<string, readonly Delegate
     {
       providers: ["qwen-token-plan", "alibaba-token-plan", "qwen-token-plan-cn", "alibaba-token-plan-cn"],
       model: "qwen3.8-max-preview",
-      variant: "max",
+      variant: "high",
     },
     { providers: ["deepseek", "opencode-go"], model: "deepseek-v4-pro", variant: "max" },
-    { providers: ["xiaomi", "opencode-go"], model: "mimo-v2.5-pro", variant: "max" }
+    { providers: ["xiaomi", "opencode-go"], model: "mimo-v2.5-pro", variant: "high" }
   ],
   "unspecified-high": [
     {

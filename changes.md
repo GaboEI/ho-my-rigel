@@ -1,3 +1,76 @@
+## 2026-10-02 - In-process task children run session_shutdown before they are disposed (#9413)
+
+Since #9343, an in-process task child loads the engine's builtin extensions, codemode included. `packages/senpi-task/src/runners/in-process/child-handle.ts` tore the child down with a bare `session.dispose()`, on both the handle's `dispose()` and `discardUnstartedChildSession()`. That never emits `session_shutdown` (only the engine's `AgentSessionRuntime` does), and codemode closes its per-session bridge HTTP server only on `session_shutdown`. So every in-process child left a listening loopback server and a keep-alive socket behind, and `omo -p` never exited after it delegated a task.
+
+Both teardown paths now go through `shutDownChildSession`: it emits `session_shutdown` (`reason: "quit"`) through the session's own extension runner when the session has handlers for it, then disposes the session in a `finally`. The runner applies the host's per-handler shutdown budget (`sessionShutdownHandlerTimeoutMs`), so a handler that hangs cannot hold teardown. `ChildSession` gains an optional `extensionRunner` (fakes that load no extensions leave it out), the handle's `dispose()` returns a promise, and the manager's in-process adapter awaits it. When handle construction fails and shutting the discarded session down also fails, both errors are kept in an `AggregateError`.
+
+`child-shutdown.integration.test.ts` runs real children with the builtin extensions against a local fake provider. It covers the three acceptance criteria in #9413, plus one budget case: disposing a child closes its codemode bridge; a print run that delegates to a child that succeeds, and one that fails, both exit 0 within the bound; a child discarded before its handle started is shut down the same way; and a hung `session_shutdown` handler is aborted at the budget while the session is still disposed. All five fail on `dev` and pass with this change.
+
+## 2026-10-01 - Adopt senpi 2026.10.1-3
+
+Every `@code-yeongyu/senpi` pin moves from 2026.10.1-2 to 2026.10.1-3: the root devDependency, `omo-native`, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. The engine carries the three desktop permission fixes (senpi#2511, #2512, #2513), event-driven Python readiness for cold Windows starts, and the tool-search, thinking-format and Claude-subscription fixes listed in CHANGELOG.
+
+## 2026-10-01 - A PR's Windows and macOS legs never report green without running their tests (#9245)
+
+On a pull request the Windows and macOS legs of `test`, `codex-compatibility` and `senpi-compatibility` skipped every install and test step unless a changed path looked platform-sensitive or the PR carried `ci:full-matrix`, and the job still concluded success, because GitHub counts a step skipped by its `if` as passing. That let #7676, #9329 and #9243 merge with green Windows checks and turn `dev` red. Two changes close it. `script/ci-fast-path.mjs` now marks a change runtime-touching unless every changed path matches an explicit allowlist of web, prose (top-level Markdown, README/CHANGELOG/AGENTS-style docs outside `packages/*/src`) and repository metadata (other workflows, issue templates, `.github/assets`); anything else, including a new folder or an unknown extension, counts as runtime, and a runtime-touching PR runs every OS leg by itself, with no label and no write token, so fork PRs get it too. Each OS leg also ends with a guard step, `script/ci-leg-tests-guard.mjs`, that always runs and reads the real outcomes of that leg's test steps: if they were all skipped while the change needed them, the check fails with `tests not run: add ci:full-matrix`; if the skip was intended (a docs or metadata change), the leg passes with a `tests intentionally not run` notice and says so in its job summary. The `dev` push still runs the full matrix.
+
+## 2026-10-01 - The copy-tree self-destination test uses the OS temp dir on Windows
+
+`packages/isolation-core/src/backends/copy-tree.test.ts` built its scratch root from `process.env.TMPDIR ?? "/tmp"`, a POSIX-only fallback. Windows runners do not set `TMPDIR`, so the path became `\tmp\self-copy-XXXXXX` and `mkdtemp` failed with `ENOENT`, which turned the required `test (windows-latest, 2/2)` job red on `dev` after #9388 changed which files share that shard's workers. The test passed before only when an earlier test in the same worker had left `TMPDIR` set. It now uses `os.tmpdir()`, which resolves on every platform. Test-only; no product change. The worker env leak that made it pass is tracked separately.
+
+## 2026-10-01 - A Bun crash in the Windows rpc-host tests is contained and retried once (#9219)
+
+Bun 1.4.2 intermittently segfaults a Windows test worker while it runs `packages/senpi-task/src/runners/rpc-host`, and 1.4.3-canary.1 still does (oven-sh/bun#44390). Each crash turned the required `test (windows-latest, 2/2)` job red. That job now runs the rpc-host suite in its own `bun test --parallel` invocation, between the serial quarantine and the remainder, through `script/bun-panic-retry.ts`: when the output carries Bun's crash markers (`Bun has crashed`, `worker crashed: exit code 3`) and nothing else failed, the invocation runs once more and the crash lines are logged as a warning annotation. A second crash fails the job. A real test failure (a `(fail)` line, an unhandled error, or more failures than crashed workers) is never retried, even when the same run also crashed. The suite stays in the required job with no `continue-on-error`. The Windows remainder reads the new `bunfig.win2.parallel.windows.toml`, which adds the directory to `bunfig.win2.parallel.toml`'s ignores so no file runs twice, and the flake soak's `full-shard-2` target follows the same shape without the retry. `script/bun-panic-retry.test.ts` drives the runner against a scripted fake `bun test` and proves that one crash is retried once, a second crash fails, and an assertion failure is not retried.
+
+## 2026-10-01 - Builtin category chains only name thinking levels their models accept (#9378)
+
+Reported by @markshikada, whose byte-compare of 5.1.6 against 5.1.7 and reflection timeline pinned it down. Five Senpi builtin category rungs named a thinking level senpi's model catalog rejects for that model, so every child session start logged a `validation_warning` to `fallback.log` (hundreds of lines in a live session) and the engine then silently clamped the rung to `high`. The entries were never skipped: they ran, just not at the declared level. In `packages/senpi-task/src/category/fallback-chains.ts`, the `quick` lane's opencode-go `minimax-m3` and `minimax-m2.7` rungs now carry no variant, so they run at the `quick` lane's own `low` instead of a clamped `high`. `unspecified-low`'s `mimo-v2.6-pro`, `qwen3.8-max-preview` and `mimo-v2.5-pro` say `high`, the level they already ran at, so their runtime behavior is unchanged and the warning stops. A level the user sets in `omo.json` is untouched: it still warns once, naming the level and the model, and still runs at a level the model accepts. The OpenCode edition's table in `model-core` keeps `max`, because OpenCode derives its own variants. The regression drives a real senpi session over the real model catalog. On the pre-fix chains, the `quick` child started at `high` instead of `low`, and two loads per category on an opencode-go plus xiaomi machine logged four warnings; after the fix it logs none.
+
+## 2026-10-01 - The fake clock no longer calls the deprecated `AtomicU64::fetch_update` (#9383)
+
+Rust 1.99 deprecates `fetch_update` in favour of `try_update`, and `rust-toolchain.toml` follows `stable`, so the desktop engine workflow's `clippy -D warnings` failed on every pull request at `crates/senpi-desktop-backend-fake/src/clock.rs`. `FakeClock::advance` now uses an explicit `compare_exchange_weak` loop with the same saturating result, which compiles without deprecation on older and current stable alike. The existing saturation tests in `tests/scenario.rs` cover it.
+
+`rust-toolchain.toml` now pins `channel = "1.99.0"` instead of `stable`, which every Rust workflow reads, so a new stable release can no longer change the lints that every pull request is checked against. Toolchain upgrades now come as their own pull request, with clippy run on the new version.
+
+## 2026-10-01 - Preserve Windows killed-task classification across repeated Bun advisories (#9228)
+
+Windows RPC exits now accept any positive number of Bun's known child-reaper startup advisory lines as advisory-only stderr. An empty stderr remains an external termination, while any other stderr line still proves a crash. This preserves `status: error` with `killed: true` for externally terminated code-1/no-signal children without weakening crash diagnostics.
+
+## 2026-10-01 - Adopt senpi 2026.10.1-2
+
+Every `@code-yeongyu/senpi` pin moves from 2026.9.30 to 2026.10.1-2: the root devDependency, `omo-native`, the `omo-senpi`
+and `senpi-task` peer and dev pins (with their `@earendil-works/pi-tui` -> `@code-yeongyu/senpi-tui` aliases), the pin
+tests, `provider-map.json` and the engine named in `senpi-task`'s category coverage test. The engine carries the upstream
+v0.99.1 sync, so `provider-map.json` gains the new builtin providers `meta` (OAuth login) and `typesafe`, and the
+`senpi-task` runners follow the upstream disposition and `TranscriptContext` API. It also brings the compiled-engine
+`bun` phantom-turn fix (#9362, senpi#2494) and per-session permission presets (senpi#2461).
+
+
+## 2026-10-01 - Repeat macOS permission denials name the earlier pane (omo-desktop-app#1437)
+
+macOS permission guidance now says the privacy pane has been opened only when the current denial opened it. Repeat denials refer to the pane opened earlier, or tell the user to open it when the initial attempt failed, while retaining the turn-on and fully quit/relaunch instructions and the responsible-process TCC identity.
+
+
+## 2026-10-01 - Keep child tool parity stable on Windows (#9274, #6709)
+
+The builtin tool parity regression now compares the in-process child loader directly with the `DefaultResourceLoader` policy used by process children instead of paying for two full Windows CLI cold starts. Both loaders expose the same platform-specific builtin registrations, including `web_search`; the existing policy tests continue to cover the shared parent and session-default tools that complete the child surface.
+
+## 2026-09-30 - In-process task children receive senpi builtin tools (#9274, #6709)
+
+The default in-process task runner now loads and binds senpi's builtin extensions without loading any parent, user or project extension paths. Its child tool payload matches process mode for the same category policy, including `web_search`, while existing allow/deny rules and the parent-only workflow, team and ask-user surfaces remain intact. The regression drives both runners through a deterministic local provider; it recorded 11 tools in-process versus 27 in process mode before the fix and 27 in both modes after it.
+
+## 2026-10-01 - The curl installer hands pipes from sh to Bash (#9325)
+
+`install.sh` keeps its Bash implementation, but its first block now parses as POSIX sh. When a user pipes the script to `sh` or `dash`, that block writes the Bash body from a quoted here-document to a private temp file and runs it with Bash, preserving arguments and the exit status. Sourcing the script from Bash, as the other-install tests do, still only defines the installer functions. If Bash is unavailable, it exits before any Bash syntax is parsed and prints the single command that uses Bash explicitly. Direct `| bash` installs are unchanged. Tests run the preamble through `sh` and `dash`, prove the complete buffered body and arguments reach Bash, and retain a direct Bash syntax check.
+
+## 2026-10-01 - deep-high and Geeky · Heavy on GPT-6 Astra high, Geeky · Normal on GPT-6.1 Sol Fast medium (#9372)
+
+The owner set new GPT lane defaults. `packages/model-core/src/category-model-requirements.ts` and the OpenCode builtin in `packages/omo-opencode/src/tools/delegate-task/openai-categories.ts` run `deep-high` on `gpt-6-astra` at `high` instead of `xhigh`, matching the Senpi chain in `packages/senpi-task` (see its changes.md). deep-high stays a single Astra rung with no Sol fallback, the 2026-09-20 rule that the deep lanes never substitute each other. `deep-low` already led with plain `gpt-6.1-sol` medium (#9214) and is unchanged. The model-profile change is in `packages/omo-senpi/changes.md`. The docs (`docs/guide/*`, `docs/reference/*`, `docs/examples/*.jsonc`) and the model-core and OpenCode tests that pinned `xhigh` for deep-high now show `high`.
+
+## 2026-10-01 - The macOS tcc-diagnostic QA scenario reads the responsible-process message (#9368)
+
+#9351 changed the permission-denied message to `TCC identity: responsible=<path>[ bundle=<id>], pid=<n>` (or `unresolved (engine executable=...)`), but `script/qa/desktop/macos/tcc.ts` still looked for the old `executable=` text, so the scenario could never pass. Its judgment now lives in `tccIdentityPasses`, which passes only when the denial names the engine itself (compared by real path) as the responsible process, and fails for another responsible process, an unresolved one, or a message with no identity. Five behavior tests cover those cases; with the old parser the two passing cases fail.
+
 ## 2026-10-01 - Windows explicit engine paths must name a .exe, and the exec-bit check stays POSIX-only (#9359)
 
 On Windows, `fs.access(..., X_OK)` only proves a file exists: the platform has no exec bit. The parity test's chmod-0644 "not executable" case was therefore accepted on Windows runners, and doctor went on to spawn it. Status and doctor share `explicitPathDiagnostic`, which now refuses a win32 explicit `engine_path` that does not end in `.exe` (the name the locator and the release asset use) with `not executable (expected a .exe file)`. POSIX keeps the X_OK check. The parity test runs the mode-bit case only on hosts that have mode bits and adds a Windows case that runs on every host, with an executable fixture so only the Windows rule can refuse it.

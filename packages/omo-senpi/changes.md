@@ -1,3 +1,31 @@
+## 2026-10-01 - In-process task children honor the caller's settings (#9353)
+
+- `components/task/runtime-context.ts` captures the parent session's project-trust decision, and `engine-runners.ts` passes it to every in-process child, so the child's settings include the project layer exactly when the parent's do. `plugin/extensions/omo-task.js` regenerated on linux/amd64 (node 24, bun 1.4.2) for the senpi-task change.
+
+## 2026-10-01 - Windows RPC kills tolerate repeated Bun startup advisories (#9228)
+
+- The task bundle treats any number of known Bun child-reaper advisory lines as advisory-only stderr for Windows code-1/no-signal exits. Any different stderr line remains a crash diagnostic.
+
+## 2026-10-01 - Windows task-child parity regression (#9274, #6709)
+
+- The parity regression now reloads the in-process child loader beside the process child's builtin loader policy and pins equal platform-specific builtin names plus `web_search`, avoiding Windows CLI cold starts while the existing surface tests retain shared-parent and session-default coverage.
+
+## 2026-09-30 - Task children keep senpi builtin tools in the default in-process mode (#9274, #6709)
+
+- The task extension bundle now gives in-process children senpi's builtin-only extension surface while continuing to suppress the parent's path-loaded extensions. The parent tool-capture wrapper stops after omo component registration, so builtin factories senpi loads later are not re-injected as raw custom tools. A mock-provider integration test compares the actual in-process and process child tool payloads and requires `web_search`.
+- `plugin/extensions/omo.js` and `omo-task.js` regenerated on linux/amd64 (node 24, bun 1.4.2) for the senpi-task change; the extension freshness checks pass.
+
+## 2026-10-01 - Geeky lanes: Astra at high, GPT-6.1 Sol Fast leads Geeky · Normal (#9372)
+
+- `src/components/model-profile/builtin-profiles.ts`: `geeky-heavy` runs `gpt-6-astra` at `high` (was `xhigh`). `geeky-normal`
+  leads with `gpt-6.1-sol-fast` (medium, `chatgpt-subscription|openai`), then plain `gpt-6.1-sol` (medium, same lanes), then the
+  unchanged `gpt-5.6-sol` (medium, all four GPT lanes). Plain 6.1 Sol stays behind the Fast tier so a registry without
+  `gpt-6.1-sol-fast` still lands on 6.1 Sol rather than dropping to 5.6 Sol.
+- `scripts/qa/model-profile-e2e-scenarios.mjs`: both geeky-heavy scenarios expect thinking `high`; new `geeky-normal-sol-fast`
+  serves 5.6 Sol, 6.1 Sol and 6.1 Sol Fast and expects the Fast tier at medium.
+- Tests: `index.test.ts` starts a session on each geeky-normal registry shape (Fast served -> Fast medium; Fast absent ->
+  plain 6.1 Sol medium) and geeky-heavy (Astra high); removing the Fast rung fails the Fast case.
+
 ## 2026-09-30 - claude-code: acquire before the auth check, from the provisioned runtime, with progress (#9276)
 
 - `src/components/claude-code/index.ts`: the component now also runs on `input`, which senpi's `prompt()` emits

@@ -53,6 +53,7 @@ import { createOutcomeTracker, type OutcomeTracker } from "./manager-outcome"
 import { claimTaskRecord, TaskRecordCollisionError } from "../store"
 import { withTaskRecordLockAsync } from "../store/record-lock"
 import { reattachManagedTask } from "./manager-reattach"
+import { PendingStops } from "./pending-stops"
 import { respawnWithWorkpool } from "./workpool-respawn"
 import { NameRegistry } from "./names"
 import { TaskSequence } from "./task-sequence"
@@ -163,6 +164,7 @@ class TaskManagerImpl implements TaskManager {
   readonly #background = new Set<string>()
   readonly #evicting = new Set<string>()
   readonly #sendCounts = new Map<string, number>()
+  readonly #stopsPending = new PendingStops()
   readonly #steering: SteeringEngine
   readonly #isolation: IsolationWiring
   readonly #outcome: OutcomeTracker
@@ -215,6 +217,13 @@ class TaskManagerImpl implements TaskManager {
       reserveForDetachedRevive: (record) => this.#reserveForDetachedRevive(record),
       destruction: options.destruction ?? NOOP_DESTRUCTION,
       runStatsSnapshot: (taskId) => this.#runStats.get(taskId)?.snapshot(this.#now()),
+      stopRequested: (taskId) => this.#stopsPending.request(taskId),
+      releaseTaskLeases: (taskId) => this.#concurrency.releaseTask(taskId),
+      stopSettled: (taskId) => {
+        this.#concurrency.releaseTask(taskId)
+        this.#settleWaiters(taskId)
+        this.#stopsPending.settle(taskId)
+      },
       now: this.#now,
     }
     this.#steering = createSteeringEngine(port)
@@ -236,6 +245,7 @@ class TaskManagerImpl implements TaskManager {
       forget: (taskId) => this.forget(taskId),
       settleWaiters: (taskId, terminal) => this.#settleWaiters(taskId, terminal),
       tryRuntimeFallback: (input) => this.#tryRuntimeFallback(input),
+      stopSettlement: (taskId) => this.#stopsPending.settlement(taskId),
     })
     this.workpools = createWorkpoolEngine(options.store.stateDir, createWorkpoolAdmission({
       options, concurrency: this.#concurrency, hostPid: this.#hostPid,
@@ -526,6 +536,10 @@ class TaskManagerImpl implements TaskManager {
     if (outcome.kind === "cancelled") {
       this.#removeCapacityWaiter(outcome.task_id)
       this.#releaseSlotForTask(outcome.task_id)
+      // A cancelled task never runs again, so no epoch of it may keep a lane slot - including a run
+      // whose live handle this manager already let go of, or never had (still launching). Only a live
+      // handle whose abort was skipped keeps its slot until its settled outcome releases it.
+      if (options?.abort !== "skip" || !this.#live.has(outcome.task_id)) this.#concurrency.releaseTask(outcome.task_id)
     }
     return outcome
   }

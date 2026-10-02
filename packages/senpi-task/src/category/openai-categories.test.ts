@@ -125,9 +125,9 @@ describe("category prompt append resolvers", () => {
 })
 
 describe("GPT builtin defaults and gates", () => {
-  it("#given the builtin definitions #then ultrabrain runs Astra max, deep-high Astra xhigh, deep-low GPT-6.1 Sol medium, all on the chatgpt-subscription lane", () => {
+  it("#given the builtin definitions #then ultrabrain runs Astra max, deep-high Astra high, deep-low GPT-6.1 Sol medium, all on the chatgpt-subscription lane", () => {
     expect(definition("ultrabrain").config).toEqual({ model: "chatgpt-subscription/gpt-6-astra", variant: "max" })
-    expect(definition("deep-high").config).toEqual({ model: "chatgpt-subscription/gpt-6-astra", variant: "xhigh" })
+    expect(definition("deep-high").config).toEqual({ model: "chatgpt-subscription/gpt-6-astra", variant: "high" })
     expect(definition("deep-low").config).toEqual({ model: "chatgpt-subscription/gpt-6.1-sol", variant: "medium" })
   })
 
@@ -150,7 +150,7 @@ describe("resolveCategory on GPT registries", () => {
 
   const astraCases = [
     { category: "ultrabrain", variant: "max", append: ULTRABRAIN_CATEGORY_PROMPT_APPEND_GPT_6_ASTRA },
-    { category: "deep-high", variant: "xhigh", append: DEEP_HIGH_CATEGORY_PROMPT_APPEND_GPT },
+    { category: "deep-high", variant: "high", append: DEEP_HIGH_CATEGORY_PROMPT_APPEND_GPT },
   ] as const
 
   for (const { category, variant, append } of astraCases) {

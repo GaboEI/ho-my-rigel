@@ -295,17 +295,17 @@ describe("builtin chain routing", () => {
       kind: "resolved",
       provider: "chatgpt-subscription",
       modelId: "gpt-6-astra",
-      reasoning: "xhigh",
+      reasoning: "high",
     })
   })
 
-  it("resolves geeky-heavy to astra xhigh", () => {
+  it("resolves geeky-heavy to astra high", () => {
     const result = resolveModelProfile({ active: "geeky-heavy", availableModels: [ASTRA, SOL_FAST] })
 
     expect(result).toMatchObject({
       kind: "resolved",
       modelId: "gpt-6-astra",
-      reasoning: "xhigh",
+      reasoning: "high",
     })
   })
 

@@ -92,7 +92,7 @@ describe("OPENAI_CATEGORIES deep lanes", () => {
     //#then
     expect(low?.config).toEqual({ model: "openai/gpt-6.1-sol", variant: "medium" })
     expect(low?.requiresModel).toEqual(["gpt-6.1-sol", "gpt-6.1-sol-fast", "gpt-5.6-sol-fast", "gpt-5.6-sol"])
-    expect(high?.config).toEqual({ model: "openai/gpt-6-astra", variant: "xhigh" })
+    expect(high?.config).toEqual({ model: "openai/gpt-6-astra", variant: "high" })
     expect(high?.requiresModel).toBe("gpt-6-astra")
     expect(highCat?.config).toEqual({ model: "anthropic/claude-opus-5-5", variant: "medium" })
     expect(highCat?.resolvePromptAppend).toBe(resolveUnspecifiedHighCategoryPromptAppend)

@@ -476,7 +476,7 @@ describe("builtin category defaults", () => {
       ["artistry", "anthropic/claude-fable-5-1", "max"],
       ["ultrabrain", "chatgpt-subscription/gpt-6-astra", "max"],
       ["deep-low", "chatgpt-subscription/gpt-6.1-sol", "medium"],
-      ["deep-high", "chatgpt-subscription/gpt-6-astra", "xhigh"],
+      ["deep-high", "chatgpt-subscription/gpt-6-astra", "high"],
       ["quick", "chatgpt-subscription/gpt-6-luna-fast", "low"],
       ["unspecified-low", "anthropic/claude-sonnet-5-5", "medium"],
       ["unspecified-high", "anthropic/claude-opus-5-5", "medium"],

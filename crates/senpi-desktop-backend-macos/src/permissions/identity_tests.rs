@@ -8,6 +8,7 @@ fn error_for(identity: Option<ResponsibleProcess>) -> DesktopError {
         TccPermission::ScreenRecording,
         "QA App".to_owned(),
         true,
+        true,
         || identity,
     )
 }

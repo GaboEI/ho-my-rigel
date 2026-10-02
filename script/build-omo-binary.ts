@@ -514,7 +514,11 @@ export function stageSidecarPayload(
     writeFileSync(join(stageDir, CLAUDE_CODE_PIN_REL_PATH), claudeCodePin, "utf8")
     staged.add(CLAUDE_CODE_PIN_REL_PATH)
   }
-  for (const source of engineSidecarSources()) stageSource(source, stageDir, staged)
+  for (const source of engineSidecarSources()) {
+    const excluded = process.env.OMO_SIDECAR_EXCLUDE
+    if (excluded && (source.to.endsWith(`/node_modules/${excluded}`) || source.to.includes(`/node_modules/${excluded}/`))) continue
+    stageSource(source, stageDir, staged)
+  }
   stagePluginPayload(stageDir, staged)
   for (const entry of target.nativePrebuilds) stageNativePrebuild(entry, stageDir, staged)
   const desktopEngine = stageCompiledDesktopEngine(target.target, stageDir, desktopEngineSourceRoot)

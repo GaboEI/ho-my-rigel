@@ -140,19 +140,20 @@ describe("BUILTIN_MODEL_PROFILES", () => {
     ])
   })
 
-  it("runs geeky-normal as gpt-6.1-sol medium on the OpenAI lanes, then gpt-5.6-sol medium on every GPT lane", () => {
+  it("runs geeky-normal as gpt-6.1-sol-fast then gpt-6.1-sol medium on the OpenAI lanes, then gpt-5.6-sol medium on every GPT lane", () => {
     expect(BUILTIN_MODEL_PROFILES["geeky-normal"]?.models).toEqual([
+      { providers: ["chatgpt-subscription", "openai"], model: "gpt-6.1-sol-fast", variant: "medium" },
       { providers: ["chatgpt-subscription", "openai"], model: "gpt-6.1-sol", variant: "medium" },
       { providers: ["chatgpt-subscription", "openai", "github-copilot", "opencode"], model: "gpt-5.6-sol", variant: "medium" },
     ])
   })
 
-  it("runs geeky-heavy as astra xhigh with the same provider ranking as deep-high", () => {
+  it("runs geeky-heavy as astra high with the same provider ranking as deep-high", () => {
     expect(BUILTIN_MODEL_PROFILES["geeky-heavy"]?.models).toEqual([
       {
         providers: ["chatgpt-subscription", "openai", "github-copilot", "opencode"],
         model: "gpt-6-astra",
-        variant: "xhigh",
+        variant: "high",
       },
     ])
   })

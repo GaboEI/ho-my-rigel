@@ -9,6 +9,7 @@ import type {
 import type { HostShardEvents } from "./handle-reattach"
 import type { HostSessionReattach } from "./reattach"
 import type { HostSessionClosed, HostSessionCommand, HostSessionParked } from "./session-client"
+import type { TransportRecoveryOptions } from "./transport-recovery"
 
 /**
  * What a child handle needs FROM a daemon session and what it exposes TO the manager. The seam is
@@ -70,6 +71,8 @@ export type HostSessionHandleOptions = {
   readonly reattach?: HostSessionReattach
   /** Told when a transport recovery starts and how it ended (the parent's crash notice). */
   readonly shardEvents?: HostShardEvents
+  /** How long a lost transport may take to come back before the child ends `transport lost`. */
+  readonly transportRecovery?: TransportRecoveryOptions
 }
 
 export type HostSessionChildHandle = RpcChildHandle & {
@@ -93,6 +96,15 @@ export type HostSessionChildHandle = RpcChildHandle & {
   onSelfResumed(listener: () => void): () => void
   adoptFinishedTurn(finalResponse: string): Promise<void>
   startInitialPrompt(text: string): Promise<void>
+  /** The connection is down and being recovered: nothing sent to the child can land yet. */
+  transportRecovering(): boolean
+  /** A cancel was accepted: a recovery that reaches the host ends the session instead of resuming it. */
+  markStopping(): void
+  /**
+   * Stop the child. With its transport down the stop waits for the recovered connection and runs
+   * there before anything else; it resolves once the child has ended on this side.
+   */
+  stopWhenReachable(): Promise<void>
   waitForOutcome(): Promise<RunnerOutcome>
   hasExited(): boolean
   terminalAssistantMessage(): RpcTerminalAssistantMessage | undefined

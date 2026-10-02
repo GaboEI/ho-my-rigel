@@ -173,7 +173,7 @@ export const OPENAI_CATEGORIES: BuiltinCategoryDefinition[] = [
   },
   {
     name: "deep-high",
-    config: { model: "openai/gpt-6-astra", variant: "xhigh" },
+    config: { model: "openai/gpt-6-astra", variant: "high" },
     description: "Escalation deep lane: a goal whose central decision cannot be settled from evidence alone. Same one-goal, one-deliverable contract as deep-low.",
     callerGuidance: DEEP_HIGH_CATEGORY_CALLER_GUIDANCE,
     promptAppend: DEEP_HIGH_CATEGORY_PROMPT_APPEND,

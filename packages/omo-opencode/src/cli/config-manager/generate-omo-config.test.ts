@@ -171,7 +171,7 @@ describe("generateOmoConfig - model fallback system", () => {
       },
     ])
     expect(categories["deep-high"].model).toBe("openai/gpt-6-astra")
-    expect(categories["deep-high"].variant).toBe("xhigh")
+    expect(categories["deep-high"].variant).toBe("high")
     expect(categories["deep-high"].fallback_models ?? []).toEqual([])
     expect(categories["deep-low"].model).toBe("openai/gpt-6.1-sol")
     expect(categories["deep-low"].variant).toBe("medium")

@@ -1,3 +1,14 @@
+## 2026-10-01 - The gateway hook's integrity check and its tests agree on Windows paths (follow-up to #9243)
+
+`verifyGatewayPackage` (`bin/lib/gateway.js`) resolves the package directory and its host entry with
+`realpathSync.native` instead of `realpathSync`. On Windows, `realpathSync` can keep an 8.3 short name
+(`C:\Users\RUNNER~1\...`) while the module loader hands back the long name for the same directory. That made the
+two sides of the containment check spell one directory two ways, which can falsely refuse a valid install reached
+through a short path. `.native` returns the canonical long name on both sides, and on POSIX it changes nothing. The test
+fixtures (`test/gateway.test-support.ts`) create their temp roots with `realpathSync.native` too, so the paths they
+expect match what the hook reports. That fixes the eight Windows-only failures in `test/gateway.test.ts` and
+`test/gateway-integrity.test.ts` on dev.
+
 ## 2026-10-01 - A `bun add -g` update leaves an `omo` that starts without node (#9293)
 
 `bun add -g omo-ai` links `<bun root>/bin/omo` (and `install/global/node_modules/.bin/omo`) back to `bin/omo.js`,
@@ -10,6 +21,75 @@ postinstall, on bun itself when node is missing, so the shim is back before anyt
 (`bun .../bin/omo.js`, the shim itself) also repairs a stock link it finds, at the cost of the same lstat and small
 read a node launch already pays. Outside a POSIX bun-global install the call is the same no-op as at launch. A blocked
 (untrusted) postinstall still leaves the stock link until the next launch under node or bun.
+
+## 2026-09-30 - Eval release smoke covers every executable target (#9291, follow-up to #9250)
+
+### What changed
+
+The packaged-binary RPC smoke now verifies JavaScript and Python arithmetic, cell listing,
+and exactly one real file read through the before/after tool hooks. Its fixture contains a
+random marker; execution runs while the source checkout is renamed, then shuts down the
+isolated task hosts and checks for surviving processes and sockets. The release workflow
+executes it on nine native targets, provisioning Python, Node and process tools inside each
+of the three Alpine musl legs. Seven legs smoke before upload; the linux-arm64 and
+linux-arm64-musl smokes run after build in parallel with the npm platform publish and fail
+the reusable workflow result. Cross-compiled Darwin x64 and Windows arm64 retain digest/manifest
+coverage. Twelve platform manifests are compared against the derived codemode sidecar set.
+Every wasm in the runtime closure also has a required file entry. The build-only
+`OMO_SIDECAR_EXCLUDE` fixture permits a missing-package RED smoke without a dependency list.
+
+### Why
+
+#9250 restored eval registration but tested only one JavaScript cell on Darwin arm64.
+It could not detect a broken Python bridge, host tool pipeline, missing target assets,
+or a release leg bypassing the smoke.
+
+### Why an extension could not handle it
+
+These checks exercise the compiled payload inside the release workflow. An extension
+cannot repair an asset absent from that payload or enforce a gate on another release leg.
+
+### Expected merge conflict zones
+
+The engine-sidecar resolver, binary staging fixture, and release smoke workflow.
+
+## 2026-09-30 - The gateway host receives omo's plugin root and the thread SDK URL (#9243)
+
+`runGatewayCommand` and the doctor call into the installed gateway now also pass `pluginRoot`, omo's staged plugin
+payload (`<packageRoot>/plugin`, from `package-paths.js` as doctor resolves it), and `threadSdkUrl`, the `file:` URL of
+`<pluginRoot>/runtime/thread-sdk/sdk.js`, so the gateway neither derives the install from `argv[1]` nor knows the
+payload layout. Both come from the hook's own module URL, so a symlinked install hands over the real install's paths.
+The SDK file ships with the thread SDK (#9222); until then the URL names a file that does not exist yet, and omo does
+not check it, so `omo gateway` behaves as before. `test/gateway.test.ts` covers the command (plain and symlinked
+install) and the doctor call; each case fails with its field removed.
+
+## 2026-09-30 - The gateway hook verifies the installed package before importing it (#9243)
+
+Before `bin/lib/gateway.js` imports `@oh-my-opencode/omo-gateway/host`, `verifyGatewayPackage` finds the package's
+`package.json` on the same resolver search paths the import walks and refuses the package, as `broken` with a reason that
+names its directory, unless the manifest `name` is exactly `@oh-my-opencode/omo-gateway`, it declares
+`omoGateway.hostContract` equal to 1 (the runtime `HOST_CONTRACT_VERSION` check stays), and the host entry the import
+resolves stays inside the package directory once symlinks are resolved on both sides. A refused package never runs:
+`omo gateway` prints the reason and exits 1, the doctor gateway row is `FAIL`. No package directory is still `missing`, and
+nothing changes for an install without the package. `test/gateway-integrity.test.ts` (5 cases) covers a foreign name, a
+missing and a mismatched manifest contract, a host entry symlinked out of the package, and a verified package reached
+through a symlinked package directory; each fails with its check removed.
+
+## 2026-09-30 - `omo gateway` and the doctor gateway rows load a separately installed gateway package (#9243)
+
+`bin/lib/gateway.js` is a hook, not a gateway: `omo gateway <args>` imports `@oh-my-opencode/omo-gateway/host` by bare
+name from omo's own install (the resolution the gateway itself uses for adapter packages), checks its
+`HOST_CONTRACT_VERSION` (1), and calls its `runGatewayCommand` with argv, stdio, env, cwd, the canonical agent dir,
+home and the argv that relaunches `omo gateway connect`. Without the package it prints one line, `omo gateway: the omo
+gateway is not installed: ...`, and exits 1; a package that fails to load or speaks another contract is named as
+such and also exits 1. `omo doctor` adds gateway rows only when the user config (`~/.omo/omo.jsonc` or `omo.json`) sets
+`gateway` at its top level or in `[native]`: one `WARN gateway:` row when the package is missing, `FAIL gateway:` when
+it is broken, otherwise `PASS gateway: installed` followed by the package's own rows, and a package `FAIL` row fails
+doctor. Without a `gateway` section nothing is imported and doctor output is unchanged. The launcher imports the hook
+lazily, so the startup path does not load it. `omo-config-core` accepts `gateway` as an open object in the root, layer
+and harness-block schemas so a config carrying it loads without an unknown-key diagnostic; omo never reads it.
+`test/gateway.test.ts` (9 cases) drives a packaged copy of `bin/` with and without a fixture package installed beside it;
+`omo-config-core` `src/schema/gateway.test.ts` (3 cases) fails on dev.
 
 ## 2026-09-30 - The compiled binary hands a downloaded Claude Code to the engine at startup (#9276)
 

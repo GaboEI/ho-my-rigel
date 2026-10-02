@@ -57,9 +57,9 @@ const KIMI_PROVIDERS = ["kimi-coding", "kimi-for-coding", "moonshotai", "opencod
 // Engine Z.AI ids. `omo setup` imports OpenCode's `zai-coding-plan` key as `zai` (#8799).
 const GLM_PROVIDERS = ["zai", "zai-coding-cn", "opencode-go"] as const
 const GPT_PROVIDERS = ["chatgpt-subscription", "openai", "github-copilot", "opencode"] as const
-// GPT-6.1 Sol is served only on the two OpenAI lanes (not Copilot or OpenCode Zen), so its rung lists
-// just those; the rung behind it (GPT-5.6 Sol in Geeky · Normal, GPT-6 Sol in Recommended) keeps the
-// profile on every GPT provider.
+// GPT-6.1 Sol and its Fast tier are served only on the two OpenAI lanes (not Copilot or OpenCode Zen),
+// so their rungs list just those; the rung behind them (GPT-5.6 Sol in Geeky · Normal, GPT-6 Sol in
+// Recommended) keeps the profile on every GPT provider.
 const GPT_6_1_PROVIDERS = ["chatgpt-subscription", "openai"] as const
 
 // Key order is the order a picker renders. `deep` is deliberately NOT an id: builtin
@@ -106,6 +106,7 @@ export const BUILTIN_MODEL_PROFILES: Readonly<Record<string, BuiltinModelProfile
     displayName: "Geeky · Normal",
     description: "Works on one task and thinks it through.",
     models: [
+      { providers: [...GPT_6_1_PROVIDERS], model: "gpt-6.1-sol-fast", variant: "medium" },
       { providers: [...GPT_6_1_PROVIDERS], model: "gpt-6.1-sol", variant: "medium" },
       { providers: [...GPT_PROVIDERS], model: "gpt-5.6-sol", variant: "medium" },
     ],
@@ -115,6 +116,6 @@ export const BUILTIN_MODEL_PROFILES: Readonly<Record<string, BuiltinModelProfile
     tier: "heavy",
     displayName: "Geeky · Heavy",
     description: "Works on one task and thinks it over from every side.",
-    models: [{ providers: [...GPT_PROVIDERS], model: "gpt-6-astra", variant: "xhigh" }],
+    models: [{ providers: [...GPT_PROVIDERS], model: "gpt-6-astra", variant: "high" }],
   },
 })

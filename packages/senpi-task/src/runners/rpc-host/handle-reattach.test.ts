@@ -9,6 +9,7 @@ import { event, fakeSessionPort, FAKE_SESSION } from "./handle.test-support"
 import { HOST_SESSION_REATTACH_TAG, type HostSessionReattach } from "./reattach"
 import { childOpenInput } from "./session-client.test-support"
 import { sessionClientHarness } from "./session-client.test-support"
+import { TRANSPORT_LOST_REASON } from "./transport-recovery"
 
 // omo#8563: a lost connection ended every host-session child as crashed(transport_gone) while its
 // session kept running on the daemon (or sat intact in its JSONL after the daemon died). The
@@ -155,7 +156,7 @@ describe("host-session handle reattach", () => {
     await handle.dispose()
   })
 
-  test("#given a managed child mid-turn #when the host dies and the turn is re-prompted #then its managed stream reports the turn resumed before the continuation is sent", async () => {
+  test("#given a managed child mid-turn #when the host dies and the turn is re-prompted #then its managed stream reports the turn resumed after the continuation is acknowledged", async () => {
     // given
     const host = await fakeHost()
     const handle = await openWithReattach(host, "/tmp/sessions/reattach-resumed.jsonl", reopenOn(host))
@@ -169,6 +170,9 @@ describe("host-session handle reattach", () => {
     await host.restart()
     const continuation = await host.waitForCommand("prompt")
 
+    expect(observed).toEqual([]) // the prompt has reached the host, but its ACK has not reached recovery
+    await handle.getEntries() // joins recovery after the prompt acknowledgement
+
     // then: the managed stream (what the footer widget reads) learns the turn is live again; the
     // host-event stream itself carries no synthesized event
     expect(String(continuation.payload.message)).toContain(HOST_SESSION_REATTACH_TAG)
@@ -178,6 +182,40 @@ describe("host-session handle reattach", () => {
     if (reopened === undefined) throw new Error("the host did not reopen the session")
     host.completeTurn(reopened.routingId, "finished after the restart")
     expect((await handle.waitForOutcome()).status).toBe("completed")
+    await handle.dispose()
+  })
+
+  test("#given a continuation awaiting acknowledgement #when the child cancels and delivery rejects #then recovery reports cancelled rather than lost", async () => {
+    const continuation = Promise.withResolvers<void>()
+    const promptSent = Promise.withResolvers<void>()
+    const original = fakeSessionPort()
+    const reopened = fakeSessionPort((command) => {
+      if (command.type !== "prompt") return Promise.resolve()
+      promptSent.resolve()
+      return continuation.promise
+    })
+    const outcomes: string[] = []
+    const observed: string[] = []
+    const handle = createHostSessionHandle({
+      client: original,
+      session: FAKE_SESSION,
+      taskId: "st_cancel_pending_continuation",
+      heartbeatIntervalMs: 60_000,
+      now: () => 13,
+      closeGraceMs: 100,
+      openDisposition: "attached",
+      reattach: async () => ({ client: reopened, session: FAKE_SESSION, attached: false }),
+      shardEvents: { onReattachOutcome: (info) => outcomes.push(info.outcome) },
+    })
+    adaptRpcHandle(handle).subscribe((event) => observed.push(event.type))
+    await handle.startInitialPrompt("do the work")
+    original.loseTransport()
+    await promptSent.promise
+    await handle.terminate()
+    continuation.reject(new Error("continuation refused after cancellation"))
+    await handle.getEntries()
+    expect(outcomes).toEqual(["cancelled"])
+    expect(observed).not.toContain(HOST_TURN_RESUMED_EVENT)
     await handle.dispose()
   })
 
@@ -207,7 +245,7 @@ describe("host-session handle reattach", () => {
     await handle.dispose()
   })
 
-  test("#given the transport is lost #when every reattach attempt fails #then the child ends crashed with transport_gone", async () => {
+  test("#given the transport is lost #when every reattach attempt fails #then the child ends crashed with transport lost", async () => {
     // given
     const host = await fakeHost()
     const handle = await openWithReattach(host, "/tmp/sessions/reattach-d.jsonl", async () => undefined)
@@ -219,7 +257,7 @@ describe("host-session handle reattach", () => {
     // then
     expect(await handle.waitForExit()).toEqual({
       kind: "crashed",
-      facts: { pid: undefined, code: null, signal: null, stderrTail: "transport_gone" },
+      facts: { pid: undefined, code: null, signal: null, stderrTail: TRANSPORT_LOST_REASON },
     })
     expect(handle.attached).toBe(false)
     await handle.dispose()

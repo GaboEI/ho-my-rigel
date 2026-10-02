@@ -50,7 +50,7 @@ export const CATEGORY_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
       {
         providers: ["openai", "chatgpt-subscription", "github-copilot", "opencode"],
         model: "gpt-6-astra",
-        variant: "xhigh",
+        variant: "high",
       }
     ],
   },

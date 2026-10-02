@@ -39,6 +39,46 @@ function writePackage(
 }
 
 describe("sidecar parity set", () => {
+  test("requires every wasm asset when a runtime dependency ships nested assets", () => {
+    // Given
+    const root = join(tmpdir(), `omo-codemode-wasm-${crypto.randomUUID()}`)
+    const codemode = join(root, "codemode")
+    const host = join(root, "host")
+    const dependency = join(codemode, "node_modules", "runtime")
+    try {
+      writePackage(codemode, { name: "codemode", version: "1.0.0", dependencies: { runtime: "1.0.0" } })
+      writePackage(host, { name: "host", version: "1.0.0" })
+      writePackage(dependency, { name: "runtime", version: "1.0.0" })
+      mkdirSync(join(dependency, "assets"), { recursive: true })
+      writeFileSync(join(dependency, "assets", "runtime.wasm"), new Uint8Array([0, 97, 115, 109]))
+      // When
+      const sources = codemodeRuntimeDependencySources(codemode, host)
+      // Then
+      expect(sources).toContainEqual({
+        from: realpathSync(join(dependency, "assets", "runtime.wasm")),
+        to: "node_modules/@code-yeongyu/senpi-codemode/node_modules/runtime/assets/runtime.wasm",
+        required: true,
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("fails when codemode declares an uninstalled runtime dependency", () => {
+    // Given
+    const root = join(tmpdir(), `omo-codemode-missing-${crypto.randomUUID()}`)
+    const codemode = join(root, "codemode")
+    const host = join(root, "host")
+    try {
+      writePackage(codemode, { name: "codemode", version: "1.0.0", dependencies: { missing: "1.0.0" } })
+      writePackage(host, { name: "host", version: "1.0.0" })
+      // When / Then
+      expect(() => codemodeRuntimeDependencySources(codemode, host)).toThrow("missing/package.json")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("#given the css-tree trio #when the engine sidecars are resolved #then each is embedded exactly when the installed engine resolves it", () => {
     // given - the jsdom-era engine ships all three, a linkedom-era engine (senpi#1666) none
     const trio = ["css-tree", "mdn-data", "source-map-js"]
@@ -169,30 +209,4 @@ describe("sidecar parity set", () => {
     }
   })
 
-  test("#given every release target #when its sidecar manifest is resolved #then each OS carries codemode's full external runtime closure", () => {
-    // given
-    const required = [
-      "node_modules/@code-yeongyu/senpi-codemode/node_modules/@babel/parser/lib/index.js",
-      "node_modules/@code-yeongyu/senpi-codemode/node_modules/@babel/parser/node_modules/@babel/types/package.json",
-      "node_modules/@code-yeongyu/senpi-codemode/node_modules/@babel/parser/node_modules/@babel/types/node_modules/@babel/helper-string-parser/package.json",
-      "node_modules/@code-yeongyu/senpi-codemode/node_modules/@babel/parser/node_modules/@babel/types/node_modules/@babel/helper-validator-identifier/package.json",
-    ]
-
-    // when
-    const manifests = RELEASE_BINARY_TARGETS.map((target) => ({
-      os: target.os,
-      target: target.target,
-      files: new Set(resolveExpectedSidecarRelPaths(target)),
-    }))
-
-    // then
-    expect(new Set(manifests.map((manifest) => manifest.os))).toEqual(
-      new Set(["darwin", "linux", "windows"]),
-    )
-    for (const manifest of manifests) {
-      for (const path of required) {
-        expect(manifest.files.has(path), `${manifest.target} is missing ${path}`).toBe(true)
-      }
-    }
-  })
 })
