@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import plugin from "./rigel-v2-native.mjs"
+import * as nativeRuntime from "./rigel-v2-native.mjs"
+import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
 // Deterministic event feed for the reactive-fallback tests. The generator
 // blocks until an event is pushed, and signals consumption only AFTER the
@@ -429,4 +431,185 @@ test("native runtime survives a reactive failure when session.switchModel is abs
   ])
   expect(second).toBe("second")
   await dispose()
+})
+
+// Task 10: the runtime collects every agent's tool gates through
+// `registerNativeAgents.onAgentPermissions`, merges the global gates first so
+// an agent-specific gate wins, indexes each agent by manifest id and display
+// name, and blocks a denied call in `execute.before` before the executor runs.
+function permissionManifest() {
+  return {
+    agents: {
+      sisyphus: { name: "Sisyphus - ultraworker", mode: "primary", permission: { teammate: "allow", task: "allow", call_omo_agent: "allow" } },
+      "multimodal-looker": { name: "Multimodal-Looker", mode: "subagent", permission: { look_at: "deny" } },
+    },
+    metadata: {
+      global: {
+        tools: {
+          "grep_app_*": false,
+          "task_*": false,
+          teammate: false,
+          LspHover: false,
+          LspCodeActions: false,
+          LspCodeActionResolve: false,
+          skill_mcp: false,
+        },
+      },
+    },
+  }
+}
+
+async function registerPermissionAgents(wiring, manifest) {
+  const agentDomain = {
+    transform: async (callback) => {
+      callback({ update: (_id, apply) => apply({ request: { headers: {}, body: {} }, permissions: [] }), default() {} })
+      return { dispose() {} }
+    },
+    reload: async () => {},
+  }
+  await registerNativeAgents(agentDomain, manifest, {
+    onAgentPermissions: (id, permissions) => wiring.onAgentPermissions(id, permissions),
+  })
+}
+
+test("native runtime permission wiring blocks a denied call before the executor runs", async () => {
+  const manifest = permissionManifest()
+  const wiring = nativeRuntime.createNativePermissionWiring({ manifest })
+  await registerPermissionAgents(wiring, manifest)
+
+  let executed = false
+  const runTool = async (event) => { await wiring.before(event); executed = true }
+
+  // Global grep_app_* deny with no agent override: the executor must not run.
+  await expect(runTool({ tool: "grep_app_searchGitHub", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
+  expect(executed).toBe(false)
+
+  // The agent look_at deny is reachable by manifest id and by display name.
+  await expect(wiring.before({ tool: "look_at", agent: "multimodal-looker" })).rejects.toThrow(/denied/)
+  await expect(wiring.before({ tool: "look_at", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
+
+  // The legacy Lsp* names are denied by the translated global tools.
+  await expect(wiring.before({ tool: "LspCodeActions", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
+
+  // global teammate:false is a hard V1 catalog disable: the agent teammate
+  // allow must not lift it.
+  await expect(wiring.before({ tool: "team_create", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
+
+  // An agent allow applies when global tools does not hard-disable the tool.
+  await expect(wiring.before({ tool: "call_omo_agent", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
+
+  // An agent with no override still receives the global team_* deny.
+  await expect(wiring.before({ tool: "team_create", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
+})
+
+test("native runtime wildcard agent permission denies every concrete tool name except its allows", async () => {
+  const manifest = {
+    agents: {
+      "multimodal-looker": { name: "Multimodal-Looker", mode: "subagent", permission: { "*": "deny", read: "allow" } },
+    },
+  }
+  const wiring = nativeRuntime.createNativePermissionWiring({ manifest })
+  await registerPermissionAgents(wiring, manifest)
+
+  await expect(wiring.before({ tool: "read", agent: "Multimodal-Looker" })).resolves.toBeUndefined()
+  await expect(wiring.before({ tool: "call_omo_agent", agent: "multimodal-looker" })).rejects.toThrow(/denied/)
+  await expect(wiring.before({ tool: "future_non_native_tool", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
+  await expect(wiring.before({ tool: "team_create", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
+})
+
+test("native runtime agent wildcard allow does not bypass a global hard-disable", async () => {
+  const manifest = {
+    agents: { sisyphus: { name: "Sisyphus - ultraworker", mode: "primary", permission: { "*": "allow" } } },
+    metadata: { global: { tools: { call_omo_agent: false } } },
+  }
+  const wiring = nativeRuntime.createNativePermissionWiring({ manifest })
+  await registerPermissionAgents(wiring, manifest)
+
+  await expect(wiring.before({ tool: "call_omo_agent", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
+  await expect(wiring.before({ tool: "look_at", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
+})
+
+test("native runtime permission wiring resolves the agent from the session when the event omits it", async () => {
+  const manifest = permissionManifest()
+  const seen = []
+  const wiring = nativeRuntime.createNativePermissionWiring({
+    manifest,
+    resolveAgent: async ({ sessionID }) => { seen.push(sessionID); return "Multimodal-Looker" },
+  })
+  await registerPermissionAgents(wiring, manifest)
+
+  await expect(wiring.before({ tool: "look_at", sessionID: "ses_child" })).rejects.toThrow(/denied/)
+  expect(seen).toEqual(["ses_child"])
+})
+
+test("native runtime session resolver reads the agent from the V2 session surface", async () => {
+  const calls = []
+  const resolver = nativeRuntime.createSessionAgentResolver({
+    session: { get: async (input) => { calls.push(input); return { data: { agent: "Multimodal-Looker" } } } },
+  })
+  await expect(resolver({ sessionID: "ses_child" })).resolves.toBe("Multimodal-Looker")
+  expect(calls).toEqual([{ sessionID: "ses_child" }])
+})
+
+test("native runtime session resolver falls back to the client session surface and tolerates its absence", async () => {
+  const paths = []
+  const resolver = nativeRuntime.createSessionAgentResolver({
+    client: { session: { get: async (input) => { paths.push(input); return { data: { agent: "Explore" } } } } },
+  })
+  await expect(resolver({ sessionID: "ses_child" })).resolves.toBe("Explore")
+  expect(paths).toEqual([{ path: { id: "ses_child" } }])
+  await expect(nativeRuntime.createSessionAgentResolver({})({ sessionID: "ses_child" })).resolves.toBeUndefined()
+  await expect(nativeRuntime.createSessionAgentResolver({})({})).resolves.toBeUndefined()
+})
+
+test("native runtime permission wiring blocks an ask pending approval instead of allowing it", async () => {
+  const manifest = { agents: { prometheus: { name: "Prometheus - Planner", permission: { call_omo_agent: "ask" } } } }
+  const wiring = nativeRuntime.createNativePermissionWiring({ manifest })
+  await registerPermissionAgents(wiring, manifest)
+
+  await expect(wiring.before({ tool: "call_omo_agent", agent: "prometheus" })).rejects.toThrow(/approval/)
+})
+
+test("native runtime permission wiring fails closed only for a governed call with no agent identity", async () => {
+  const manifest = permissionManifest()
+  const wiring = nativeRuntime.createNativePermissionWiring({ manifest, resolveAgent: async () => undefined })
+  await registerPermissionAgents(wiring, manifest)
+
+  await expect(wiring.before({ tool: "look_at", sessionID: "ses_1" })).rejects.toThrow(/identity/)
+  await expect(wiring.before({ tool: "todo_write", sessionID: "ses_1" })).resolves.toBeUndefined()
+})
+
+test("native runtime registers one additional execute.before hook and disposes it", async () => {
+  const registrations = []
+  const context = {
+    location: { directory: "/native-v2" },
+    agent: {
+      list: async () => ({ data: [] }),
+      transform: async (callback) => { callback({ update() {}, default() {} }); return { dispose() {} } },
+      reload: async () => {},
+    },
+    model: { list: async () => ({ data: [] }) },
+    session: {
+      hook: async (name, handler) => {
+        const registration = { name, handler, disposed: false, dispose() { registration.disposed = true } }
+        registrations.push(registration)
+        return registration
+      },
+    },
+    tool: {
+      transform: async (callback) => { callback({ add() {} }); return { dispose() {} } },
+      hook: async (name, handler) => {
+        const registration = { name, handler, disposed: false, dispose() { registration.disposed = true } }
+        registrations.push(registration)
+        return registration
+      },
+    },
+  }
+  const dispose = await plugin.setup(context)
+  const beforeHooks = registrations.filter((registration) => registration.name === "execute.before")
+  // Two pre-existing guards (write-existing-file + non-interactive env) plus
+  // exactly one new permission gate.
+  expect(beforeHooks.length).toBe(3)
+  await dispose()
+  expect(beforeHooks.every((registration) => registration.disposed)).toBe(true)
 })

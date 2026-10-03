@@ -171,3 +171,43 @@ test("registerNativeAgents exposes acceptance tuning from the applied AgentV2Inf
   expect(requests.get("Sisyphus-Junior")).toMatchObject({ maxTokens: 64000 })
   expect(requests.get("Atlas - Plan Executor")).toMatchObject({ temperature: 0.1 })
 })
+
+test("preserves the V2 baseline permission rules and overrides only the declared action", () => {
+  // Plan decision 2: manifest rules merge onto the V2 baseline by action +
+  // resource, last declaration wins. The editor callback receives an agent
+  // whose `permissions` already carry that baseline, so applyLegacyAgentDefinition
+  // must not wipe it.
+  const agent = {
+    request: { headers: {}, body: {} },
+    permissions: [
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "edit", resource: "*", effect: "allow" },
+      { action: "shell", resource: "*", effect: "allow" },
+      { action: "subagent", resource: "*", effect: "allow" },
+    ],
+  }
+  applyLegacyAgentDefinition(agent, "judge", { name: "Judge", permission: { edit: "deny" } })
+  const forAction = (action) => agent.permissions.filter((rule) => rule.action === action && rule.resource === "*")
+  expect(forAction("read")).toEqual([{ action: "read", resource: "*", effect: "allow" }])
+  expect(forAction("shell")).toEqual([{ action: "shell", resource: "*", effect: "allow" }])
+  expect(forAction("subagent")).toEqual([{ action: "subagent", resource: "*", effect: "allow" }])
+  expect(forAction("edit")).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
+})
+
+test("expands the V1 read-only wildcard so every non-read V2 action is denied", () => {
+  // Plan decision 6: `*` never reaches AgentV2Info as an opaque action. The
+  // multimodal-looker allowlist (`*: deny`, `read: allow`) must deny the whole
+  // real V2 set and then allow read.
+  const agent = { request: { headers: {}, body: {} }, permissions: [] }
+  applyLegacyAgentDefinition(agent, "multimodal-looker", {
+    name: "Multimodal-Looker", permission: { "*": "deny", read: "allow" },
+  })
+  expect(agent.permissions.map((rule) => rule.action)).not.toContain("*")
+  expect(agent.permissions.filter((rule) => rule.action === "read")).toEqual([
+    { action: "read", resource: "*", effect: "allow" },
+  ])
+  for (const action of ["edit", "shell", "subagent", "question", "lsp", "skill"]) {
+    expect(agent.permissions).toContainEqual({ action, resource: "*", effect: "deny" })
+  }
+  expect(agent.permissions.filter((rule) => rule.action !== "read").every((rule) => rule.effect === "deny")).toBe(true)
+})

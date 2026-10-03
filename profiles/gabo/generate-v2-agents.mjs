@@ -45,7 +45,14 @@ try {
   const materialized = {
     defaultAgent: config.default_agent,
     agents: selected,
-    metadata: { generatedBy: "Ho My Rigel V2 native runtime", profile: process.env.OMO_PROFILE || null },
+    metadata: {
+      generatedBy: "Ho My Rigel V2 native runtime",
+      profile: process.env.OMO_PROFILE || null,
+      global: {
+        tools: { ...(config.tools ?? {}) },
+        permission: { ...(config.permission ?? {}) },
+      },
+    },
     modes: { defaultUltrawork: selection?.nativeModes?.defaultUltrawork === true },
   }
   fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true })

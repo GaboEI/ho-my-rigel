@@ -85,6 +85,7 @@ for (const file of [
   "opencode/rigel-v2-native-core.mjs",
   "opencode/rigel-v2-native-prompt.mjs",
   "opencode/rigel-v2-native-agents.mjs",
+  "opencode/rigel-v2-native-permissions.mjs",
   "opencode/rigel-v2-native-agent-manifest.mjs",
   "opencode/rigel-v2-native-categories.mjs",
   "opencode/rigel-v2-category-manifest.mjs",
@@ -96,6 +97,14 @@ for (const file of [
 const nativeEntrypoint = readFileSync(join(root, "opencode/rigel-v2-native.mjs"), "utf8")
 if (/legacyModule|omo-v2-adapter/i.test(nativeEntrypoint)) fail("native V2 entrypoint must not load the V1 bridge")
 if (!nativeEntrypoint.includes("registerNativeAgents")) fail("native V2 entrypoint must register the generated agent manifest")
+// Tool-name permission gate: the entrypoint must consume the permission
+// authority (V2-only families have no native action, so a name gate is the only
+// real enforcement) and must throw it from `execute.before` before the executor.
+const permissionAuthority = readFileSync(join(root, "opencode/rigel-v2-native-permissions.mjs"), "utf8")
+if (!permissionAuthority.includes("Unknown V1 permission key")) fail("permission authority must reject unknown V1 keys instead of a silent passthrough")
+for (const marker of ["createNativePermissionWiring", "createNativeToolPermissionGate", "translateGlobalTools", "permissionWiring.before"]) {
+  if (!nativeEntrypoint.includes(marker)) fail(`native V2 entrypoint must wire the permission gate: missing ${marker}`)
+}
 
 // Single-runtime invariant: no active (non-attic) profile file may load the
 // quarantined V1 bridge. generate-v2-agents.mjs is exempt: it is a build-time

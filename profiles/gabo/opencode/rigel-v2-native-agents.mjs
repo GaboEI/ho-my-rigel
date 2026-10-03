@@ -13,11 +13,7 @@
  */
 
 import { agentChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
-
-const permissionAction = {
-  bash: "shell",
-  task: "subagent",
-}
+import { mergePermissionRules, translateV1Permissions } from "./rigel-v2-native-permissions.mjs"
 
 const tuningKeys = ["temperature", "top_p", "maxTokens", "thinking", "reasoning", "reasoningEffort", "textVerbosity"]
 
@@ -76,21 +72,47 @@ function modelRef(value, variant) {
   return { providerID: match[1], id: match[2], ...(typeof variant === "string" ? { variant } : {}) }
 }
 
-function rulesFor(action, value) {
-  const mapped = permissionAction[action] ?? action
-  if (typeof value === "string") return [{ action: mapped, resource: "*", effect: value }]
-  if (!value || typeof value !== "object" || Array.isArray(value)) return []
-  return Object.entries(value).flatMap(([resource, effect]) => (
-    typeof effect === "string" ? [{ action: mapped, resource, effect }] : []
-  ))
+const PERMISSION_EFFECT_VALUES = new Set(["allow", "deny", "ask"])
+
+function acceptedLegacyEntry(key, value) {
+  const stringEffect = typeof value === "string" && PERMISSION_EFFECT_VALUES.has(value) ? value : undefined
+  let entry = stringEffect
+  if (entry === undefined && value && typeof value === "object" && !Array.isArray(value)) {
+    const resources = {}
+    for (const [resource, candidate] of Object.entries(value)) {
+      if (typeof candidate === "string" && PERMISSION_EFFECT_VALUES.has(candidate)) resources[resource] = candidate
+    }
+    if (Object.keys(resources).length > 0) entry = resources
+  }
+  if (entry === undefined) return undefined
+  try {
+    translateV1Permissions({ [key]: entry })
+    return entry
+  } catch (error) {
+    // The legacy helper stays lenient: only the authority's own validation
+    // errors are dropped, anything unexpected still surfaces.
+    if (error instanceof TypeError) return undefined
+    throw error
+  }
 }
 
+/**
+ * Legacy compatibility export. Kept for existing callers, but routed through
+ * `translateV1Permissions` so the action renames live in one authority. It
+ * preserves the old lenient contract (malformed entries are dropped) while
+ * `translateV1Permissions` itself fails closed for the runtime path.
+ */
 export function nativePermissionRules(permission) {
   if (!permission || typeof permission !== "object" || Array.isArray(permission)) return []
-  return Object.entries(permission).flatMap(([action, value]) => rulesFor(action, value))
+  const accepted = {}
+  for (const [key, value] of Object.entries(permission)) {
+    const entry = acceptedLegacyEntry(key, value)
+    if (entry !== undefined) accepted[key] = entry
+  }
+  return translateV1Permissions(accepted).rules
 }
 
-export function applyLegacyAgentDefinition(agent, id, definition) {
+export function applyLegacyAgentDefinition(agent, id, definition, globalRules = []) {
   const source = definition && typeof definition === "object" ? definition : {}
   agent.name = typeof source.name === "string" ? source.name : id
   agent.description = typeof source.description === "string" ? source.description : undefined
@@ -104,10 +126,14 @@ export function applyLegacyAgentDefinition(agent, id, definition) {
   const request = agent.request && typeof agent.request === "object" && !Array.isArray(agent.request) ? agent.request : {}
   const requestBody = request.body && typeof request.body === "object" && !Array.isArray(request.body) ? request.body : {}
   agent.request = { ...request, body: { ...requestBody, ...agentRequestBodyFromDefinition(source) } }
-  // Info.default() already supplies a valid request and baseline rules.  The
-  // generated definition is authoritative for every rule it declares.
-  const rules = nativePermissionRules(source.permissions ?? source.permission)
-  if (rules.length > 0) agent.permissions = rules
+  // Info.default() already supplies a valid request and baseline rules. The
+  // manifest rules merge over that baseline, then the global static overlay,
+  // then the agent overlay, so the last declaration wins.
+  const translated = translateV1Permissions(source.permissions ?? source.permission ?? {})
+  const baseline = Array.isArray(agent.permissions) ? agent.permissions : []
+  const merged = mergePermissionRules([baseline, globalRules, translated.rules])
+  if (merged.length > 0 || Array.isArray(agent.permissions)) agent.permissions = merged
+  return { rules: agent.permissions ?? [], toolGates: translated.toolGates }
 }
 
 function chainHeadRef(chain) {
@@ -150,12 +176,15 @@ export function resolveProactiveAgentModels(agents, listModels) {
   return resolved
 }
 
-export async function registerNativeAgents(agentDomain, manifest, { listModels, onAgentRequest } = {}) {
+export async function registerNativeAgents(agentDomain, manifest, { listModels, onAgentRequest, onAgentPermissions } = {}) {
   if (typeof agentDomain?.transform !== "function" || typeof agentDomain?.reload !== "function") {
     throw new Error("OpenCode V2 agent.transform/agent.reload is unavailable")
   }
   const agents = manifest?.agents
   if (!agents || typeof agents !== "object") throw new Error("Rigel native agent manifest is invalid")
+  // The global static overlay is materialized by the generator as
+  // manifest.metadata.global.permission; absent metadata is an empty overlay.
+  const globalRules = translateV1Permissions(manifest?.metadata?.global?.permission).rules
   // Inventory is read once, before the transform, so the whole roster resolves
   // against a single consistent snapshot. A failed read degrades to manifest
   // models instead of blocking agent registration.
@@ -171,10 +200,11 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels, 
   await agentDomain.transform((editor) => {
     for (const [id, definition] of Object.entries(agents)) {
       editor.update(id, (agent) => {
-        applyLegacyAgentDefinition(agent, id, definition)
+        const permissions = applyLegacyAgentDefinition(agent, id, definition, globalRules)
         const proactive = proactiveModels.get(id)
         if (proactive) agent.model = proactive
         onAgentRequest?.(id, agent.request.body)
+        onAgentPermissions?.(id, permissions)
       })
     }
     if (typeof manifest.defaultAgent === "string" && agents[manifest.defaultAgent]) editor.default(manifest.defaultAgent)

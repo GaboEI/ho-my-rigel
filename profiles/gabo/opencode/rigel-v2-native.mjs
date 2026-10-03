@@ -26,6 +26,7 @@ import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guar
 import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninteractive.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
+import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 
 function recordAgentTuning(event) {
   const stateRoot = process.env.XDG_STATE_HOME
@@ -73,6 +74,70 @@ const taskInput = {
   anyOf: [{ required: ["subagent_type"] }, { required: ["category"] }, { required: ["task_id"] }],
 }
 
+function readSessionAgent(result) {
+  const agent = result?.data?.agent ?? result?.agent
+  if (typeof agent !== "string") return undefined
+  const trimmed = agent.trim()
+  return trimmed ? trimmed : undefined
+}
+
+async function lookupSessionAgent(call, sessionID) {
+  try {
+    return readSessionAgent(await call())
+  } catch (error) {
+    console.error(`[ho-my-rigel] Native V2 session agent lookup failed: session=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
+
+/**
+ * Resolve the agent that owns a V2 session, for the tool-name permission gate
+ * when `tool.execute.before` carries no `agent`. Uses the V2 session surface
+ * first and the compatible client surface second; an absent or failing lookup
+ * returns `undefined` so the gate can decide whether to fail closed.
+ */
+export function createSessionAgentResolver(context) {
+  return async ({ sessionID } = {}) => {
+    if (typeof sessionID !== "string" || !sessionID) return undefined
+    if (typeof context?.session?.get === "function") {
+      const fromSession = await lookupSessionAgent(() => context.session.get({ sessionID }), sessionID)
+      if (fromSession) return fromSession
+    }
+    if (typeof context?.client?.session?.get === "function") {
+      return lookupSessionAgent(() => context.client.session.get({ path: { id: sessionID } }), sessionID)
+    }
+    return undefined
+  }
+}
+
+/**
+ * Build the tool-name permission gate the runtime wires as one
+ * `tool.execute.before` hook. It merges the materialized global
+ * `manifest.metadata.global.tools` gates before each agent's gates (so an
+ * agent-specific declaration wins) and indexes every agent under both its
+ * manifest id and its display name.
+ *
+ * Exported so the runtime tests can drive the real collection and decision path
+ * with a fixture manifest instead of mutating the generated manifest module.
+ */
+export function createNativePermissionWiring({ manifest: agentManifest, resolveAgent } = {}) {
+  const globalGates = translateGlobalTools(agentManifest?.metadata?.global?.tools)
+  const agents = agentManifest && typeof agentManifest.agents === "object" && agentManifest.agents !== null ? agentManifest.agents : {}
+  const gate = createNativeToolPermissionGate({ globalGates, resolveAgent })
+  return {
+    globalGates,
+    onAgentPermissions(id, permissions) {
+      if (typeof id !== "string" || !id) return
+      gate.registerAgent(id, permissions)
+      const name = agents[id]?.name
+      if (typeof name === "string" && name && name !== id) gate.registerAgent(name, permissions)
+    },
+    before(event) {
+      return gate.before(event)
+    },
+  }
+}
+
 export default {
   id: "ho-my-rigel",
   setup: async (context) => {
@@ -81,6 +146,10 @@ export default {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
     const agentRequestBodies = new Map()
+    const permissionWiring = createNativePermissionWiring({
+      manifest,
+      resolveAgent: createSessionAgentResolver(context),
+    })
     const registeredAgents = await registerNativeAgents(context.agent, manifest, {
       // Proactive fallback runs at this pre-selection boundary: the live
       // inventory decides each agent's starting model before `agent.reload`,
@@ -92,6 +161,9 @@ export default {
         const name = manifest.agents?.[id]?.name
         if (typeof name === "string") agentRequestBodies.set(name.toLocaleLowerCase(), body)
       },
+      // The permission gate consumes each agent's translated tool-name gates
+      // here, so the `execute.before` hook below governs the real roster.
+      onAgentPermissions: (id, permissions) => permissionWiring.onAgentPermissions(id, permissions),
     })
     const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
     const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
@@ -360,6 +432,12 @@ export default {
     const nonInteractiveRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => nonInteractiveEnv.before(input))
       : undefined
+    // One tool-name permission gate: global `config.tools` gates first, then the
+    // per-agent gates collected above, so the last matching gate wins. Deny and
+    // ask throw here, before V2 invokes the tool executor.
+    const permissionRegistration = typeof context?.tool?.hook === "function"
+      ? await context.tool.hook("execute.before", async (input) => permissionWiring.before(input))
+      : undefined
     const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
@@ -392,7 +470,7 @@ export default {
       reminders.clearAll()
       rules.clearAll()
       writeGuard.clearAll()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
     }
   },
 }
