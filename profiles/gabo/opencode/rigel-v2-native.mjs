@@ -10,10 +10,12 @@ import {
 import {
   availableCategoryNames,
   categoryTaskPrompt,
+  listV2ModelsFromClients,
   resolveCategoryFromClients,
 } from "./rigel-v2-native-categories.mjs"
 import fs from "node:fs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
+import { agentChain, categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
 import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
@@ -58,7 +60,13 @@ export default {
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
-    const registeredAgents = await registerNativeAgents(context.agent, manifest)
+    const registeredAgents = await registerNativeAgents(context.agent, manifest, {
+      // Proactive fallback runs at this pre-selection boundary: the live
+      // inventory decides each agent's starting model before `agent.reload`,
+      // so an agent whose primary is absent starts on the next chain rung
+      // instead of being rejected by V2 before any request hook can run.
+      listModels: () => listV2ModelsFromClients([context, context?.client], location),
+    })
     const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
     const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
     if (manifest.modes?.defaultUltrawork === true && !ultraworkPrompt.trim()) {
@@ -69,6 +77,123 @@ export default {
     // name is required for a real, callable Rigel delegation surface.
     const taskName = process.env.RIGEL_NATIVE_TASK_NAME || "rigel_task"
     const childSessionIDs = new Set()
+    // Proactive/reactive model fallback state. Keyed by session so a failing
+    // child never poisons its parent's chain, and bounded by the chain length.
+    const categoryChildSessions = new Map()
+    const sessionFallback = new Map()
+    let inventoryFailureLogged = false
+    const readAvailableModels = async () => {
+      try {
+        return await listV2ModelsFromClients([context, context?.client], location)
+      } catch (error) {
+        if (!inventoryFailureLogged) {
+          inventoryFailureLogged = true
+          console.error(`[ho-my-rigel] Native V2 model inventory unavailable; model fallback disabled: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        return undefined
+      }
+    }
+    const resolveNativeModel = async ({ sessionID, agent, model, sameProviderAs }) => {
+      if (!sessionID || typeof model !== "string" || !model.trim()) return undefined
+      const chain = categoryChildSessions.has(sessionID)
+        ? categoryChain(categoryChildSessions.get(sessionID))
+        : agentChain(agent)
+      if (!Array.isArray(chain) || chain.length === 0) return undefined
+      const state = sessionFallback.get(sessionID) ?? { chain, failedModels: new Set(), attempts: 0 }
+      state.chain = chain
+      state.model = model
+      state.agent = agent
+      // Remember the provider V2 selected for this session so the reactive path
+      // (which has no request ref of its own) can stay on it too.
+      if (typeof sameProviderAs === "string" && sameProviderAs) state.providerID = sameProviderAs
+      sessionFallback.set(sessionID, state)
+      // Bounded attempts: once the chain is exhausted, stop rewriting.
+      if (state.attempts >= chain.length) return undefined
+      // A reactive failure already selected the next step; honour it directly
+      // so the rewrite does not depend on the model V2 happens to resend.
+      if (state.nextModel?.id && !state.failedModels.has(state.nextModel.id)) {
+        const next = state.nextModel
+        state.nextModel = undefined
+        if (next.id !== model) {
+          console.error(`[ho-my-rigel] Native V2 model fallback (reactive step): session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${next.id}; attempts=${state.attempts}/${chain.length}`)
+        }
+        return next
+      }
+      const availableModels = await readAvailableModels()
+      if (!availableModels) return undefined
+      const resolved = resolveFallbackModel({ chain, availableModels, currentModel: model, failedModels: state.failedModels, sameProviderAs })
+      if (resolved?.id && resolved.id !== model) {
+        console.error(`[ho-my-rigel] Native V2 model fallback: session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${resolved.id}; attempts=${state.attempts}/${chain.length}`)
+      }
+      return resolved
+    }
+    const applyReactiveFallback = async (sessionID) => {
+      const state = sessionFallback.get(sessionID)
+      if (!state) return
+      const chain = Array.isArray(state.chain) ? state.chain : []
+      if (state.attempts >= chain.length) return
+      if (typeof state.model === "string" && state.model) state.failedModels.add(state.model)
+      state.attempts += 1
+      if (state.attempts >= chain.length) {
+        console.error(`[ho-my-rigel] Native V2 model fallback exhausted: session=${sessionID}; attempts=${state.attempts}/${chain.length}; last=${state.model ?? "unknown"}`)
+        return
+      }
+      const availableModels = await readAvailableModels()
+      // Reactive resolution walks the FULL chain and may change provider: unlike
+      // `http.request` (post-selection, same-provider guard only), `switchModel`
+      // is a pre-selection boundary that accepts a `providerID`, so picking a
+      // rung on another provider is a real fallback here, not a misroute.
+      // `sameProviderAs` is deliberately omitted for this path.
+      const next = availableModels
+        ? resolveFallbackModel({ chain, availableModels, currentModel: state.model, failedModels: state.failedModels })
+        : undefined
+      state.nextModel = next
+      console.error(`[ho-my-rigel] Native V2 reactive model fallback: session=${sessionID}; failed=${state.model ?? "unknown"}; attempts=${state.attempts}/${chain.length}; next=${next?.id ?? "none"}`)
+      // V2 ignores the `http.request` `body.model` rewrite (proven live), so the
+      // resolved rung only takes effect through the pre-selection model boundary.
+      // Switch the session model to the resolved rung, carrying its own
+      // providerID so a cross-provider fallback is honoured; the next request
+      // then runs the fallback. Guarded so an absent API or a provider
+      // rejection never tears down the event subscription.
+      if (next?.id && typeof context?.session?.switchModel === "function") {
+        try {
+          await context.session.switchModel({
+            sessionID,
+            model: {
+              ...(next.providerID ? { providerID: next.providerID } : {}),
+              id: next.id,
+            },
+          })
+          // Advance the tracked model to the rung we just switched to. Without
+          // this the next failure would re-add the stale model and resolve the
+          // same rung again, so the walk would stall instead of advancing.
+          // The new model is NOT marked failed here: it becomes the running
+          // model, and the next failure marks it before the following walk.
+          state.model = next.id
+          if (typeof next.providerID === "string" && next.providerID) state.providerID = next.providerID
+        } catch (error) {
+          console.error(`[ho-my-rigel] Native V2 switchModel failed: session=${sessionID}; model=${next.id}; ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+    }
+    // Seed a delegated child's fallback state at creation time, so a failure
+    // that happens BEFORE `http.request` (an unavailable model or variant
+    // rejected at V2 model resolution) still has a chain to walk. Without this,
+    // `session.execution.failed` would arrive for an untracked session and the
+    // reactive fallback could not act.
+    const seedChildFallback = (sessionID, { agent, model } = {}) => {
+      if (typeof sessionID !== "string" || !sessionID) return
+      const chain = categoryChildSessions.has(sessionID)
+        ? categoryChain(categoryChildSessions.get(sessionID))
+        : agentChain(agent)
+      if (!Array.isArray(chain) || chain.length === 0) return
+      const state = sessionFallback.get(sessionID) ?? { chain, failedModels: new Set(), attempts: 0 }
+      state.chain = chain
+      if (typeof model?.id === "string" && model.id) state.model = model.id
+      if (typeof agent === "string" && agent) state.agent = agent
+      if (typeof model?.providerID === "string" && model.providerID) state.providerID = model.providerID
+      sessionFallback.set(sessionID, state)
+    }
     const directoryInstructions = createDirectoryInstructionStore({ directory: location.directory })
     const reminders = createNativeToolResultReminders()
     const rules = createNativeRulesInjector({ directory: location.directory })
@@ -100,11 +225,19 @@ export default {
       ? (async () => {
         try {
           for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
-            const sessionID = event?.data?.sessionID
+            const sessionID = event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
             if (event.type === "session.deleted" && typeof sessionID === "string") {
               reminders.clear(sessionID)
               rules.clear(sessionID)
               writeGuard.clear(sessionID)
+              sessionFallback.delete(sessionID)
+              categoryChildSessions.delete(sessionID)
+            }
+            // Reactive fallback: a failed execution marks the last-sent model
+            // failed for that session, so the next request resolves the next
+            // reachable rung. Independent of the background-handoff wake.
+            if (typeof sessionID === "string" && (event.type === "session.execution.failed" || event.type === "session.error")) {
+              await applyReactiveFallback(sessionID)
             }
             if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
@@ -166,7 +299,11 @@ export default {
             background: input.run_in_background === true,
             model: category?.model,
             parentSessionID: toolContext?.sessionID,
-            onChildSession: (sessionID) => childSessionIDs.add(sessionID),
+            onChildSession: (sessionID, child) => {
+              childSessionIDs.add(sessionID)
+              if (category) categoryChildSessions.set(sessionID, category.name)
+              seedChildFallback(sessionID, child)
+            },
           })
           if (delegated.background && toolContext?.sessionID) {
             backgroundChildren.set(delegated.sessionID, { parentSessionID: toolContext.sessionID, agent: delegated.agent })
@@ -205,6 +342,7 @@ export default {
         context.location,
       ),
       categories: availableCategoryNames(),
+      resolveModel: resolveNativeModel,
       ultraworkPrompt,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
       getDirectoryInstructions: directoryInstructions.guidance,

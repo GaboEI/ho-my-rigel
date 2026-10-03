@@ -20,7 +20,7 @@ export default {
     },
     "deep-high": {
       "model": "openai/gpt-6-astra",
-      "variant": "xhigh"
+      "variant": "high"
     },
     "quick": {
       "model": "openai/gpt-6-luna-fast",

@@ -4,8 +4,14 @@
  * Category definitions are a frozen data export of the matching OmO revision.
  * This module deliberately does not import the V1 delegate-task runtime: it
  * resolves the currently available V2 models and produces a V2 ModelRef.
+ *
+ * The canonical fallback chain (ported in `rigel-v2-native-model-chains.mjs`)
+ * is the source of truth for which model a category runs on. The manifest still
+ * owns the description/guidance/prompt text and the primary lane used as a
+ * fallback when a chain is somehow absent.
  */
 import manifest from "./rigel-v2-category-manifest.mjs"
+import { categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 
 function dataOf(response) {
   return Array.isArray(response) ? response : (response?.data ?? [])
@@ -51,6 +57,23 @@ export async function listV2Models(client, location) {
   return dataOf(result).filter((row) => modelKey(row) !== undefined && row.enabled !== false)
 }
 
+/**
+ * Resolve the V2 model inventory from the first client that can answer it.
+ * Setup and tool-execution clients expose different endpoint subsets, so a
+ * total miss is a real error the caller decides how to surface.
+ */
+export async function listV2ModelsFromClients(clients, location) {
+  const diagnostics = []
+  for (const client of (Array.isArray(clients) ? clients : []).filter(Boolean)) {
+    try {
+      return await listV2Models(client, location)
+    } catch (error) {
+      diagnostics.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(`OpenCode V2 model inventory is unavailable: ${diagnostics.join("; ")}`)
+}
+
 export async function resolveCategoryFromClients(clients, location, categoryName) {
   const diagnostics = []
   for (const client of clients.filter(Boolean)) {
@@ -71,30 +94,45 @@ export function availableCategoryNames() {
   return Object.keys(manifest.categories).sort()
 }
 
+function manifestLane(config, available) {
+  const configured = parseModel(config.model)
+  if (!configured) return undefined
+  const row = findAvailable(configured, available)
+  if (!row) return undefined
+  const selected = parseModel(modelKey(row))
+  return selected ? { ...selected, ...(config.variant ? { variant: config.variant } : {}) } : undefined
+}
+
 export async function resolveCategory(client, location, categoryName) {
   const name = String(categoryName ?? "").trim()
   const config = manifest.categories[name]
   if (!config) {
     throw new Error(`Unknown category: "${name}". Available categories: ${availableCategoryNames().join(", ")}`)
   }
-  const configured = parseModel(config.model)
-  if (!configured) {
-    throw new Error(`Rigel category "${name}" has no valid model configuration.`)
-  }
   const available = await listV2Models(client, location)
-  const selected = findAvailable(configured, available)
+  const chain = categoryChain(name)
+  // First reachable rung of the canonical chain, provider-scoped per rung.
+  // `sameProviderAs` is intentionally omitted: category resolution runs before
+  // V2 selects the provider, so choosing a rung on another provider is
+  // legitimate here and is not the post-selection misroute the HTTP hook
+  // guards against. A category with no canonical chain falls back to its
+  // manifest lane.
+  const selected = Array.isArray(chain) && chain.length > 0
+    ? resolveFallbackModel({ chain, availableModels: available })
+    : manifestLane(config, available)
   if (!selected) {
     const visible = available.map(modelKey).filter(Boolean).sort()
-    throw new Error(`Category "${name}" requires ${config.model}, which is not available in this OpenCode V2 location. Available models: ${visible.join(", ")}`)
+    const required = Array.isArray(chain) && chain.length > 0
+      ? chain.map((entry) => entry.model).join(", ")
+      : config.model
+    throw new Error(`Category "${name}" requires one of its canonical fallback models (${required}), none of which is available in this OpenCode V2 location. Available models: ${visible.join(", ")}`)
   }
-  const selectedKey = modelKey(selected)
-  const selectedModel = parseModel(selectedKey)
   return {
     name,
     description: manifest.descriptions[name],
     callerGuidance: manifest.guidance[name],
     promptAppend: manifest.prompts[name] ?? "",
-    model: { ...selectedModel, ...(config.variant ? { variant: config.variant } : {}) },
+    model: selected,
     configuredModel: config.model,
   }
 }

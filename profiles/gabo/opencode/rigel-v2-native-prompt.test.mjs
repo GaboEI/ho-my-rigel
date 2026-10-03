@@ -109,3 +109,252 @@ test("default Ultrawork activates for roots and never leaks into children", asyn
   await childHook(child)
   expect((await child.request.clone().json()).messages).toEqual([{ role: "user", content: "child work" }])
 })
+
+test("resolves a fallback model at the request boundary when the primary is unavailable", async () => {
+  const seen = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async (input) => {
+      seen.push(input)
+      return { providerID: "openai", id: "fallback-model" }
+    },
+  })
+  const input = {
+    sessionID: "ses_root",
+    agent: "Sisyphus - ultraworker",
+    model: { providerID: "openai", modelID: "primary-model" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.model).toBe("fallback-model")
+  expect(seen).toEqual([{ sessionID: "ses_root", agent: "Sisyphus - ultraworker", model: "primary-model", sameProviderAs: "openai" }])
+  expect(body.messages.some((message) => message.content?.includes("<rigel-native-delegation-roster>"))).toBe(true)
+})
+
+test("keeps the payload model when the resolver returns the current model", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async () => ({ providerID: "openai", id: "primary-model" }),
+  })
+  const input = {
+    sessionID: "ses_root",
+    model: { providerID: "openai", modelID: "primary-model" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).model).toBe("primary-model")
+})
+
+test("applies model fallback to a child session without injecting the roster", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    isRootSession: async () => false,
+    resolveModel: async () => ({ providerID: "openai", id: "child-fallback" }),
+  })
+  const input = {
+    sessionID: "ses_child",
+    agent: "explore",
+    model: { providerID: "openai", modelID: "primary-model" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "child work" }] }),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.model).toBe("child-fallback")
+  expect(body.messages).toEqual([{ role: "user", content: "child work" }])
+})
+
+test("leaves the payload model untouched when the active provider is unknown", async () => {
+  let calls = 0
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async () => { calls += 1; return { providerID: "openai", id: "fallback-model" } },
+  })
+  const input = {
+    sessionID: "ses_root",
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).model).toBe("primary-model")
+  expect(calls).toBe(0)
+})
+
+test("passes the V2 request provider to the resolver as sameProviderAs", async () => {
+  const seen = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async (input) => { seen.push(input); return undefined },
+  })
+  const input = {
+    sessionID: "ses_root",
+    agent: "explore",
+    model: { providerID: "openai", modelID: "primary" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  expect(seen).toEqual([{ sessionID: "ses_root", agent: "explore", model: "primary-model", sameProviderAs: "openai" }])
+})
+
+test("a resolver failure leaves the request body untouched", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async () => { throw new Error("inventory down") },
+  })
+  const input = {
+    sessionID: "ses_root",
+    model: { providerID: "openai", modelID: "primary-model" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "primary-model", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).model).toBe("primary-model")
+})
+
+// The live V2 lab sends the OpenAI Responses API shape: `input` (typed items)
+// plus a single `instructions` string, and NO `messages` array. These tests pin
+// that the hook no longer bails on the shape guard and that both the model
+// fallback and the roster injection reach that body.
+function responsesBody(overrides = {}) {
+  return {
+    model: "grok-4.7",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "research this" }] },
+    ],
+    instructions: "You are a helpful agent.",
+    tools: [],
+    store: false,
+    prompt_cache_key: "ses_root",
+    include: [],
+    max_output_tokens: 4096,
+    stream: true,
+    ...overrides,
+  }
+}
+
+test("rewrites the model for a Responses-shaped body and leaves input and instructions intact", async () => {
+  const seen = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async (input) => { seen.push(input); return { providerID: "opencode-go", id: "kimi-k3" } },
+  })
+  const original = responsesBody()
+  const input = {
+    sessionID: "ses_root",
+    agent: "explore",
+    model: { providerID: "opencode-go", modelID: "grok-4.7" },
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(original),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.model).toBe("kimi-k3")
+  expect(seen).toEqual([{ sessionID: "ses_root", agent: "explore", model: "grok-4.7", sameProviderAs: "opencode-go" }])
+  expect(body.input).toEqual(original.input)
+  expect(body.instructions).toContain("You are a helpful agent.")
+  expect(body.instructions).toContain("<rigel-native-delegation-roster>")
+  expect(body.prompt_cache_key).toBe("ses_root")
+  expect(body.max_output_tokens).toBe(4096)
+})
+
+test("keeps the Responses model when the resolver returns the current model", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    resolveModel: async () => ({ providerID: "opencode-go", id: "grok-4.7" }),
+  })
+  const input = {
+    sessionID: "ses_root",
+    model: { providerID: "opencode-go", modelID: "grok-4.7" },
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(responsesBody()),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).model).toBe("grok-4.7")
+})
+
+test("does not inject the roster into a Responses-shaped child session", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    isRootSession: async () => false,
+  })
+  const original = responsesBody()
+  const input = {
+    sessionID: "ses_child",
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(original),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.input).toEqual(original.input)
+  expect(body.instructions).toBe("You are a helpful agent.")
+})
+
+test("appends directory guidance to Responses instructions for a child session", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    isRootSession: async () => false,
+    getDirectoryInstructions: () => "<rigel-native-directory-agents>\nAGENTS rules\n<rigel-native-directory-agents>",
+  })
+  const input = {
+    sessionID: "ses_child",
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(responsesBody()),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.instructions).toContain("You are a helpful agent.")
+  expect(body.instructions).toContain("<rigel-native-directory-agents>")
+  expect(body.input).toHaveLength(1)
+})
+
+test("Responses instructions do not accumulate across repeated passes", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    ultraworkPrompt: "<ultrawork-mode>ULTRAWORK MODE ENABLED!</ultrawork-mode>",
+  })
+  const input = {
+    sessionID: "ses_root",
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(responsesBody({ input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "ulw investigate" }] }] })),
+    }),
+  }
+  await hook(input)
+  const first = (await input.request.clone().json()).instructions
+  expect(first).toContain("ULTRAWORK MODE ENABLED!")
+  expect(first).toContain("<rigel-native-delegation-roster>")
+
+  input.request = new Request("https://example.invalid/responses", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(responsesBody({ instructions: first, input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] }] })),
+  })
+  await hook(input)
+  const second = (await input.request.clone().json()).instructions
+  expect((second.match(/ULTRAWORK MODE ENABLED!/g) ?? [])).toHaveLength(1)
+  expect((second.match(/<rigel-native-delegation-roster>/g) ?? [])).toHaveLength(2)
+  expect(second).toContain("You are a helpful agent.")
+})

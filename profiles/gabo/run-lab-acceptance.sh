@@ -114,7 +114,11 @@ after_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>
 
 [ "$before_config_hash" = "$after_config_hash" ] && pass "V1 config hash unchanged" || bad "V1 config hash changed"
 [ "$before_counts" = "$after_counts" ] && pass "V1 root file counts unchanged" || bad "V1 root file counts changed"
-{ [ "$after_version" = "1" ] && [ "$before_version" = "$after_version" ]; } && pass "V1 goal schema still version 1" || bad "V1 goal schema changed"
+# The protection property requires both snapshots to be version 1 and equal.
+# Equality alone would falsely accept an invariant schema 2 after the incident.
+{ [ "$before_version" = "1" ] && [ "$after_version" = "1" ] && [ "$before_version" = "$after_version" ]; } \
+  && pass "V1 goal schema still version 1 (unchanged)" \
+  || bad "V1 goal schema is not version 1 or changed ($before_version -> $after_version)"
 [ "$before_goals" = "$after_goals" ] && pass "V1 goal count unchanged" || bad "V1 goal count changed"
 
 {

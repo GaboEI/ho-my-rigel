@@ -1,9 +1,10 @@
-import { isDirectoryInstructionMessage } from "./rigel-v2-directory-instructions.mjs"
+import { DIRECTORY_AGENTS_MARKER, isDirectoryInstructionMessage } from "./rigel-v2-directory-instructions.mjs"
 
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
 const ULTRAWORK_MARKER = "<ultrawork-mode>"
 const ULTRAWORK_KEYWORD = /\b(?:ultraworker|ultrawork|ulw)\b/i
+const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, DIRECTORY_AGENTS_MARKER]
 
 function safeSingleLine(value, limit = 120) {
   // Agent names come from user configuration. Keep their visible value useful
@@ -64,15 +65,67 @@ function isUltraworkMessage(message) {
 }
 
 /**
+ * Detect the ultrawork keyword in the Responses API body. User text lives in
+ * `body.input`: either a bare string, or `{type:"message", role:"user",
+ * content:[{type:"input_text", text}]}` items produced by the V2 request
+ * builder. Mirrors hasUltraworkKeyword for the Chat Completions shape.
+ */
+function responsesHasUltraworkKeyword(body) {
+  if (typeof body?.input === "string") return ULTRAWORK_KEYWORD.test(body.input)
+  if (!Array.isArray(body?.input)) return false
+  return body.input.some((item) => {
+    if (item?.type !== "message" || item?.role !== "user") return false
+    const content = item.content
+    if (typeof content === "string") return ULTRAWORK_KEYWORD.test(content)
+    if (!Array.isArray(content)) return false
+    return content.some((part) => typeof part?.text === "string" && ULTRAWORK_KEYWORD.test(part.text))
+  })
+}
+
+/**
+ * Responses bodies carry one `instructions` string instead of discrete system
+ * messages. Drop any block this hook appended on a prior pass (identifiable by
+ * its sentinel marker) so a repeated pass rebuilds rather than accumulates.
+ */
+function stripInjectedInstructions(instructions) {
+  let cut = instructions.length
+  for (const marker of INJECTION_MARKERS) {
+    const index = instructions.indexOf(marker)
+    if (index >= 0 && index < cut) cut = index
+  }
+  return instructions.slice(0, cut).replace(/\s+$/, "")
+}
+
+/** Append hook injections to the Responses `instructions` string in place. */
+function mergeInstructions(instructions, injections) {
+  const base = typeof instructions === "string" && instructions.trim()
+    ? stripInjectedInstructions(instructions)
+    : ""
+  const appended = injections.filter(Boolean).join("\n\n")
+  if (!appended) return base || undefined
+  return base ? `${base}\n\n${appended}` : appended
+}
+
+/**
  * V2.0.22 exposes prompt/context hooks, but their mutations do not reach the
- * provider. The HTTP request hook does. Keep roster injection here, at that
- * verified boundary, so every provider request reads the live inventory.
+ * provider. The HTTP request hook does. Keep roster injection and model
+ * fallback here, at that verified boundary, so every provider request reads the
+ * live inventory and the active fallback state.
+ *
+ * `resolveModel` is an optional async callback
+ * `({ sessionID, agent, model, sameProviderAs })` returning a model ref
+ * (`{ id }` at minimum) or undefined. `sameProviderAs` is the provider V2
+ * already selected, derived from `input.model`; the resolver must only return a
+ * model on that provider. The callback runs for every session, before the
+ * root/child guard, so a delegated child whose primary model is unavailable
+ * also falls back.
  */
 export function createNativeRequestHook({
   getDelegationRoster,
   categories = [],
   isRootSession = async () => true,
   onDelegationRoster,
+  resolveModel,
   ultraworkPrompt = "",
   defaultUltrawork = false,
   getDirectoryInstructions,
@@ -88,8 +141,38 @@ export function createNativeRequestHook({
     // V2.0.x, so session/agent ownership below is the authoritative guard.
     let body
     try { body = await input.request.clone().json() } catch { return }
-    if (!Array.isArray(body?.messages)) return
+    // Two provider body shapes reach this boundary. Chat Completions carries
+    // `messages` (array of {role, content}); the OpenAI Responses API carries
+    // `input` (array of typed items) plus a single `instructions` string. The
+    // live V2 lab sends the Responses shape, so a `messages`-only guard would
+    // silently disable both the roster injection and the model fallback.
+    const isChatShape = Array.isArray(body?.messages)
+    const isResponsesShape = !isChatShape && Array.isArray(body?.input)
+    if (!isChatShape && !isResponsesShape) return
     const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
+    // Proactive model fallback runs before the root/child guard. The payload
+    // `model` is a bare id (no provider prefix) at this boundary, while
+    // `input.model` is the V2 ref that names the provider V2 already selected.
+    // Pass that provider so the resolver can only return a rung on the same
+    // provider: rewriting `body.model` across providers would send the id down
+    // the already-selected route (a misroute, not a fallback). When the active
+    // provider is unknown, skip the walk entirely and leave `body.model` alone.
+    const activeProviderID = typeof input.model?.providerID === "string" && input.model.providerID
+      ? input.model.providerID
+      : (typeof input.model?.provider === "string" && input.model.provider ? input.model.provider : undefined)
+    if (typeof resolveModel === "function" && activeProviderID && typeof body.model === "string" && body.model.trim()) {
+      let resolved
+      try {
+        resolved = await resolveModel({ sessionID, agent: input.agent, model: body.model, sameProviderAs: activeProviderID })
+      } catch (error) {
+        resolved = undefined
+        console.error(`[ho-my-rigel] Native V2 model resolution failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      if (resolved && typeof resolved.id === "string" && resolved.id && resolved.id !== body.model) {
+        body.model = resolved.id
+        input.request = new Request(input.request, { body: JSON.stringify(body) })
+      }
+    }
     const directoryGuidance = sessionID && typeof getDirectoryInstructions === "function"
       ? getDirectoryInstructions(sessionID)
       : ""
@@ -104,29 +187,42 @@ export function createNativeRequestHook({
     const isRoot = await isRootSession(input, agents)
     if (!isRoot && !directoryGuidance) return
     if (!isRoot) {
-      const messages = body.messages.filter((message) => !isDirectoryInstructionMessage(message))
-      const index = messages.findIndex((message) => message?.role !== "system")
-      messages.splice(index < 0 ? messages.length : index, 0, { role: "system", content: directoryGuidance })
-      body.messages = messages
+      if (isChatShape) {
+        const messages = body.messages.filter((message) => !isDirectoryInstructionMessage(message))
+        const index = messages.findIndex((message) => message?.role !== "system")
+        messages.splice(index < 0 ? messages.length : index, 0, { role: "system", content: directoryGuidance })
+        body.messages = messages
+      } else {
+        // Responses has no discrete system messages; the directory guidance is
+        // appended to `instructions` (the system prompt) instead.
+        body.instructions = mergeInstructions(body.instructions, [directoryGuidance])
+      }
       input.request = new Request(input.request, { body: JSON.stringify(body) })
       return
     }
-    const explicitUltrawork = hasUltraworkKeyword(body.messages)
+    const explicitUltrawork = isChatShape ? hasUltraworkKeyword(body.messages) : responsesHasUltraworkKeyword(body)
     if (sessionID && (defaultUltrawork || explicitUltrawork)) ultraworkSessions.add(sessionID)
     const ultraworkActive = defaultUltrawork || explicitUltrawork || Boolean(sessionID && ultraworkSessions.has(sessionID))
     const roster = formatDelegationRoster(agents, categories)
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
-    const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
     const injections = []
-    if (initialDirectoryGuidance) injections.push({ role: "system", content: initialDirectoryGuidance })
-    if (directoryGuidance) injections.push({ role: "system", content: directoryGuidance })
-    if (ultraworkActive && ultraworkPrompt.trim()) injections.push({ role: "system", content: ultraworkPrompt })
-    if (roster) injections.push({ role: "system", content: roster })
-    if (injections.length > 0) {
-      const insertionIndex = messages.findIndex((message) => message?.role !== "system")
-      messages.splice(insertionIndex < 0 ? messages.length : insertionIndex, 0, ...injections)
+    if (initialDirectoryGuidance) injections.push(initialDirectoryGuidance)
+    if (directoryGuidance) injections.push(directoryGuidance)
+    if (ultraworkActive && ultraworkPrompt.trim()) injections.push(ultraworkPrompt)
+    if (roster) injections.push(roster)
+    if (isChatShape) {
+      const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
+      if (injections.length > 0) {
+        const insertionIndex = messages.findIndex((message) => message?.role !== "system")
+        messages.splice(insertionIndex < 0 ? messages.length : insertionIndex, 0, ...injections.map((content) => ({ role: "system", content })))
+      }
+      body.messages = messages
+    } else {
+      // Responses: the roster, ultrawork directive, and directory guidance are
+      // all system-level text, so they merge into `instructions`. `input` is
+      // left untouched.
+      body.instructions = mergeInstructions(body.instructions, injections)
     }
-    body.messages = messages
     input.request = new Request(input.request, { body: JSON.stringify(body) })
   }
 }

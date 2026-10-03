@@ -124,7 +124,7 @@ export async function delegateNamedAgent({ client, location, agent, prompt, back
     ...(model ? { model } : {}),
   })
   const sessionID = sessionIdFrom(created)
-  onChildSession?.(sessionID)
+  onChildSession?.(sessionID, { model, agent: agent.id ?? agent.name })
   await sessions.prompt({
     sessionID,
     // Plugin V2's SessionDomain takes PromptInput fields directly. The SDK
