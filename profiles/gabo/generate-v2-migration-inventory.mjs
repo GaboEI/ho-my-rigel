@@ -9,18 +9,60 @@
  *   2. The real runtime composition, derived from the composer return objects.
  * The runtime count is the authoritative one; the repository prose disagrees
  * with itself and is not used as a source.
+ *
+ * Every row also carries a migration classification (Migrar / Adaptar /
+ * Equivale a builtin V2 / Interno de build / Excluido), a rationale and a
+ * future-evidence token. Classifications are source-controlled under
+ * profiles/gabo/migration-classifications/<section>.mjs so a regeneration can
+ * never silently downgrade a row back to "pending".
  */
 import fs from "node:fs"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const srcRoot = path.join(root, "packages/omo-opencode/src")
 const hooksRoot = path.join(srcRoot, "hooks")
 const toolsRoot = path.join(srcRoot, "tools")
 const output = path.join(root, "profiles/gabo/V2_MIGRATION_INVENTORY.md")
+const classificationsDir = path.join(root, "profiles/gabo/migration-classifications")
 
 const SURFACE_DIRS = ["features", "plugin", "agents", "mcp", "config", "cli"]
+
+// The classification vocabulary. `SIN CLASIFICAR` is deliberately NOT in the
+// allowed set: the structural test fails while any row carries it.
+const ALLOWED_CLASSIFICATIONS = [
+  "Migrar",
+  "Adaptar",
+  "Equivale a builtin V2",
+  "Interno de build (sin superficie de runtime)",
+  "Excluido (unwired upstream)",
+]
+
+// ---------------------------------------------------------------------------
+// Classification data (source-controlled fragments)
+// ---------------------------------------------------------------------------
+
+// Each section maps to profiles/gabo/migration-classifications/<section>.mjs,
+// whose default export is `{ "<row>": { classification, rationale, futureEvidence } }`.
+async function loadClassifications(section) {
+  const file = path.join(classificationsDir, `${section}.mjs`)
+  if (!fs.existsSync(file)) return {}
+  const mod = await import(pathToFileURL(file).href)
+  const map = mod.default
+  if (!map || typeof map !== "object") {
+    throw new Error(`${file} must default-export a classification object`)
+  }
+  for (const [row, entry] of Object.entries(map)) {
+    if (!ALLOWED_CLASSIFICATIONS.includes(entry.classification)) {
+      throw new Error(`${section}:${row} has invalid classification "${entry.classification}"`)
+    }
+    if (!entry.rationale || !entry.futureEvidence) {
+      throw new Error(`${section}:${row} needs a non-empty rationale and futureEvidence`)
+    }
+  }
+  return map
+}
 
 // ---------------------------------------------------------------------------
 // Surfaces
@@ -177,26 +219,33 @@ const UNWIRED_UPSTREAM = new Set(["task-reminder", "ralph-loop"])
 // Ledger rows
 // ---------------------------------------------------------------------------
 
-function markdownRows(items, overrides = {}, unwired = new Set()) {
-  return items.map((item) => {
-    if (unwired.has(item)) {
-      const preserved = overrides[item]
-      const retained = preserved
-        ? ` Capacidad V2 relacionada (clasificación retenida en el generador): ${preserved.evidence}`
-        : ""
-      return `| \`${item}\` | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en \`createHooks\`). No se cuenta entre los hooks cableados.${retained} |`
-    }
-    const override = overrides[item]
-    return override
-      ? `| \`${item}\` | ${override.status} | ${override.evidence} |`
-      : `| \`${item}\` | Pendiente de clasificación V2 | - |`
-  }).join("\n")
+// Renders one classification-bearing row. Order of precedence:
+//   1. unwired upstream (excluded, never a migration target);
+//   2. an authored classification from the section fragment;
+//   3. a classification derived from an already-registered migration status;
+//   4. SIN CLASIFICAR (the structural test fails while any of these exist).
+function renderRow(item, classMap, overrides = {}, unwired = new Set()) {
+  if (unwired.has(item)) {
+    const preserved = overrides[item]
+    const retained = preserved
+      ? ` Capacidad V2 relacionada (clasificación retenida en el generador): ${preserved.evidence}`
+      : ""
+    return `| \`${item}\` | Excluido (unwired upstream) | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en \`createHooks\`). No se cuenta entre los hooks cableados.${retained} | - |`
+  }
+  const authored = classMap[item]
+  if (authored) {
+    return `| \`${item}\` | ${authored.classification} | Pendiente de ejecución | ${authored.rationale} | ${authored.futureEvidence} |`
+  }
+  const override = overrides[item]
+  if (override) {
+    const classification = override.status.startsWith("Incompatible") ? "Adaptar" : "Migrar"
+    return `| \`${item}\` | ${classification} | ${override.status} | Clasificación derivada del estado de migración ya registrado. | ${override.evidence} |`
+  }
+  return `| \`${item}\` | SIN CLASIFICAR | - | - | - |`
 }
 
-function surfaceRows(items) {
-  return items
-    .map((item) => `| \`${item}\` | Pendiente de clasificación V2 | - |`)
-    .join("\n")
+function classificationRows(items, classMap, overrides = {}, unwired = new Set()) {
+  return items.map((item) => renderRow(item, classMap, overrides, unwired)).join("\n")
 }
 
 const hooks = directoriesWithIndex(hooksRoot)
@@ -251,17 +300,36 @@ const modeOverrides = {
 const compositionRows = runtimeTiers.map((tier) =>
   `| ${tier.label} | ${tier.base} | ${tier.team} | ${tier.monitor} | ${tier.both} | ${tier.keys.map((key) => `\`${key}\``).join(", ")} |`,
 )
-const surfaceSections = SURFACE_DIRS.flatMap((name) => {
+
+const classHeaders = "| Fila | Clasificación | Estado | Rationale | Evidencia futura |\n| --- | --- | --- | --- | --- |"
+
+async function sectionRows(section, items, overrides = {}, unwired = new Set()) {
+  const classMap = await loadClassifications(section)
+  return classificationRows(items, classMap, overrides, unwired)
+}
+
+const surfaceSections = []
+for (const name of SURFACE_DIRS) {
   const items = surfaceEntries(path.join(srcRoot, name))
-  return [
+  surfaceSections.push(
     `## Superficies \`${name}/\` (${items.length})`,
     "",
-    "| Superficie | Estado | Equivalente / evidencia V2 |",
-    "| --- | --- | --- |",
-    surfaceRows(items),
+    classHeaders,
+    await sectionRows(name, items),
     "",
-  ]
-})
+  )
+}
+
+const hooksRows = await sectionRows("hooks", hooks, hookOverrides, UNWIRED_UPSTREAM)
+const toolsRows = await sectionRows("tools", tools, toolOverrides)
+const modesRows = await sectionRows("modes", modes, modeOverrides)
+
+// Aggregate the classification counts so a run can prove the ledger is closed.
+const allClassMaps = {}
+for (const section of [...SURFACE_DIRS, "hooks", "tools", "modes"]) {
+  allClassMaps[section] = await loadClassifications(section)
+}
+const authoredCount = Object.values(allClassMaps).reduce((sum, map) => sum + Object.keys(map).length, 0)
 
 const document = [
   "# Rigel: inventario de migración V1 a V2",
@@ -271,6 +339,18 @@ const document = [
   "## Regla de aceptación",
   "",
   "Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra OpenCode V2 real y evidencia de que no toca V1. Si V2 carece de API, la fila debe contener la incompatibilidad y la evidencia, no una simulación.",
+  "",
+  "## Vocabulario de clasificación",
+  "",
+  "Toda fila lleva una clasificación, un rationale y una evidencia futura (el contrato o la tarea que demostrará la equivalencia):",
+  "",
+  "- `Migrar`: se porta a la superficie nativa V2 (el enfoque V2 vive en el rationale).",
+  "- `Adaptar`: existe un muro (API V2 ausente o distinta); se adapta con un enfoque propuesto, nunca se descarta.",
+  "- `Equivale a builtin V2`: el builtin nativo de V2 cubre el comportamiento; se demuestra con una prueba de paridad.",
+  "- `Interno de build (sin superficie de runtime)`: módulo de soporte que no expone comportamiento propio; viaja con la capacidad que lo consume.",
+  "- `Excluido (unwired upstream)`: no se cablea en la composición del runtime V1 upstream; no es un objetivo de migración.",
+  "",
+  "Una fila sin clasificación se imprime como `SIN CLASIFICAR` y la prueba estructural del inventario falla mientras exista.",
   "",
   "## Resumen de superficies conocidas",
   "",
@@ -300,26 +380,23 @@ const document = [
   "",
   `## Hooks V1 (inventario de directorios, ${hooks.length})`,
   "",
-  "| Hook V1 | Estado | Equivalente / evidencia V2 |",
-  "| --- | --- | --- |",
-  markdownRows(hooks, hookOverrides, UNWIRED_UPSTREAM),
+  classHeaders,
+  hooksRows,
   "",
   `## Herramientas V1 (${tools.length})`,
   "",
-  "| Herramienta V1 | Estado | Equivalente / evidencia V2 |",
-  "| --- | --- | --- |",
-  markdownRows(tools, toolOverrides),
+  classHeaders,
+  toolsRows,
   "",
   ...surfaceSections,
   "## Modos y flujos transversales",
   "",
-  "| Modo / flujo | Estado | Equivalente / evidencia V2 |",
-  "| --- | --- | --- |",
-  markdownRows(modes, modeOverrides),
+  classHeaders,
+  modesRows,
   "",
   "## Criterio de cierre",
   "",
-  "Solo puede declararse la migración terminada cuando no existan filas sin clasificación, todas las filas estén marcadas como `Migrado` o `Incompatible (con evidencia)`, y las pruebas V2 correspondientes pasen en el laboratorio aislado.",
+  "Solo puede declararse la migración terminada cuando no existan filas `SIN CLASIFICAR`, todas las filas tengan clasificación, rationale y evidencia futura, y las pruebas V2 correspondientes pasen en el laboratorio aislado.",
   "",
 ].join("\n")
 
@@ -329,6 +406,10 @@ process.stdout.write(JSON.stringify({
   hooks: hooks.length,
   tools: tools.length,
   modes: modes.length,
+  classifications: {
+    authored: authoredCount,
+    allowed: ALLOWED_CLASSIFICATIONS,
+  },
   runtime: {
     unit: "composer-slot",
     countsConfigGatedSlots: true,

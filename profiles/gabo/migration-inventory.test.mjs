@@ -1,0 +1,116 @@
+import { describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
+import { execFileSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const root = path.resolve(here, "../..")
+const ledgerPath = path.join(here, "V2_MIGRATION_INVENTORY.md")
+const generatorPath = path.join(here, "generate-v2-migration-inventory.mjs")
+
+const ALLOWED = new Set([
+  "Migrar",
+  "Adaptar",
+  "Equivale a builtin V2",
+  "Interno de build (sin superficie de runtime)",
+  "Excluido (unwired upstream)",
+])
+
+// Row shape: | `name` | classification | status | rationale | future evidence |
+// The rationale is greedy so a stray " | " inside it does not split the row.
+const ROW = /^\| `([^`]+)` \| ([^|]+?) \| ([^|]+?) \| (.+) \| (.+) \|$/
+
+function readLedger() {
+  return fs.readFileSync(ledgerPath, "utf8")
+}
+
+function parseRows(markdown) {
+  const rows = []
+  for (const line of markdown.split("\n")) {
+    const match = line.match(ROW)
+    if (!match) continue
+    rows.push({
+      name: match[1],
+      classification: match[2].trim(),
+      status: match[3].trim(),
+      rationale: match[4].trim(),
+      futureEvidence: match[5].trim(),
+    })
+  }
+  return rows
+}
+
+function sha256(text) {
+  return createHash("sha256").update(text).digest("hex")
+}
+
+describe("migration inventory ledger", () => {
+  const markdown = readLedger()
+  const rows = parseRows(markdown)
+
+  describe("#given the generated ledger", () => {
+    test("#then it classifies at least every V1 surface", () => {
+      expect(rows.length).toBeGreaterThanOrEqual(198)
+    })
+
+    test("#then no row is left unclassified", () => {
+      const pending = rows.filter((row) => row.classification === "SIN CLASIFICAR")
+      expect(pending.map((row) => row.name)).toEqual([])
+      expect(markdown.includes("SIN CLASIFICAR")).toBe(true)
+    })
+
+    test("#then no legacy pending sentinel survives", () => {
+      const legacy = rows.filter((row) => row.classification.includes("Pendiente de clasificación"))
+      expect(legacy.map((row) => row.name)).toEqual([])
+    })
+
+    test("#then every classification is in the allowed vocabulary", () => {
+      const invalid = rows
+        .filter((row) => !ALLOWED.has(row.classification))
+        .map((row) => `${row.name}: ${row.classification}`)
+      expect(invalid).toEqual([])
+    })
+
+    test("#then every row carries a rationale and a future-evidence entry", () => {
+      const incomplete = rows
+        .filter((row) => row.rationale.length === 0 || row.rationale === "-" || row.futureEvidence.length === 0)
+        .map((row) => row.name)
+      expect(incomplete).toEqual([])
+    })
+
+    test("#then no machine-local personal path leaks into the ledger", () => {
+      expect(/\/home\/gabodev/.test(markdown)).toBe(false)
+    })
+
+    test("#then no em dash or en dash is present", () => {
+      expect(/[\u2014\u2013]/.test(markdown)).toBe(false)
+    })
+  })
+
+  describe("#when the generator runs twice", () => {
+    test("#then it is idempotent and does not downgrade classifications", () => {
+      const before = readLedger()
+      execFileSync("node", [generatorPath], { cwd: root, stdio: "pipe" })
+      const first = readLedger()
+      execFileSync("node", [generatorPath], { cwd: root, stdio: "pipe" })
+      const second = readLedger()
+      expect(sha256(first)).toBe(sha256(second))
+      // Regeneration must preserve every classification already present.
+      // Rows are compared by position: the generator emits them in a stable
+      // order, and a row name is not unique across sections (for example
+      // `monitor` and `atlas` appear in more than one section).
+      const beforeRows = parseRows(before)
+      const afterRows = parseRows(second)
+      expect(afterRows.length).toBe(beforeRows.length)
+      beforeRows.forEach((row, index) => {
+        const after = afterRows[index]
+        expect(after.name).toBe(row.name)
+        if (row.classification !== "SIN CLASIFICAR") {
+          expect(after.classification).toBe(row.classification)
+        }
+      })
+    })
+  })
+})

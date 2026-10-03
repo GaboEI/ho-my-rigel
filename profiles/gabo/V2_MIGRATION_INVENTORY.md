@@ -6,6 +6,18 @@
 
 Cada capacidad necesita: equivalente V2 identificado, prueba aislada contra OpenCode V2 real y evidencia de que no toca V1. Si V2 carece de API, la fila debe contener la incompatibilidad y la evidencia, no una simulación.
 
+## Vocabulario de clasificación
+
+Toda fila lleva una clasificación, un rationale y una evidencia futura (el contrato o la tarea que demostrará la equivalencia):
+
+- `Migrar`: se porta a la superficie nativa V2 (el enfoque V2 vive en el rationale).
+- `Adaptar`: existe un muro (API V2 ausente o distinta); se adapta con un enfoque propuesto, nunca se descarta.
+- `Equivale a builtin V2`: el builtin nativo de V2 cubre el comportamiento; se demuestra con una prueba de paridad.
+- `Interno de build (sin superficie de runtime)`: módulo de soporte que no expone comportamiento propio; viaja con la capacidad que lo consume.
+- `Excluido (unwired upstream)`: no se cablea en la composición del runtime V1 upstream; no es un objetivo de migración.
+
+Una fila sin clasificación se imprime como `SIN CLASIFICAR` y la prueba estructural del inventario falla mientras exista.
+
 ## Resumen de superficies conocidas
 
 | Superficie | Estado | Alcance actual | Evidencia |
@@ -43,269 +55,269 @@ Hooks no cableados upstream, excluidos del recuento cableado: `ralph-loop`, `tas
 
 ## Hooks V1 (inventario de directorios, 54)
 
-| Hook V1 | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `agent-usage-reminder` | Migrado parcialmente | El hook nativo V2 decora el mismo resultado de búsqueda para agentes orquestadores y se detiene tras `rigel_task`; falta la persistencia V1 tras reinicio. La mutabilidad real de `tool.execute.after` fue comprobada de forma aislada. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
-| `anthropic-context-window-limit-recovery` | Pendiente de clasificación V2 | - |
-| `ast-grep-sg-provision` | Pendiente de clasificación V2 | - |
-| `atlas` | Pendiente de clasificación V2 | - |
-| `auto-slash-command` | Pendiente de clasificación V2 | - |
-| `auto-update-checker` | Pendiente de clasificación V2 | - |
-| `background-notification` | Migrado parcialmente | Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
-| `category-skill-reminder` | Pendiente de clasificación V2 | - |
-| `claude-code-hooks` | Pendiente de clasificación V2 | - |
-| `comment-checker` | Pendiente de clasificación V2 | - |
-| `compaction-context-injector` | Incompatible (con evidencia) | V2.0.22 invoca `session.hook("compaction")`, pero las mutaciones de `event.system` no llegan a la petición real del proveedor que genera el resumen. No se usa `result`, pues reemplazaría el resumen nativo. `qa-v2-compaction-hook-contract.mjs` |
-| `compaction-todo-preserver` | Incompatible (con evidencia) | La superficie V2 real de `context.session` no expone `todo`, y el catálogo de herramientas del turno V2 no contiene `todowrite`; por tanto no existe lectura ni escritura nativa de todos que permita preservar la lista V1. `qa-v2-compaction-hook-contract.mjs` |
-| `delegate-task-retry` | Pendiente de clasificación V2 | - |
-| `directory-agents-injector` | Migrado parcialmente | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
-| `directory-readme-injector` | Migrado parcialmente | El mismo hook V2 conserva los `README.md` aplicables a una lectura y los inyecta como contexto en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
-| `edit-error-recovery` | Migrado parcialmente | El reemplazo V2 detecta los tres errores de Edit V1 y anexa la misma instrucción de recuperación al resultado de herramienta mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un fallo real del editor V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
-| `fsync-skip-warning` | Pendiente de clasificación V2 | - |
-| `goal` | Pendiente de clasificación V2 | - |
-| `hashline-read-enhancer` | Pendiente de clasificación V2 | - |
-| `hephaestus-agents-md-injector` | Migrado parcialmente | Para cualquier manifiesto V2 que incluya Hephaestus, la petición inicial recibe el `AGENTS.md` raíz; contrato aislado V2 comprobado. El perfil de laboratorio de Gabo lo excluye de forma explícita, por lo que no es una capacidad visible allí. `rigel-v2-native.mjs`; `qa-v2-agents-md-contract.mjs`; `v2-agent-selection.json` |
-| `interactive-bash-session` | Pendiente de clasificación V2 | - |
-| `json-error-recovery` | Migrado parcialmente | El reemplazo V2 conserva patrones, exclusiones y deduplicación de la instrucción V1 sobre el resultado mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un error JSON real del host V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
-| `keyword-detector` | Migrado parcialmente | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
-| `legacy-plugin-toast` | Pendiente de clasificación V2 | - |
-| `model-fallback` | Pendiente de clasificación V2 | - |
-| `monitor-status-injector` | Pendiente de clasificación V2 | - |
-| `native-edition-nudge` | Pendiente de clasificación V2 | - |
-| `no-hephaestus-non-gpt` | Pendiente de clasificación V2 | - |
-| `no-sisyphus-gpt` | Pendiente de clasificación V2 | - |
-| `non-interactive-env` | Migrado | El guard nativo V2 antepone el entorno no interactivo a Git en `tool.execute.before` con prefijos por tipo de shell (unix/csh/powershell/cmd, detección de Windows igual que V1 #3607). Un comando interactivo baneado produce la misma advertencia observable de V1 en el output del shell en vez de colgar la sesión (V2 no permite adjuntar un mensaje en `execute.before`). Un servidor V2 aislado probó la reescritura de `git` y la advertencia del comando baneado. `rigel-v2-native-noninteractive.mjs`; `rigel-v2-native-noninteractive.test.mjs`; `qa-v2-noninteractive-contract.mjs` |
-| `notepad-write-guard` | Pendiente de clasificación V2 | - |
-| `plan-format-validator` | Pendiente de clasificación V2 | - |
-| `prometheus-md-only` | Pendiente de clasificación V2 | - |
-| `question-label-truncator` | Pendiente de clasificación V2 | - |
-| `ralph-loop` | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en `createHooks`). No se cuenta entre los hooks cableados. |
-| `read-image-resizer` | Pendiente de clasificación V2 | - |
-| `rules-injector` | Migrado parcialmente | El reemplazo nativo V2 descubre reglas de proyecto/globales, aplica `alwaysApply` y globs, deduplica por sesión y anexa la regla al resultado de read/edit/write. El contrato aislado demuestra reglas reales del fork tras `read`; faltan la semántica YAML/picomatch completa y el truncador dinámico V1. `rigel-v2-native-rules.mjs`; `rigel-v2-native-rules.test.mjs`; `qa-v2-native-rules-injector-contract.mjs` |
-| `runtime-fallback` | Pendiente de clasificación V2 | - |
-| `sisyphus-junior-notepad` | Pendiente de clasificación V2 | - |
-| `stop-continuation-guard` | Pendiente de clasificación V2 | - |
-| `task-reminder` | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en `createHooks`). No se cuenta entre los hooks cableados. Capacidad V2 relacionada (clasificación retenida en el generador): El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima. V2 usa `rigel_task` en vez de la familia V1 `task_*`, por lo que el texto y el mecanismo de seguimiento se adaptan a la superficie disponible. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
-| `task-resume-info` | Migrado | `rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
-| `tasks-todowrite-disabler` | Pendiente de clasificación V2 | - |
-| `team-mailbox-injector` | Pendiente de clasificación V2 | - |
-| `team-mode-status-injector` | Pendiente de clasificación V2 | - |
-| `team-tool-gating` | Pendiente de clasificación V2 | - |
-| `think-mode` | Incompatible (con evidencia) | V1 requiere mutar `chat.message.output.message.variant` por turno. En V2.0.22 la variante se selecciona antes de la frontera `http.request`; la mutación se rechaza y el proveedor no recibe cambio de variante. Las variantes fijas por agente no preservan semántica por mensaje. `qa-v2-chat-message-variant-contract.mjs` |
-| `todo-continuation-enforcer` | Incompatible (con evidencia) | La superficie V2 real no publica `session.todo` ni `todowrite`, que son requisitos de la condición de continuidad V1. `qa-v2-compaction-hook-contract.mjs` |
-| `todo-description-override` | Pendiente de clasificación V2 | - |
-| `tool-pair-validator` | Pendiente de clasificación V2 | - |
-| `ulw-execute` | Pendiente de clasificación V2 | - |
-| `unstable-agent-babysitter` | Pendiente de clasificación V2 | - |
-| `webfetch-redirect-guard` | Pendiente de clasificación V2 | - |
-| `write-existing-file-guard` | Migrado parcialmente | El guard nativo V2 bloquea escribir un archivo existente sin lectura previa del mismo sessionID, consume la autorización una vez y conserva bypass `overwrite`/`.omo`. Un contrato V2 aislado confirma que `tool.execute.before` puede cancelar la ejecución real; falta una prueba completa contra el `write` builtin de V2. `rigel-v2-native-write-guard.mjs`; `rigel-v2-native-write-guard.test.mjs`; `qa-v2-tool-before-contract.mjs` |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `agent-usage-reminder` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El hook nativo V2 decora el mismo resultado de búsqueda para agentes orquestadores y se detiene tras `rigel_task`; falta la persistencia V1 tras reinicio. La mutabilidad real de `tool.execute.after` fue comprobada de forma aislada. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
+| `anthropic-context-window-limit-recovery` | Migrar | Pendiente de ejecución | La recuperación V1 en `hooks/anthropic-context-window-limit-recovery/recovery-hook.ts` aplica truncación, resumen y deduplicación ante errores de límite de contexto; se migra suscribiéndose a los eventos de error de sesión del runtime nativo V2 y aplicando las mismas estrategias sobre el estado de la sesión. | task:18 |
+| `ast-grep-sg-provision` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | La provisión V1 en `hooks/ast-grep-sg-provision/hook.ts` asegura el binario sg que consume la skill ast-grep; en el espejo se resuelve al preparar el runtime y viaja con la entrega de skills, sin exponer comportamiento propio de agente. | task:14 |
+| `atlas` | Migrar | Pendiente de ejecución | El orquestador V1 en `hooks/atlas/atlas-hook.ts` gobierna las sesiones boulder y background; se migra al runtime nativo V2 con suscripción a los eventos de sesión y guardas en tool.execute.before/after para la continuación y el auto-commit. | task:20 |
+| `auto-slash-command` | Migrar | Pendiente de ejecución | El ejecutor V1 en `hooks/auto-slash-command/hook.ts` detecta y ejecuta comandos embebidos en el mensaje del usuario; se migra al modelo de comandos nativo de V2 con despacho desde el runtime, cubriendo los comandos de skill y de plugin. | task:14 |
+| `auto-update-checker` | Migrar | Pendiente de ejecución | El chequeo V1 en `hooks/auto-update-checker/hook.ts` concentra los avisos de versión, configuración y proveedores en el arranque; se migra al init del runtime nativo V2 reproduciendo los toasts y el diagnóstico de inicio. | task:20 |
+| `background-notification` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Suscripción V2 a eventos terminales y reanudación del padre; faltan cola, reintento y deduplicación del manager V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
+| `category-skill-reminder` | Migrar | Pendiente de ejecución | El recordatorio V1 en `hooks/category-skill-reminder/hook.ts` sugiere cargar skills antes de invocar una categoría; se migra al runtime nativo V2 inyectando el recordatorio en la frontera http.request del orquestador. | task:19 |
+| `claude-code-hooks` | Migrar | Pendiente de ejecución | El despachador V1 en `hooks/claude-code-hooks/claude-code-hooks-hook.ts` ejecuta hooks configurados de Claude Code en mensajes, tools y compactación; se migra reutilizando claude-code-compat-core y suscribiéndose a los eventos equivalentes del runtime nativo V2. | task:20 |
+| `comment-checker` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/comment-checker/hook.ts` invoca el binario y respeta la anotación @allow y la desactivación por archivo; se migra al runtime nativo V2 desde tool.execute.after con la misma invocación al binario. | task:18 |
+| `compaction-context-injector` | Adaptar | Incompatible (con evidencia) | Clasificación derivada del estado de migración ya registrado. | V2.0.22 invoca `session.hook("compaction")`, pero las mutaciones de `event.system` no llegan a la petición real del proveedor que genera el resumen. No se usa `result`, pues reemplazaría el resumen nativo. `qa-v2-compaction-hook-contract.mjs` |
+| `compaction-todo-preserver` | Adaptar | Incompatible (con evidencia) | Clasificación derivada del estado de migración ya registrado. | La superficie V2 real de `context.session` no expone `todo`, y el catálogo de herramientas del turno V2 no contiene `todowrite`; por tanto no existe lectura ni escritura nativa de todos que permita preservar la lista V1. `qa-v2-compaction-hook-contract.mjs` |
+| `delegate-task-retry` | Migrar | Pendiente de ejecución | El reintento V1 en `hooks/delegate-task-retry/hook.ts` reintenta delegaciones fallidas sobre el resultado de la herramienta; se migra al runtime nativo V2 en tool.execute.after con los mismos patrones de fallo. | task:20 |
+| `directory-agents-injector` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Hook V2 `tool.execute.after` recuerda los `AGENTS.md` aplicables a una lectura y los inyecta en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
+| `directory-readme-injector` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El mismo hook V2 conserva los `README.md` aplicables a una lectura y los inyecta como contexto en la siguiente petición del mismo sessionID. Servidor V2 aislado comprobado. `rigel-v2-directory-instructions.mjs`; `qa-v2-agents-md-contract.mjs` |
+| `edit-error-recovery` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El reemplazo V2 detecta los tres errores de Edit V1 y anexa la misma instrucción de recuperación al resultado de herramienta mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un fallo real del editor V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
+| `fsync-skip-warning` | Migrar | Pendiente de ejecución | El aviso V1 en `hooks/fsync-skip-warning/index.ts` advierte cuando se omite fsync en una escritura atómica; se migra al runtime nativo V2 en tool.execute.after examinando el resultado de la escritura. | task:20 |
+| `goal` | Migrar | Pendiente de ejecución | El objetivo persistente V1 en `hooks/goal/index.ts` gobierna la continuidad por idle y el uso por sesión; se migra al runtime nativo V2 con estado por sessionID, suscripción al evento de idle y las herramientas create_goal, update_goal y get_goal bajo el gate goal.enabled. | task:16 |
+| `hashline-read-enhancer` | Adaptar | Pendiente de ejecución | El enhancer V1 en `hooks/hashline-read-enhancer/hook.ts` etiqueta cada lectura con LINE#ID; V2 no expone el mismo gancho de lectura, así que se adapta con un enhancer nativo en tool.execute.after más un equivalente de hashline_edit que valida el hash antes de escribir. | task:19 |
+| `hephaestus-agents-md-injector` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Para cualquier manifiesto V2 que incluya Hephaestus, la petición inicial recibe el `AGENTS.md` raíz; contrato aislado V2 comprobado. El perfil de laboratorio de Gabo lo excluye de forma explícita, por lo que no es una capacidad visible allí. `rigel-v2-native.mjs`; `qa-v2-agents-md-contract.mjs`; `v2-agent-selection.json` |
+| `interactive-bash-session` | Migrar | Pendiente de ejecución | La sesión V1 en `hooks/interactive-bash-session/hook.ts` gestiona el ciclo de vida tmux de interactive_bash; se migra al runtime nativo V2 cuando tmux está disponible, replicando el tracker y el estado por sesión. | task:16 |
+| `json-error-recovery` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El reemplazo V2 conserva patrones, exclusiones y deduplicación de la instrucción V1 sobre el resultado mutable. La mutabilidad se comprobó contra V2 aislado y los patrones mediante pruebas unitarias; falta provocar un error JSON real del host V2. `rigel-v2-native-recovery.mjs`; `rigel-v2-native-recovery.test.mjs`; `qa-v2-tool-after-result-contract.mjs` |
+| `keyword-detector` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Activación explícita `Ultraworker`/`ultrawork`/`ulw` y modo predeterminado, aislados de hijos, probados en V2; faltan team mode, Hyperplan, configuración de exclusión y recuperación tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
+| `legacy-plugin-toast` | Migrar | Pendiente de ejecución | El aviso V1 en `hooks/legacy-plugin-toast/hook.ts` detecta y migra un entrypoint de plugin legacy; se migra al arranque del runtime nativo V2 reutilizando el motor de migración de configuración y avisando por toast. | task:25 |
+| `model-fallback` | Migrar | Pendiente de ejecución | La cadena proactiva V1 en `hooks/model-fallback/hook.ts` reescribe el modelo en chat.params; se migra resolviendo la cadena por agente en la frontera http.request del runtime nativo V2 y reescribiendo el campo model del payload. | task:8 |
+| `monitor-status-injector` | Migrar | Pendiente de ejecución | El inyector V1 en `hooks/monitor-status-injector/hook.ts` añade el estado del monitor a los mensajes; se migra inyectando el bloque en la frontera http.request del runtime nativo V2, condicionado al gate monitor.enabled que está apagado por defecto. | gate:monitor.enabled |
+| `native-edition-nudge` | Migrar | Pendiente de ejecución | El nudge V1 en `hooks/native-edition-nudge/hook.ts` decide y muestra un aviso de una sola vez hacia la edición nativa; se migra al arranque del runtime nativo V2 con estado persistente y toast de inicio. | task:25 |
+| `no-hephaestus-non-gpt` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/no-hephaestus-non-gpt/hook.ts` restringe Hephaestus a modelos GPT; se migra con el gate de proveedor del roster V2 (requiresProvider e isHephaestusSupportedModel) al registrar el agente. | task:11 |
+| `no-sisyphus-gpt` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/no-sisyphus-gpt/hook.ts` bloquea Sisyphus en proveedores no GPT; se migra al runtime nativo V2 resolviendo el proveedor del modelo en la frontera http.request y denegando o avisando por toast. | task:8 |
+| `non-interactive-env` | Migrar | Migrado | Clasificación derivada del estado de migración ya registrado. | El guard nativo V2 antepone el entorno no interactivo a Git en `tool.execute.before` con prefijos por tipo de shell (unix/csh/powershell/cmd, detección de Windows igual que V1 #3607). Un comando interactivo baneado produce la misma advertencia observable de V1 en el output del shell en vez de colgar la sesión (V2 no permite adjuntar un mensaje en `execute.before`). Un servidor V2 aislado probó la reescritura de `git` y la advertencia del comando baneado. `rigel-v2-native-noninteractive.mjs`; `rigel-v2-native-noninteractive.test.mjs`; `qa-v2-noninteractive-contract.mjs` |
+| `notepad-write-guard` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/notepad-write-guard/index.ts` bloquea escrituras a rutas de notepad append-only; se migra al runtime nativo V2 como guard en tool.execute.before con las mismas rutas bloqueadas. | task:20 |
+| `plan-format-validator` | Migrar | Pendiente de ejecución | El validador V1 en `hooks/plan-format-validator/hook.ts` verifica el formato de checkboxes en los planes boulder; se migra al runtime nativo V2 en tool.execute.before validando Write y Edit sobre esos planes. | task:18 |
+| `prometheus-md-only` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/prometheus-md-only/hook.ts` limita a Prometheus a escribir solo archivos .md; se migra al runtime nativo V2 en tool.execute.before aplicando la misma política de rutas y el matcher de agente. | task:18 |
+| `question-label-truncator` | Migrar | Pendiente de ejecución | El truncador V1 en `hooks/question-label-truncator/hook.ts` acorta etiquetas largas de la herramienta de pregunta; se migra al runtime nativo V2 en tool.execute.before con el mismo límite. | task:20 |
+| `ralph-loop` | Excluido (unwired upstream) | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en `createHooks`). No se cuenta entre los hooks cableados. | - |
+| `read-image-resizer` | Migrar | Pendiente de ejecución | El redimensionador V1 en `hooks/read-image-resizer/hook.ts` reduce las imágenes grandes que se leen; se migra al runtime nativo V2 en tool.execute.after reescribiendo el resultado con la imagen reducida. | task:20 |
+| `rules-injector` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El reemplazo nativo V2 descubre reglas de proyecto/globales, aplica `alwaysApply` y globs, deduplica por sesión y anexa la regla al resultado de read/edit/write. El contrato aislado demuestra reglas reales del fork tras `read`; faltan la semántica YAML/picomatch completa y el truncador dinámico V1. `rigel-v2-native-rules.mjs`; `rigel-v2-native-rules.test.mjs`; `qa-v2-native-rules-injector-contract.mjs` |
+| `runtime-fallback` | Migrar | Pendiente de ejecución | El fallback reactivo V1 en `hooks/runtime-fallback/hook.ts` reacciona a los errores del proveedor; se migra al runtime nativo V2 suscribiéndose a los eventos de error de sesión y reintentando con el siguiente escalón. | task:8 |
+| `sisyphus-junior-notepad` | Migrar | Pendiente de ejecución | La inyección V1 en `hooks/sisyphus-junior-notepad/hook.ts` añade el notepad al prompt del subagente; se migra al runtime nativo V2 como contexto de delegación al crear la sesión hija. | task:20 |
+| `stop-continuation-guard` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/stop-continuation-guard/hook.ts` atiende el comando de parada y detiene la continuidad; se migra al modelo de comandos nativo de V2 con el mismo estado de parada por sessionID. | task:20 |
+| `task-reminder` | Excluido (unwired upstream) | unwired upstream | No se cablea en la composición del runtime V1 upstream (no aparece en `createHooks`). No se cuenta entre los hooks cableados. Capacidad V2 relacionada (clasificación retenida en el generador): El reemplazo nativo cuenta diez herramientas no-task por sesión y anexa el recordatorio al resultado de la décima. V2 usa `rigel_task` en vez de la familia V1 `task_*`, por lo que el texto y el mecanismo de seguimiento se adaptan a la superficie disponible. La frontera mutable V2 y la lógica de conteo están probadas. `rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`; `qa-v2-tool-after-result-contract.mjs` | - |
+| `task-resume-info` | Migrar | Migrado | Clasificación derivada del estado de migración ya registrado. | `rigel_task` devuelve `sessionID` en contenido y metadatos, acepta `task_id` y reutiliza el hijo V2 existente. Servidor V2 aislado comprobado en una segunda vuelta del padre. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
+| `tasks-todowrite-disabler` | Equivale a builtin V2 | Pendiente de ejecución | El bloqueo V1 en `hooks/tasks-todowrite-disabler/hook.ts` desactiva todowrite cuando el sistema de tareas está activo; V2 no publica todowrite, así que el comportamiento queda cubierto por el host y el sistema de tareas migrado conserva el flujo. | contract:qa-v2-compaction-hook-contract.mjs |
+| `team-mailbox-injector` | Migrar | Pendiente de ejecución | El inyector V1 en `hooks/team-mailbox-injector/hook.ts` incorpora los mensajes pendientes del buzón del equipo; se migra al runtime nativo V2 leyendo el buzón por sessionID e inyectando los mensajes en la frontera http.request bajo el gate team_mode.enabled. | gate:team_mode.enabled |
+| `team-mode-status-injector` | Migrar | Pendiente de ejecución | El inyector V1 en `hooks/team-mode-status-injector/hook.ts` publica el bloque de estado del equipo en los mensajes; se migra inyectándolo en la frontera http.request del runtime nativo V2 bajo el gate team_mode.enabled. | gate:team_mode.enabled |
+| `team-tool-gating` | Migrar | Pendiente de ejecución | El gate V1 en `hooks/team-tool-gating/hook.ts` restringe las herramientas de equipo según el rol del miembro; team mode se migra completo, así que se porta al runtime nativo V2 como guard en tool.execute.before bajo el gate team_mode.enabled. | gate:team_mode.enabled |
+| `think-mode` | Adaptar | Incompatible (con evidencia) | Clasificación derivada del estado de migración ya registrado. | V1 requiere mutar `chat.message.output.message.variant` por turno. En V2.0.22 la variante se selecciona antes de la frontera `http.request`; la mutación se rechaza y el proveedor no recibe cambio de variante. Las variantes fijas por agente no preservan semántica por mensaje. `qa-v2-chat-message-variant-contract.mjs` |
+| `todo-continuation-enforcer` | Adaptar | Incompatible (con evidencia) | Clasificación derivada del estado de migración ya registrado. | La superficie V2 real no publica `session.todo` ni `todowrite`, que son requisitos de la condición de continuidad V1. `qa-v2-compaction-hook-contract.mjs` |
+| `todo-description-override` | Migrar | Pendiente de ejecución | El override V1 en `hooks/todo-description-override/hook.ts` reescribe descripciones de todos; se migra al runtime nativo V2 sobre el registro de todos por sessionID en tool.execute.before y after. | task:20 |
+| `tool-pair-validator` | Migrar | Pendiente de ejecución | El validador V1 en `hooks/tool-pair-validator/hook.ts` repara pares de llamada y resultado de herramienta desemparejados; se migra en la frontera http.request del runtime nativo V2, reparando los mensajes antes de enviarlos al proveedor. | task:20 |
+| `ulw-execute` | Migrar | Pendiente de ejecución | El comando V1 en `hooks/ulw-execute/ulw-execute-hook.ts` arranca una sesión de trabajo de Atlas con contexto de boulder y worktree; se migra al modelo de comandos nativo de V2 y al contexto de sesión del runtime. | task:20 |
+| `unstable-agent-babysitter` | Migrar | Pendiente de ejecución | El vigilante V1 en `hooks/unstable-agent-babysitter/unstable-agent-babysitter-hook.ts` analiza mensajes de subagentes inestables y añade un recordatorio; se migra al runtime nativo V2 suscribiéndose al idle de sesión y transformando los mensajes. | task:20 |
+| `webfetch-redirect-guard` | Migrar | Pendiente de ejecución | El guard V1 en `hooks/webfetch-redirect-guard/hook.ts` resuelve y controla las redirecciones de webfetch; se migra al runtime nativo V2 en tool.execute.before con la misma resolución de redirección. | task:18 |
+| `write-existing-file-guard` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | El guard nativo V2 bloquea escribir un archivo existente sin lectura previa del mismo sessionID, consume la autorización una vez y conserva bypass `overwrite`/`.omo`. Un contrato V2 aislado confirma que `tool.execute.before` puede cancelar la ejecución real; falta una prueba completa contra el `write` builtin de V2. `rigel-v2-native-write-guard.mjs`; `rigel-v2-native-write-guard.test.mjs`; `qa-v2-tool-before-contract.mjs` |
 
 ## Herramientas V1 (14)
 
-| Herramienta V1 | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `background-task` | Migrado parcialmente | Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
-| `call-omo-agent` | Pendiente de clasificación V2 | - |
-| `delegate-task` | Pendiente de clasificación V2 | - |
-| `glob` | Pendiente de clasificación V2 | - |
-| `grep` | Pendiente de clasificación V2 | - |
-| `hashline-edit` | Pendiente de clasificación V2 | - |
-| `interactive-bash` | Pendiente de clasificación V2 | - |
-| `look-at` | Pendiente de clasificación V2 | - |
-| `monitor` | Pendiente de clasificación V2 | - |
-| `session-manager` | Pendiente de clasificación V2 | - |
-| `skill` | Pendiente de clasificación V2 | - |
-| `skill-mcp` | Pendiente de clasificación V2 | - |
-| `slashcommand` | Pendiente de clasificación V2 | - |
-| `task` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `background-task` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Spawn y resultado en background verificados en laboratorio V2; faltan límites, cancelación y persistencia de V1. `rigel-v2-native-core.mjs`; `qa-v2-native-delegation.mjs` |
+| `call-omo-agent` | Adaptar | Pendiente de ejecución | La delegación nombrada V1 (`tools/call-omo-agent/tools.ts`) se adapta a la superficie nativa `rigel_task` de V2, que resuelve agentes por inventario y crea sesiones hijas con `session.create`/`session.prompt` en `rigel-v2-native-core.mjs`. | task:14 |
+| `delegate-task` | Adaptar | Pendiente de ejecución | El enrutado por categoría y subagente de `tools/delegate-task/tools.ts` se adapta al `rigel_task` nativo, que resuelve categorías y agentes llamables y delega con modelo por categoría en `rigel-v2-native.mjs`. | task:17 |
+| `glob` | Equivale a builtin V2 | Pendiente de ejecución | El builtin `glob` de V2 cubre la búsqueda por patrón de `tools/glob/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo. | contract:qa-v2-builtin-parity.mjs |
+| `grep` | Equivale a builtin V2 | Pendiente de ejecución | El builtin `grep` de V2 cubre la búsqueda por contenido de `tools/grep/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo. | contract:qa-v2-builtin-parity.mjs |
+| `hashline-edit` | Adaptar | Pendiente de ejecución | El editor por hashes de `tools/hashline-edit/tools.ts` se adapta al modelo de edición de V2: el read enhancer LINE#ID y un equivalente de `hashline_edit` con validación de hash sobre la superficie nativa. | task:19 |
+| `interactive-bash` | Migrar | Pendiente de ejecución | La shell interactiva por tmux de `tools/interactive-bash/tools.ts` se porta a la superficie nativa V2, condicionada a la detección de tmux disponible en el host. | task:16 |
+| `look-at` | Migrar | Pendiente de ejecución | El análisis multimodal de `tools/look-at/tools.ts` se porta a V2 con enrutado al agente multimodal-looker y el permiso runtime correspondiente. | task:15 |
+| `monitor` | Migrar | Pendiente de ejecución | La familia `monitor_start/stop/list/output` de `tools/monitor/create-monitor-tools.ts` se porta a V2, condicionada a la clave de configuración `monitor.enabled` (apagada por defecto). | gate:monitor.enabled |
+| `session-manager` | Migrar | Pendiente de ejecución | Las herramientas de sesión `session_list/read/search/info` de `tools/session-manager/tools.ts` se portan a V2 envolviendo el SDK nativo con la semántica V1 de dominio, paginación y formatos. | task:15 |
+| `skill` | Migrar | Pendiente de ejecución | La selección y carga de skills de `tools/skill/tools.ts` se porta a V2 con el descubrimiento por `SCOPE_PRIORITY` de skills-loader-core y la inyección real del cuerpo de la skill en el hijo delegado. | task:14 |
+| `skill-mcp` | Migrar | Pendiente de ejecución | El MCP embebido en skill de `tools/skill-mcp/tools.ts` se porta a V2 como tier-3 con transporte stdio y HTTP y aislamiento por sesión. | task:14 |
+| `slashcommand` | Migrar | Pendiente de ejecución | El descubrimiento de comandos de `tools/slashcommand/command-discovery.ts` se migra al modelo de comandos de V2, conservando el descubrimiento por directorios y el frontmatter. | task:14 |
+| `task` | Adaptar | Pendiente de ejecución | La familia `task_create/get/list/update` de `tools/task/` se adapta al motor de tareas nativo de V2, con los gates de configuración respetados en runtime. | task:16 |
 
 ## Superficies `features/` (24)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `background-agent` | Pendiente de clasificación V2 | - |
-| `boulder-state` | Pendiente de clasificación V2 | - |
-| `btw-side` | Pendiente de clasificación V2 | - |
-| `builtin-commands` | Pendiente de clasificación V2 | - |
-| `claude-code-agent-loader` | Pendiente de clasificación V2 | - |
-| `claude-code-command-loader` | Pendiente de clasificación V2 | - |
-| `claude-code-mcp-loader` | Pendiente de clasificación V2 | - |
-| `claude-code-session-state` | Pendiente de clasificación V2 | - |
-| `claude-tasks` | Pendiente de clasificación V2 | - |
-| `context-injector` | Pendiente de clasificación V2 | - |
-| `hook-message-injector` | Pendiente de clasificación V2 | - |
-| `mcp-oauth` | Pendiente de clasificación V2 | - |
-| `monitor` | Pendiente de clasificación V2 | - |
-| `native-edition-nudge` | Pendiente de clasificación V2 | - |
-| `opencode-runtime-skills` | Pendiente de clasificación V2 | - |
-| `opencode-skill-loader` | Pendiente de clasificación V2 | - |
-| `opengateway-provider` | Pendiente de clasificación V2 | - |
-| `run-continuation-state` | Pendiente de clasificación V2 | - |
-| `skill-mcp-manager` | Pendiente de clasificación V2 | - |
-| `task-toast-manager` | Pendiente de clasificación V2 | - |
-| `team-mode` | Pendiente de clasificación V2 | - |
-| `tmux-subagent` | Pendiente de clasificación V2 | - |
-| `tool-metadata-store` | Pendiente de clasificación V2 | - |
-| `tui-sidebar` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `background-agent` | Migrar | Pendiente de ejecución | El motor de ciclo de vida de tareas de `features/background-agent/` (cola FIFO por clave, sondeo de finalización, circuit breaker y despertar del padre con `parent-wake-notifier.ts`) se porta al runtime nativo V2 sobre eventos de sesión y un registro de tareas propio. | task:20 |
+| `boulder-state` | Migrar | Pendiente de ejecución | El estado persistente de trabajo boulder de `features/boulder-state/` sobre `packages/boulder-state/` sostiene el plan activo entre sesiones y se migra como base del enforcer de continuidad nativo de V2. | task:22 |
+| `btw-side` | Adaptar | Pendiente de ejecución | Las conversaciones laterales efímeras de `features/btw-side/` inyectan contexto del padre mediante un hook Transform que V2 no ofrece; se adapta el inyector a la frontera `http.request` reescribiendo el payload real de la petición. | contract:qa-v2-native-prompt-contract.mjs |
+| `builtin-commands` | Migrar | Pendiente de ejecución | Las plantillas de comandos de `features/builtin-commands/` (refactor, init-deep, handoff, ulw-loop) se migran al modelo de comandos de V2 conservando los mismos disparadores y cuerpos. | contract:qa-v2-builtin-commands-contract.mjs |
+| `claude-code-agent-loader` | Migrar | Pendiente de ejecución | La carga de agentes desde `.opencode/agents/` y plugins de Claude Code de `features/claude-code-agent-loader/` delega en `packages/claude-code-compat-core/`; se migra reutilizando el cargador neutral y registrando el resultado en el roster de V2. | contract:qa-v2-agent-domain.mjs |
+| `claude-code-command-loader` | Migrar | Pendiente de ejecución | La carga de comandos desde `.opencode/commands/` y plugins de Claude Code de `features/claude-code-command-loader/` sobre `packages/claude-code-compat-core/` se migra al modelo de comandos de V2 junto con builtin-commands. | contract:qa-v2-builtin-commands-contract.mjs |
+| `claude-code-mcp-loader` | Migrar | Pendiente de ejecución | El cargador MCP de tier 2 de `features/claude-code-mcp-loader/` (parseo de `.mcp.json` y expansión de `${VAR}` sobre `packages/claude-code-compat-core/`) se migra como segunda capa del sistema MCP de tres niveles de V2. | task:14 |
+| `claude-code-session-state` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El registro en memoria de sesiones de subagente de `features/claude-code-session-state/` no expone comportamiento propio; es un módulo de soporte que viaja con la superficie de delegación e inyección que lo consume. | contract:qa-v2-native-delegation.mjs |
+| `claude-tasks` | Adaptar | Pendiente de ejecución | El esquema y almacenamiento atómico de tareas de `features/claude-tasks/` se migran, pero su sincronización con la API de todos de OpenCode es un muro de V2 y se adapta con el registro persistente propio de la tarea 22. | task:22 |
+| `context-injector` | Adaptar | Pendiente de ejecución | La inyección de `AGENTS.md` y `README.md` de `features/context-injector/` apoyada en `packages/agents-md-core/` usa un hook Transform ausente en V2; se adapta a la frontera `http.request` que ya usa `rigel-v2-native-prompt.mjs`. | task:19 |
+| `hook-message-injector` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El inyector de mensajes de sistema de `features/hook-message-injector/` es un helper de soporte consumido por otros hooks y no expone comportamiento propio; viaja con los hooks que lo usan. | contract:qa-v2-hook-message-injector-contract.mjs |
+| `mcp-oauth` | Migrar | Pendiente de ejecución | El flujo OAuth 2.0 con PKCE, DCR y step-up de `features/mcp-oauth/` sobre `packages/mcp-client-core/` se migra como parte del sistema MCP de tres niveles de V2 con la misma seguridad. | task:14 |
+| `monitor` | Migrar | Pendiente de ejecución | El backend de `monitor_start/stop/list/output` de `features/monitor/` (procesos vigilados, anillo de salida, filtrado e inyección por lotes) se porta a V2 condicionado a la clave `monitor.enabled`, apagada por defecto. | gate:monitor.enabled |
+| `native-edition-nudge` | Migrar | Pendiente de ejecución | El aviso de TUI de `features/native-edition-nudge/` que ofrece instalar la edición nativa se migra con su diálogo, acciones y estado de snooze al runtime nativo V2. | contract:qa-v2-native-edition-nudge-contract.mjs |
+| `opencode-runtime-skills` | Migrar | Pendiente de ejecución | La fuente de skills de seguridad en runtime de `features/opencode-runtime-skills/`, que selecciona skills y las sirve por sesión sobre `packages/skills-loader-core/`, se migra al runtime nativo como fuente de skills de sesión. | task:14 |
+| `opencode-skill-loader` | Migrar | Pendiente de ejecución | El descubrimiento de skills de cuatro ámbitos con prioridad numérica de `features/opencode-skill-loader/` sobre `packages/skills-loader-core/` se migra para alimentar las herramientas `skill` y `skill_mcp` nativas. | task:14 |
+| `opengateway-provider` | Migrar | Pendiente de ejecución | La inyección del proveedor OpenGateway de `features/opengateway-provider/`, activada solo con credencial real y con el catálogo empaquetado, se migra al modelo de configuración de proveedores de V2. | contract:qa-v2-opengateway-provider-contract.mjs |
+| `run-continuation-state` | Migrar | Pendiente de ejecución | Los marcadores persistentes de continuación de `features/run-continuation-state/` que sostienen al subcomando `run` entre invocaciones se migran al estado de continuación del runtime nativo V2. | task:20 |
+| `skill-mcp-manager` | Migrar | Pendiente de ejecución | El ciclo de vida de MCP de tier 3 de `features/skill-mcp-manager/` sobre `packages/mcp-client-core/`, aislado por la clave `${sessionID}:${skillName}:${serverName}`, se migra para el MCP embebido en skills con transporte stdio y HTTP. | task:14 |
+| `task-toast-manager` | Migrar | Pendiente de ejecución | El gestor de notificaciones de progreso de tareas de `features/task-toast-manager/` se migra a los avisos de la TUI de V2 conservando el seguimiento de estado y la información de fallback de modelo. | contract:qa-v2-task-toast-contract.mjs |
+| `team-mode` | Migrar | Pendiente de ejecución | La coordinación multiagente paralela de `features/team-mode/` con primitivas de dominio en `packages/team-core/` se migra completa, incluidas las 12 herramientas `team_*`, el mailbox, el tasklist y su gate de configuración. | contract:qa-v2-team-mode-contract.mjs |
+| `tmux-subagent` | Migrar | Pendiente de ejecución | La orquestación de paneles tmux de `features/tmux-subagent/` sobre `packages/tmux-core/`, con seguimiento de sesiones y decisiones de panel, se migra para la visualización opcional de subagentes en V2. | task:16 |
+| `tool-metadata-store` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El almacén de metadatos de ejecución de herramientas de `features/tool-metadata-store/` no expone comportamiento propio; es un módulo de soporte que viaja con las herramientas de tarea que publican y recuperan su metadata. | contract:qa-v2-native-delegation.mjs |
+| `tui-sidebar` | Migrar | Pendiente de ejecución | La barra lateral de TUI de `features/tui-sidebar/`, que deriva roster y estado y publica un espejo para la TUI, se migra bajo la clave de configuración `tui.sidebar.enabled`. | gate:tui.sidebar.enabled |
 
 ## Superficies `plugin/` (39)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `available-categories` | Pendiente de clasificación V2 | - |
-| `build-team-idle-wake-hint-client` | Pendiente de clasificación V2 | - |
-| `chat-headers` | Pendiente de clasificación V2 | - |
-| `chat-message` | Pendiente de clasificación V2 | - |
-| `chat-params` | Pendiente de clasificación V2 | - |
-| `command-execute-before` | Pendiente de clasificación V2 | - |
-| `event` | Pendiente de clasificación V2 | - |
-| `event-error-utils` | Pendiente de clasificación V2 | - |
-| `event-hook-dispatcher` | Pendiente de clasificación V2 | - |
-| `event-model-fallback` | Pendiente de clasificación V2 | - |
-| `event-model-fallback-state` | Pendiente de clasificación V2 | - |
-| `event-session-lifecycle` | Pendiente de clasificación V2 | - |
-| `event-team-handlers` | Pendiente de clasificación V2 | - |
-| `event-types` | Pendiente de clasificación V2 | - |
-| `hooks` | Pendiente de clasificación V2 | - |
-| `messages-transform` | Pendiente de clasificación V2 | - |
-| `native-skills` | Pendiente de clasificación V2 | - |
-| `normalize-tool-arg-schemas` | Pendiente de clasificación V2 | - |
-| `recent-synthetic-idles` | Pendiente de clasificación V2 | - |
-| `runtime-skill-resolver` | Pendiente de clasificación V2 | - |
-| `session-agent-resolver` | Pendiente de clasificación V2 | - |
-| `session-compacting` | Pendiente de clasificación V2 | - |
-| `session-status-normalizer` | Pendiente de clasificación V2 | - |
-| `skill-context` | Pendiente de clasificación V2 | - |
-| `stop-continuation` | Pendiente de clasificación V2 | - |
-| `system-transform` | Pendiente de clasificación V2 | - |
-| `tool-definition` | Pendiente de clasificación V2 | - |
-| `tool-execute-after` | Pendiente de clasificación V2 | - |
-| `tool-execute-before` | Pendiente de clasificación V2 | - |
-| `tool-registry` | Pendiente de clasificación V2 | - |
-| `tool-registry-core-tools` | Pendiente de clasificación V2 | - |
-| `tool-registry-factories` | Pendiente de clasificación V2 | - |
-| `tool-registry-gated-tools` | Pendiente de clasificación V2 | - |
-| `tool-registry-team-tools` | Pendiente de clasificación V2 | - |
-| `tool-registry-trimming` | Pendiente de clasificación V2 | - |
-| `ultrawork-db-model-override` | Pendiente de clasificación V2 | - |
-| `ultrawork-model-override` | Pendiente de clasificación V2 | - |
-| `ultrawork-variant-availability` | Pendiente de clasificación V2 | - |
-| `unstable-agent-babysitter` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `available-categories` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/available-categories.ts` solo construye la lista `AvailableCategory[]` que alimenta el prompt de agentes; no expone comportamiento propio y viaja con la capacidad de categorías que lo consume. | task:17 |
+| `build-team-idle-wake-hint-client` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/build-team-idle-wake-hint-client.ts` solo acota el cliente SDK a `promptAsync`/`status`/`messages` para el handler de team mode; es soporte de construcción sin comportamiento de runtime propio. | task:16 |
+| `chat-headers` | Adaptar | Pendiente de ejecución | `plugin/chat-headers.ts` inyecta la cabecera `x-initiator` de Copilot, pero V2 no tiene mapeo verificado para `chat.headers`; se adapta en la frontera `http.request` que el runtime nativo ya usa en `rigel-v2-native.mjs`. | task:23 |
+| `chat-message` | Adaptar | Pendiente de ejecución | `plugin/chat-message.ts` resuelve la variante del primer mensaje, la sesión y la detección de keywords; V2 no expone `chat.message`, así que se adapta en la frontera `http.request` de `rigel-v2-native-prompt.mjs`. | task:20 |
+| `chat-params` | Adaptar | Pendiente de ejecución | `plugin/chat-params.ts` ajusta esfuerzo Anthropic, think mode y fallback de modelo, pero V2 no tiene mapeo verificado para `chat.params`; se adapta mutando el cuerpo real de la petición en la frontera `http.request`. | task:23 |
+| `command-execute-before` | Adaptar | Pendiente de ejecución | `plugin/command-execute-before.ts` aplica guards de comando (stop-continuation, /goal, ulw-execute), pero V2 no tiene mapeo verificado para `command.execute.before`; se adapta al modelo de comandos nativo de V2. | task:20 |
+| `event` | Adaptar | Pendiente de ejecución | `plugin/event.ts` cablea el ciclo de vida de sesión, openclaw y fallback reactivo, pero V2 no tiene mapeo verificado para `event`; se adapta a la suscripción de eventos nativa que `rigel-v2-native.mjs` ya usa para el handoff de background. | task:20 |
+| `event-error-utils` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/event-error-utils.ts` solo normaliza nombres y mensajes de error para el handler de eventos; es soporte de construcción sin superficie de runtime propia. | task:20 |
+| `event-hook-dispatcher` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/event-hook-dispatcher.ts` solo resuelve el sessionID y ejecuta los hooks de evento con aislamiento de errores; es plomería de despacho, no un handler de comportamiento. | task:20 |
+| `event-model-fallback` | Adaptar | Pendiente de ejecución | `plugin/event-model-fallback.ts` implementa el fallback reactivo sobre errores de sesión; se adapta a la suscripción de eventos nativa de V2 y a las cadenas de `model-core`, como exige la tarea de fallback. | task:8 |
+| `event-model-fallback-state` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/event-model-fallback-state.ts` solo mantiene el estado de continuación y deduplicación del fallback reactivo; es soporte de construcción que viaja con el handler de fallback. | task:8 |
+| `event-session-lifecycle` | Adaptar | Pendiente de ejecución | `plugin/event-session-lifecycle.ts` maneja created/deleted/idle/error y el estado de sesión; se adapta a los eventos nativos de V2 que el runtime nativo ya consume para el handoff de background. | task:20 |
+| `event-team-handlers` | Adaptar | Pendiente de ejecución | `plugin/event-team-handlers.ts` cablea los cuatro handlers de team mode (orphan, member error, member status, idle wake hint); se adapta a los eventos nativos de V2 porque team mode se migra completo. | task:16 |
+| `event-types` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/event-types.ts` solo declara los tipos de entrada y salida del handler de eventos; es una superficie de tipos sin comportamiento de runtime. | task:20 |
+| `hooks` | Migrar | Pendiente de ejecución | `plugin/hooks/` compone los tiers Session, ToolGuard, Transform, Continuation y Skill que el runtime nativo V2 debe reproducir; se migra completo con equivalencia demostrada por el oráculo diferencial. | task:18 |
+| `messages-transform` | Adaptar | Pendiente de ejecución | `plugin/messages-transform.ts` inyecta contexto y valida bloques de pensamiento y pares de herramientas, pero V2 no tiene mapeo verificado para `experimental.chat.messages.transform`; se adapta en la frontera `http.request`. | task:19 |
+| `native-skills` | Migrar | Pendiente de ejecución | `plugin/native-skills.ts` carga las skills nativas del host V2 y alimenta el descubrimiento perezoso de skill/delegate; se porta a la superficie nativa de skills del runtime V2. | task:14 |
+| `normalize-tool-arg-schemas` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/normalize-tool-arg-schemas.ts` solo coacciona los esquemas de argumentos de herramientas a una forma normalizada; es plomería de registro sin comportamiento de runtime propio. | task:14 |
+| `recent-synthetic-idles` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/recent-synthetic-idles.ts` solo deduplica eventos idle sintéticos recientes para el handler de eventos; es soporte de construcción sin superficie de runtime propia. | task:20 |
+| `runtime-skill-resolver` | Migrar | Pendiente de ejecución | `plugin/runtime-skill-resolver.ts` lee las skills del config fusionado en runtime para descubrir fuentes que otros plugins agregan; se porta a la superficie nativa de skills de V2. | task:14 |
+| `session-agent-resolver` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/session-agent-resolver.ts` solo resuelve qué agente posee una sesión leyendo sus mensajes; es un helper de construcción que consumen los guards de herramientas. | task:20 |
+| `session-compacting` | Adaptar | Pendiente de ejecución | `plugin/session-compacting.ts` preserva contexto y todos en la compactación, pero V2 no tiene mapeo verificado para `experimental.session.compacting`; se adapta en la frontera `http.request` del resumen. | task:21 |
+| `session-status-normalizer` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/session-status-normalizer.ts` solo normaliza `session.status` idle a `session.idle` entre versiones de OpenCode; es plomería de normalización sin comportamiento propio. | task:20 |
+| `skill-context` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/skill-context.ts` solo descubre y fusiona skills para construir el contexto compartido con la creación de herramientas; es soporte de construcción sin superficie de runtime. | task:14 |
+| `stop-continuation` | Migrar | Pendiente de ejecución | `plugin/stop-continuation.ts` detiene keyword detector, guard de continuación, enforcer de todos y goal para una sesión; se porta a la superficie nativa V2 como parte del flujo de continuidad. | task:20 |
+| `system-transform` | Adaptar | Pendiente de ejecución | `plugin/system-transform.ts` reconcilia el prompt de Sisyphus y restaura ultrawork a nivel de sistema; se adapta a la inyección de contexto en la frontera `http.request` de `rigel-v2-native-prompt.mjs`. | task:20 |
+| `tool-definition` | Adaptar | Pendiente de ejecución | `plugin/tool-definition.ts` aplica el override de descripción de todos, pero V2 no tiene mapeo verificado para `tool.definition`; se adapta al registro de herramientas nativo de V2. | task:20 |
+| `tool-execute-after` | Migrar | Pendiente de ejecución | `plugin/tool-execute-after.ts` ejecuta truncado, comment-checker, hashline read tagging y recuperación de errores; se migra al hook `execute.after` nativo que `rigel-v2-native.mjs` ya registra. | task:18 |
+| `tool-execute-before` | Migrar | Pendiente de ejecución | `plugin/tool-execute-before.ts` aplica guards previos (mcp_ strip, bloqueo de sleep, resolución de subagente, dispatch de skill); se migra al hook `execute.before` nativo que `rigel-v2-native.mjs` ya registra. | task:18 |
+| `tool-registry` | Migrar | Pendiente de ejecución | `plugin/tool-registry.ts` ensambla el registro de herramientas con sus gates de configuración; se migra al registro nativo de V2 respetando cada gate en runtime. | task:14 |
+| `tool-registry-core-tools` | Migrar | Pendiente de ejecución | `plugin/tool-registry-core-tools.ts` construye las herramientas base (grep, glob, sesión, background, task, skill); se migra al registro nativo de V2 con la semántica V1. | task:14 |
+| `tool-registry-factories` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/tool-registry-factories.ts` solo agrupa las fábricas de herramientas en un objeto inyectable; es plomería de construcción sin comportamiento de runtime propio. | task:14 |
+| `tool-registry-gated-tools` | Migrar | Pendiente de ejecución | `plugin/tool-registry-gated-tools.ts` arma las familias condicionales (task system, hashline, monitor, goal); se migra al registro nativo de V2 respetando cada gate de configuración. | task:16 |
+| `tool-registry-team-tools` | Migrar | Pendiente de ejecución | `plugin/tool-registry-team-tools.ts` arma las doce herramientas de team mode y el override de modelo de Sisyphus-Junior; se migra al registro nativo de V2 porque team mode se migra completo. | task:16 |
+| `tool-registry-trimming` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/tool-registry-trimming.ts` solo recorta el registro cuando se fija `experimental.max_tools`; es plomería de construcción sin comportamiento de runtime propio. | task:14 |
+| `ultrawork-db-model-override` | Adaptar | Pendiente de ejecución | `plugin/ultrawork-db-model-override.ts` programa un override de modelo a nivel de base de datos para ultrawork; se adapta a la mutación del cuerpo real de la petición en la frontera `http.request` de V2. | task:23 |
+| `ultrawork-model-override` | Adaptar | Pendiente de ejecución | `plugin/ultrawork-model-override.ts` detecta ultrawork y aplica el override de modelo y variante por mensaje; se adapta a la frontera `http.request` porque V2 fija la variante antes de esa frontera. | task:23 |
+| `ultrawork-variant-availability` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | `plugin/ultrawork-variant-availability.ts` solo consulta los proveedores para validar que una variante de ultrawork existe; es soporte de construcción del override de modelo. | task:23 |
+| `unstable-agent-babysitter` | Migrar | Pendiente de ejecución | `plugin/unstable-agent-babysitter.ts` rastrea agentes inestables entre sesiones y alimenta el hook de babysitter; se porta a la superficie nativa V2 junto con el manager de background. | task:20 |
 
 ## Superficies `agents/` (37)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `agent-builder` | Pendiente de clasificación V2 | - |
-| `agent-skill-resolution` | Pendiente de clasificación V2 | - |
-| `atlas` | Pendiente de clasificación V2 | - |
-| `builtin-agents` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-category-skills-guide` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-core-sections` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-policy-sections` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-prompt-builder` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-prompt-types` | Pendiente de clasificación V2 | - |
-| `dynamic-agent-tool-categorization` | Pendiente de clasificación V2 | - |
-| `env-context` | Pendiente de clasificación V2 | - |
-| `explore` | Pendiente de clasificación V2 | - |
-| `frontier-tool-schema-guard` | Pendiente de clasificación V2 | - |
-| `gpt-apply-patch-guard` | Pendiente de clasificación V2 | - |
-| `gpt-prompt-identity` | Pendiente de clasificación V2 | - |
-| `hephaestus` | Pendiente de clasificación V2 | - |
-| `kimi-tool-loop-guard` | Pendiente de clasificación V2 | - |
-| `librarian` | Pendiente de clasificación V2 | - |
-| `metis` | Pendiente de clasificación V2 | - |
-| `momus` | Pendiente de clasificación V2 | - |
-| `momus-gpt-5-6` | Pendiente de clasificación V2 | - |
-| `multimodal-looker` | Pendiente de clasificación V2 | - |
-| `oracle` | Pendiente de clasificación V2 | - |
-| `prometheus` | Pendiente de clasificación V2 | - |
-| `sisyphus` | Pendiente de clasificación V2 | - |
-| `sisyphus-agent-config` | Pendiente de clasificación V2 | - |
-| `sisyphus-agent-factory` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-builder` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-execution` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-exploration` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-role` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-sections` | Pendiente de clasificación V2 | - |
-| `sisyphus-dynamic-prompt-style` | Pendiente de clasificación V2 | - |
-| `sisyphus-gemini-fallback-overrides` | Pendiente de clasificación V2 | - |
-| `sisyphus-junior` | Pendiente de clasificación V2 | - |
-| `sisyphus-runtime-prompt-reconciler` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `agent-builder` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | agent-builder.ts compone el AgentConfig con buildAgent a partir de factories y overrides de categoria durante la generacion, y su salida queda horneada en el manifiesto V2 sin superficie de runtime propia. | contract:rigel-v2-native-agents.test.mjs |
+| `agent-skill-resolution` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | agent-skill-resolution.ts resuelve las skills declaradas por el agente e inserta su contenido en el prompt al armar la configuracion, por lo que solo actua en la generacion del manifiesto. | contract:qa-v2-native-prompt-contract.mjs |
+| `atlas` | Migrar | Pendiente de ejecución | atlas/agent.ts define el orquestador primario, sus prompts por modelo y su modo; el manifiesto nativo y rigel-v2-native-agents.mjs deben registrar su roster y su modo no delegable. | task:12 |
+| `builtin-agents` | Migrar | Pendiente de ejecución | builtin-agents/ contiene las factorias condicionales que arman el roster y aplican overrides, resolucion de modelo y permisos antes de escribir el manifiesto, incluido el gate de Hephaestus, por lo que su efecto debe reproducirse en V2. | task:13 |
+| `dynamic-agent-category-skills-guide` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-category-skills-guide.ts ensambla las secciones de guia de categorias y skills del prompt de Sisyphus en tiempo de generacion y no tiene superficie de runtime. | contract:qa-v2-native-prompt-contract.mjs |
+| `dynamic-agent-core-sections` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-core-sections.ts arma las secciones base del prompt, desde identidad hasta tablas de delegacion, durante la generacion del agente. | contract:qa-v2-native-prompt-contract.mjs |
+| `dynamic-agent-policy-sections` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-policy-sections.ts arma las secciones de politicas y bloques duros del prompt en tiempo de generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `dynamic-agent-prompt-builder` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-prompt-builder.ts es un barrel que reexporta los constructores de secciones y solo participa en el armado del prompt de generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `dynamic-agent-prompt-types` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-prompt-types.ts define los tipos de las secciones dinamicas del prompt y no aporta comportamiento de runtime. | contract:qa-v2-native-prompt-contract.mjs |
+| `dynamic-agent-tool-categorization` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | dynamic-agent-tool-categorization.ts clasifica herramientas para el prompt de generacion y no expone superficie de runtime. | contract:qa-v2-native-prompt-contract.mjs |
+| `env-context` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | env-context.ts produce el bloque de timezone y locale que se anexa al prompt al generar la configuracion, por lo que su valor queda horneado en el manifiesto. | contract:qa-v2-native-prompt-contract.mjs |
+| `explore` | Migrar | Pendiente de ejecución | explore.ts define el subagente de busqueda con sus restricciones de herramientas y metadatos; el manifiesto V2 debe incluir su definicion y su cadena de fallback. | task:8 |
+| `frontier-tool-schema-guard` | Adaptar | Pendiente de ejecución | frontier-tool-schema-guard.ts niega grep y glob para modelos frontier; en V2 debe adaptarse al vocabulario de acciones y recursos del modelo de permisos de AgentV2Info. | task:10 |
+| `gpt-apply-patch-guard` | Adaptar | Pendiente de ejecución | gpt-apply-patch-guard.ts solo aporta guias de edicion para modelos GPT; en V2 la guia se adapta a la frontera de herramientas de edicion disponible. | contract:qa-v2-native-prompt-contract.mjs |
+| `gpt-prompt-identity` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | gpt-prompt-identity.ts mapea el modelo a la identidad textual usada por los prompts de Sisyphus y Sisyphus-Junior en tiempo de generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `hephaestus` | Migrar | Pendiente de ejecución | hephaestus/agent.ts define el agente autonomo primario y su gate de modelo soportado; el roster nativo debe restaurarlo con el gate de proveedor sobre el manifiesto. | task:11 |
+| `kimi-tool-loop-guard` | Migrar | Pendiente de ejecución | kimi-tool-loop-guard.ts es una guia textual que evita llamadas repetidas; se migra como parte del prompt del agente hacia la frontera de herramientas V2. | contract:qa-v2-native-prompt-contract.mjs |
+| `librarian` | Migrar | Pendiente de ejecución | librarian.ts define el subagente de busqueda externa con sus restricciones; su definicion y su cadena de fallback deben portarse al manifiesto nativo. | task:8 |
+| `metis` | Migrar | Pendiente de ejecución | metis.ts define el consultor de pre-planificacion con prompts por modelo y restricciones; el manifiesto nativo debe portar su definicion y fallback. | task:8 |
+| `momus` | Migrar | Pendiente de ejecución | momus.ts define el revisor de planes y selecciona el prompt segun el modelo; su definicion debe portarse al manifiesto nativo. | task:8 |
+| `momus-gpt-5-6` | Migrar | Pendiente de ejecución | momus-gpt-5-6.ts es la variante de prompt GPT-5.6 consumida por momus.ts; la definicion de Momus en V2 debe conservar esa seleccion por modelo. | task:8 |
+| `multimodal-looker` | Migrar | Pendiente de ejecución | multimodal-looker.ts define el subagente de analisis de medios con allowlist de solo lectura; el modelo de permisos V2 debe reproducir su bloqueo restrictivo. | task:10 |
+| `oracle` | Migrar | Pendiente de ejecución | oracle.ts define el consultor de solo lectura con prompts por modelo y su cadena de fallback; el manifiesto nativo debe portar la definicion. | task:8 |
+| `prometheus` | Migrar | Pendiente de ejecución | prometheus/system-prompt.ts carga el prompt del planificador y su permiso; el manifiesto V2 debe registrar su modo primary y su no delegabilidad. | task:12 |
+| `sisyphus` | Migrar | Pendiente de ejecución | sisyphus-agent-factory.ts y el directorio sisyphus/ seleccionan el prompt por modelo y arman el agente orquestador principal; su definicion debe portarse al manifiesto nativo. | task:8 |
+| `sisyphus-agent-config` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-agent-config.ts construye las variantes de AgentConfig de Sisyphus por modelo en tiempo de generacion, sin superficie de runtime. | contract:rigel-v2-native-agents.test.mjs |
+| `sisyphus-agent-factory` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-agent-factory.ts enruta al prompt de Sisyphus segun el modelo y compone el AgentConfig durante la generacion del manifiesto. | contract:rigel-v2-native-agents.test.mjs |
+| `sisyphus-dynamic-prompt` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt.ts orquesta el armado dinamico del prompt de Sisyphus y aplica overrides de Gemini en tiempo de generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-builder` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-builder.ts encadena los renderizadores de secciones del prompt dinamico de Sisyphus durante la generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-execution` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-execution.ts renderiza la seccion de ejecucion y delegacion del prompt de Sisyphus durante la generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-exploration` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-exploration.ts renderiza la seccion de exploracion y busqueda paralela del prompt de Sisyphus en la generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-role` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-role.ts renderiza las secciones de rol e intent gate del prompt de Sisyphus en tiempo de generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-sections` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-sections.ts recolecta las secciones que arman el prompt de Sisyphus durante la generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-dynamic-prompt-style` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-dynamic-prompt-style.ts renderiza la seccion de tono y restricciones del prompt de Sisyphus durante la generacion. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-gemini-fallback-overrides` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | sisyphus-gemini-fallback-overrides.ts inserta overrides de Gemini en el prompt ya armado durante la generacion del agente. | contract:qa-v2-native-prompt-contract.mjs |
+| `sisyphus-junior` | Migrar | Pendiente de ejecución | sisyphus-junior/agent.ts define el ejecutor por categoria con sus defaults y prompts por modelo; el manifiesto nativo debe llevar su maxTokens y su tuning al payload V2. | task:9 |
+| `sisyphus-runtime-prompt-reconciler` | Migrar | Pendiente de ejecución | sisyphus-runtime-prompt-reconciler.ts reconstruye el prompt de Sisyphus por peticion cuando el modelo de runtime difiere del configurado y esta cableado en plugin/system-transform.ts, por lo que su comportamiento de runtime debe migrarse a la frontera de prompt V2. | task:8 |
 
 ## Superficies `mcp/` (7)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `cli-suffix` | Pendiente de clasificación V2 | - |
-| `context7` | Pendiente de clasificación V2 | - |
-| `grep-app` | Pendiente de clasificación V2 | - |
-| `lsp` | Pendiente de clasificación V2 | - |
-| `runtime-executable` | Pendiente de clasificación V2 | - |
-| `shared` | Pendiente de clasificación V2 | - |
-| `websearch` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `cli-suffix` | Migrar | Pendiente de ejecución | El helper `hasCliSuffix` de `packages/omo-opencode/src/mcp/cli-suffix.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque normaliza separadores y decide entre CLI dist y fuente. Se migra con la resolución del CLI, conservando la política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` que mantiene `lsp` disponible. | contract:qa-v2-mcp-contract.mjs |
+| `context7` | Migrar | Pendiente de ejecución | El MCP remoto tier-1 `context7` de `packages/omo-opencode/src/mcp/context7.ts` se migra como conexión externa singleton, aunque el perfil lo desactive. La política `mcpPolicy.context7` y `mcpPolicy.omoBuiltinsDisabled` de `profiles/gabo/integration-manifest.json` exige un único Context7 de OmO y su desactivación en el builtin, sin perder la capacidad. | gate:disabled_mcps |
+| `grep-app` | Migrar | Pendiente de ejecución | El MCP remoto tier-1 `grep_app` de `packages/omo-opencode/src/mcp/grep-app.ts` se migra como búsqueda de código en GitHub sin autenticación. La política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` lo mantiene disponible en el runtime nativo V2. | contract:qa-v2-mcp-contract.mjs |
+| `lsp` | Migrar | Pendiente de ejecución | El MCP local stdio tier-1 `lsp` de `packages/omo-opencode/src/mcp/lsp.ts` se migra con su resolución de CLI dist o fuente y su daemon compartido. La política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` lo conserva como builtin retenido. | contract:qa-v2-mcp-contract.mjs |
+| `runtime-executable` | Migrar | Pendiente de ejecución | El resolvedor `resolveRuntimeExecutable` de `packages/omo-opencode/src/mcp/runtime-executable.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque localiza node o bun de forma segura. Se migra con la resolución del CLI, respetando `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json`. | contract:qa-v2-mcp-contract.mjs |
+| `shared` | Migrar | Pendiente de ejecución | El resolvedor `createAncestorCliCandidates` de `packages/omo-opencode/src/mcp/shared/ancestor-cli-resolver.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque busca el CLI en directorios ancestros. Se migra con la resolución del CLI, respetando `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json`. | contract:qa-v2-mcp-contract.mjs |
+| `websearch` | Migrar | Pendiente de ejecución | El MCP remoto tier-1 `websearch` de `packages/omo-opencode/src/mcp/websearch.ts` se migra con proveedor Exa o Tavily y clave opcional. La política `mcpPolicy.websearch` de `profiles/gabo/integration-manifest.json` fija Tavily como proveedor del perfil. | gate:websearch.provider |
 
 ## Superficies `config/` (3)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `prune-plugin-view` | Pendiente de clasificación V2 | - |
-| `schema` | Pendiente de clasificación V2 | - |
-| `validate` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `prune-plugin-view` | Migrar | Pendiente de ejecución | `prunePluginView` de `packages/omo-opencode/src/config/prune-plugin-view.ts` descarta en runtime los valores inválidos de una vista con una advertencia por clave, apoyándose en `@oh-my-opencode/omo-config-core`. Se migra al cargador nativo V2 para conservar la degradación parcial, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode. | contract:qa-v2-config-contract.mjs |
+| `schema` | Migrar | Pendiente de ejecución | El esquema Zod de `packages/omo-opencode/src/config/schema/` es el contrato de claves y defaults que el runtime nativo V2 debe leer desde `omo.jsonc`. Se migra como contrato de configuración, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode. | contract:qa-v2-config-contract.mjs |
+| `validate` | Migrar | Pendiente de ejecución | `validatePluginConfig` de `packages/omo-opencode/src/config/validate.ts` carga la cadena `omo.jsonc`, fusiona vistas, protege campos de usuario y migra claves legadas en runtime. Se migra al cargador nativo V2, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode. | contract:qa-v2-config-contract.mjs |
 
 ## Superficies `cli/` (35)
 
-| Superficie | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `boulder` | Pendiente de clasificación V2 | - |
-| `cleanup` | Pendiente de clasificación V2 | - |
-| `cleanup-command` | Pendiente de clasificación V2 | - |
-| `cli-installer` | Pendiente de clasificación V2 | - |
-| `cli-program` | Pendiente de clasificación V2 | - |
-| `codex-ulw-loop` | Pendiente de clasificación V2 | - |
-| `config-manager` | Pendiente de clasificación V2 | - |
-| `config-migrate` | Pendiente de clasificación V2 | - |
-| `doctor` | Pendiente de clasificación V2 | - |
-| `fallback-chain-resolution` | Pendiente de clasificación V2 | - |
-| `fallback-lane-policy` | Pendiente de clasificación V2 | - |
-| `get-local-version` | Pendiente de clasificación V2 | - |
-| `install` | Pendiente de clasificación V2 | - |
-| `install-ast-grep-sg` | Pendiente de clasificación V2 | - |
-| `install-codex` | Pendiente de clasificación V2 | - |
-| `install-native` | Pendiente de clasificación V2 | - |
-| `install-native-dev` | Pendiente de clasificación V2 | - |
-| `install-validators` | Pendiente de clasificación V2 | - |
-| `mcp-oauth` | Pendiente de clasificación V2 | - |
-| `minimum-opencode-version` | Pendiente de clasificación V2 | - |
-| `model-fallback` | Pendiente de clasificación V2 | - |
-| `model-fallback-requirements` | Pendiente de clasificación V2 | - |
-| `model-fallback-types` | Pendiente de clasificación V2 | - |
-| `native-dev-platform-flag` | Pendiente de clasificación V2 | - |
-| `native-edition-hint` | Pendiente de clasificación V2 | - |
-| `openai-only-model-catalog` | Pendiente de clasificación V2 | - |
-| `provider-availability` | Pendiente de clasificación V2 | - |
-| `provider-model-id-transform` | Pendiente de clasificación V2 | - |
-| `refresh-model-capabilities` | Pendiente de clasificación V2 | - |
-| `run` | Pendiente de clasificación V2 | - |
-| `runtime-commands` | Pendiente de clasificación V2 | - |
-| `star-request` | Pendiente de clasificación V2 | - |
-| `tui-install-prompts` | Pendiente de clasificación V2 | - |
-| `tui-installer` | Pendiente de clasificación V2 | - |
-| `worktree-sweep` | Pendiente de clasificación V2 | - |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `boulder` | Adaptar | Pendiente de ejecución | El inspector de estado boulder de `packages/omo-opencode/src/cli/boulder/boulder.ts` se adapta al registro de continuidad nativo de V2, ya que el CLI de OpenCode no ofrece un comando de progreso boulder. | task:22 |
+| `cleanup` | Adaptar | Pendiente de ejecución | La limpieza de estado Codex Light de `packages/omo-opencode/src/cli/cleanup.ts` se adapta o se reduce, porque el CLI de OpenCode no desinstala artefactos gestionados por el plugin. | contract:qa-v2-cli-reduction.mjs |
+| `cleanup-command` | Adaptar | Pendiente de ejecución | El cableado del comando cleanup/uninstall de `packages/omo-opencode/src/cli/cleanup-command.ts` se adapta dentro del subconjunto reducido del CLI, documentando que OpenCode no tiene un comando equivalente. | contract:qa-v2-cli-reduction.mjs |
+| `cli-installer` | Adaptar | Pendiente de ejecución | El instalador no interactivo de `packages/omo-opencode/src/cli/cli-installer.ts` se adapta al instalador del runtime nativo, conservando la selección de proveedores y la generación de configuración. | contract:qa-v2-lab-install-contract.mjs |
+| `cli-program` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El programa Commander de `packages/omo-opencode/src/cli/cli-program.ts` es el cableado de entrada del CLI y no aporta comportamiento de runtime propio al espejo V2. | contract:qa-v2-cli-reduction.mjs |
+| `codex-ulw-loop` | Adaptar | Pendiente de ejecución | El comando ulw-loop de Codex Light en `packages/omo-opencode/src/cli/codex-ulw-loop.ts` se adapta o se reduce, porque pertenece a la edición Codex y no al runtime nativo de OpenCode V2. | contract:qa-v2-cli-reduction.mjs |
+| `config-manager` | Adaptar | Pendiente de ejecución | Las utilidades de configuración de `packages/omo-opencode/src/cli/config-manager/` (registro de plugin, JSONC, versiones) se adaptan al esquema unificado de V2, que resuelve la configuración de otra forma. | contract:qa-v2-cli-reduction.mjs |
+| `config-migrate` | Adaptar | Pendiente de ejecución | La migración de configuración legada de `packages/omo-opencode/src/cli/config-migrate.ts` se adapta al motor de migración de la configuración unificada de V2, sin comando equivalente en OpenCode. | contract:qa-v2-cli-reduction.mjs |
+| `doctor` | Migrar | Pendiente de ejecución | El diagnóstico de cuatro categorías de `packages/omo-opencode/src/cli/doctor/` se mantiene como subconjunto necesario del CLI, portando sus comprobaciones al runtime nativo de V2. | task:25 |
+| `fallback-chain-resolution` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | La resolución de cadenas de fallback de `packages/omo-opencode/src/cli/fallback-chain-resolution.ts` es lógica de generación de configuración en instalación, sin superficie de runtime propia; el fallback de runtime lo cubre la tarea 8. | task:8 |
+| `fallback-lane-policy` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | La política de carriles excluidos de `packages/omo-opencode/src/cli/fallback-lane-policy.ts` solo participa en la generación de configuración de instalación y no expone comportamiento de runtime en V2. | task:8 |
+| `get-local-version` | Migrar | Pendiente de ejecución | La detección de versión instalada frente a la publicada de `packages/omo-opencode/src/cli/get-local-version/get-local-version.ts` se mantiene como subconjunto necesario del CLI nativo. | task:25 |
+| `install` | Migrar | Pendiente de ejecución | El instalador de `packages/omo-opencode/src/cli/install.ts` se mantiene como subconjunto necesario del CLI, portando la selección de proveedores y el registro del plugin al runtime nativo de V2. | contract:qa-v2-lab-install-contract.mjs |
+| `install-ast-grep-sg` | Adaptar | Pendiente de ejecución | El aprovisionamiento del binario sg de `packages/omo-opencode/src/cli/install-ast-grep-sg.ts` se adapta al instalador nativo, porque en V2 ast-grep se sirve como skill y no requiere este paso separado. | contract:qa-v2-cli-reduction.mjs |
+| `install-codex` | Adaptar | Pendiente de ejecución | La instalación de la edición Codex Light de `packages/omo-opencode/src/cli/install-codex/` se adapta o se reduce, porque pertenece al harness Codex y queda fuera del espejo nativo de OpenCode V2. | contract:qa-v2-cli-reduction.mjs |
+| `install-native` | Adaptar | Pendiente de ejecución | El instalador de OmO Native de `packages/omo-opencode/src/cli/install-native/` se adapta o se reduce, porque instala otro runtime distinto del espejo nativo de OpenCode V2. | contract:qa-v2-cli-reduction.mjs |
+| `install-native-dev` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El envoltorio de instalación nativa de desarrollo de `packages/omo-opencode/src/cli/install-native-dev/index.ts` solo reenvía al instalador de senpi y no aporta comportamiento de runtime propio. | contract:qa-v2-cli-reduction.mjs |
+| `install-validators` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | Las validaciones de plataforma y opciones de `packages/omo-opencode/src/cli/install-validators.ts` son comprobaciones de build del instalador, sin superficie de runtime propia en V2. | contract:qa-v2-cli-reduction.mjs |
+| `mcp-oauth` | Adaptar | Pendiente de ejecución | La gestión OAuth PKCE de MCP de tier 3 de `packages/omo-opencode/src/cli/mcp-oauth/` se adapta al sistema MCP de V2, porque el CLI de OpenCode no cubre el login OAuth de MCP embebidos en skill. | task:14 |
+| `minimum-opencode-version` | Adaptar | Pendiente de ejecución | La verificación de versión mínima de `packages/omo-opencode/src/cli/minimum-opencode-version.ts` se adapta al binario V2 y a su versión mínima verificada. | contract:qa-v2-cli-reduction.mjs |
+| `model-fallback` | Adaptar | Pendiente de ejecución | La generación de configuración de fallback por disponibilidad de proveedores de `packages/omo-opencode/src/cli/model-fallback.ts` se adapta al esquema unificado de V2; el fallback de runtime se porta en la tarea 8. | task:8 |
+| `model-fallback-requirements` | Adaptar | Pendiente de ejecución | Las cadenas de fallback por agente de `packages/omo-opencode/src/cli/model-fallback-requirements.ts` se adaptan al runtime nativo, con las cadenas portadas desde model-core en la tarea 8. | task:8 |
+| `model-fallback-types` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | Los tipos de `packages/omo-opencode/src/cli/model-fallback-types.ts` son contratos de datos de la generación de configuración de instalación y no tienen superficie de runtime propia. | task:8 |
+| `native-dev-platform-flag` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | La bandera de plataforma nativa de desarrollo de `packages/omo-opencode/src/cli/native-dev-platform-flag.ts` solo decide opciones del instalador y no expone comportamiento de runtime. | contract:qa-v2-cli-reduction.mjs |
+| `native-edition-hint` | Adaptar | Pendiente de ejecución | El aviso de la edición OmO Native de `packages/omo-opencode/src/cli/native-edition-hint.ts` se adapta al instalador nativo, porque promociona un runtime distinto del espejo V2. | contract:qa-v2-cli-reduction.mjs |
+| `openai-only-model-catalog` | Adaptar | Pendiente de ejecución | El filtrado de catálogo solo OpenAI de `packages/omo-opencode/src/cli/openai-only-model-catalog.ts` se adapta a la resolución de modelos del runtime nativo de V2. | task:8 |
+| `provider-availability` | Adaptar | Pendiente de ejecución | La detección de disponibilidad de proveedores de `packages/omo-opencode/src/cli/provider-availability.ts` se adapta a las credenciales y proveedores reales del runtime nativo de V2. | task:8 |
+| `provider-model-id-transform` | Interno de build (sin superficie de runtime) | Pendiente de ejecución | El reenvío de transformación de id de modelo de `packages/omo-opencode/src/cli/provider-model-id-transform.ts` es un shim de model-core sin comportamiento de runtime propio. | task:8 |
+| `refresh-model-capabilities` | Adaptar | Pendiente de ejecución | El refresco de la caché de capacidades de modelos de `packages/omo-opencode/src/cli/refresh-model-capabilities.ts` se adapta al runtime nativo, que resuelve las capacidades por otra vía. | contract:qa-v2-cli-reduction.mjs |
+| `run` | Equivale a builtin V2 | Pendiente de ejecución | El lanzador de sesión no interactiva de `packages/omo-opencode/src/cli/run/runner.ts` queda cubierto por el comando nativo `opencode run`; la continuidad V1 se rastrea en el modo continuations de la tarea 22. | contract:qa-v2-cli-reduction.mjs |
+| `runtime-commands` | Adaptar | Pendiente de ejecución | El registro de comandos de runtime de `packages/omo-opencode/src/cli/runtime-commands.ts` se adapta al subconjunto reducido del CLI nativo, conservando solo los comandos con equivalente. | contract:qa-v2-cli-reduction.mjs |
+| `star-request` | Adaptar | Pendiente de ejecución | La solicitud de estrella en GitHub de `packages/omo-opencode/src/cli/star-request.ts` se adapta o se reduce, porque es una cortesía del instalador sin equivalente en el CLI de OpenCode. | contract:qa-v2-cli-reduction.mjs |
+| `tui-install-prompts` | Adaptar | Pendiente de ejecución | Los prompts interactivos de `packages/omo-opencode/src/cli/tui-install-prompts.ts` se adaptan al instalador nativo, conservando las mismas decisiones de proveedor y plataforma. | contract:qa-v2-lab-install-contract.mjs |
+| `tui-installer` | Adaptar | Pendiente de ejecución | El instalador interactivo de `packages/omo-opencode/src/cli/tui-installer.ts` se adapta al flujo nativo del runtime V2, sin dependencia del plugin V1. | contract:qa-v2-lab-install-contract.mjs |
+| `worktree-sweep` | Adaptar | Pendiente de ejecución | El barrido de worktrees obsoletos de `packages/omo-opencode/src/cli/worktree-sweep/worktree-sweep.ts` se adapta al flujo de PR del espejo, ya que el CLI de OpenCode no barre worktrees. | contract:qa-v2-cli-reduction.mjs |
 
 ## Modos y flujos transversales
 
-| Modo / flujo | Estado | Equivalente / evidencia V2 |
-| --- | --- | --- |
-| `default Ultrawork` | Migrado parcialmente | Inyección raíz predeterminada probada; falta restauración tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
-| `keyword Ultrawork / ULW` | Migrado parcialmente | Alias `Ultraworker`/`ultrawork`/`ulw` llegan al proveedor V2 y no a hijos. `qa-v2-native-delegation.mjs` |
-| `Hyperplan` | Pendiente de clasificación V2 | - |
-| `Team mode` | Pendiente de clasificación V2 | - |
-| `Goal` | Pendiente de clasificación V2 | - |
-| `continuations` | Pendiente de clasificación V2 | - |
-| `background-task handoff` | Migrado parcialmente | Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
+| Fila | Clasificación | Estado | Rationale | Evidencia futura |
+| --- | --- | --- | --- | --- |
+| `default Ultrawork` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Inyección raíz predeterminada probada; falta restauración tras compactación. `rigel-v2-native-prompt.mjs`; `qa-v2-native-delegation.mjs` |
+| `keyword Ultrawork / ULW` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Alias `Ultraworker`/`ultrawork`/`ulw` llegan al proveedor V2 y no a hijos. `qa-v2-native-delegation.mjs` |
+| `Hyperplan` | Adaptar | Pendiente de ejecución | La expansión de Hyperplan del keyword detector (sección de keyword detector del plan, hook `keyword-detector`) se adapta a la superficie de keywords de V2, que hoy solo reconoce Ultraworker/ultrawork/ulw; la expansión completa se cubre en la tarea 20. | task:20 |
+| `Team mode` | Migrar | Pendiente de ejecución | El team mode completo (sección de team mode del plan, gate `team_mode.enabled`) se migra a V2 con sus herramientas, mailbox y ciclo de vida de miembros, sin recortes de alcance. | gate:team_mode.enabled |
+| `Goal` | Migrar | Pendiente de ejecución | El modo Goal (sección de goal del plan, gate `goal.enabled`) se migra con `create_goal`, `update_goal` y `get_goal` portados a la superficie nativa de V2 como indica la tarea 16. | task:16 |
+| `continuations` | Adaptar | Pendiente de ejecución | La continuidad de todos y compactación (sección de keyword detector y continuidad del plan) se adapta: V2 no expone `session.todo` ni `todowrite`, por lo que la tarea 22 define un registro propio ligado al sessionID. | task:22 |
+| `background-task handoff` | Migrar | Migrado parcialmente | Clasificación derivada del estado de migración ya registrado. | Evento `session.execution.*` despierta al padre con resultado visible; faltan reintentos y handoff diferido V1. `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs` |
 
 ## Criterio de cierre
 
-Solo puede declararse la migración terminada cuando no existan filas sin clasificación, todas las filas estén marcadas como `Migrado` o `Incompatible (con evidencia)`, y las pruebas V2 correspondientes pasen en el laboratorio aislado.
+Solo puede declararse la migración terminada cuando no existan filas `SIN CLASIFICAR`, todas las filas tengan clasificación, rationale y evidencia futura, y las pruebas V2 correspondientes pasen en el laboratorio aislado.
