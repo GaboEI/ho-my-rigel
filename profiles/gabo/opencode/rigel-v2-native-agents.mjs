@@ -19,6 +19,56 @@ const permissionAction = {
   task: "subagent",
 }
 
+const tuningKeys = ["temperature", "top_p", "maxTokens", "thinking", "reasoning", "reasoningEffort", "textVerbosity"]
+
+function invalidTuning(key) {
+  throw new TypeError(`Invalid native agent tuning field: ${key}`)
+}
+
+function validatedTuningValue(key, value) {
+  if (key === "temperature") {
+    if (!Number.isFinite(value) || value < 0 || value > 2) invalidTuning(key)
+    return value
+  }
+  if (key === "top_p") {
+    if (!Number.isFinite(value) || value < 0 || value > 1) invalidTuning(key)
+    return value
+  }
+  if (key === "maxTokens") {
+    if (!Number.isInteger(value) || value <= 0) invalidTuning(key)
+    return value
+  }
+  if (key === "thinking") {
+    if (!value || typeof value !== "object" || Array.isArray(value)
+      || !["enabled", "disabled"].includes(value.type)
+      || (value.budgetTokens !== undefined && (!Number.isFinite(value.budgetTokens) || value.budgetTokens <= 0))) {
+      invalidTuning(key)
+    }
+    return { type: value.type, ...(value.budgetTokens === undefined ? {} : { budgetTokens: value.budgetTokens }) }
+  }
+  if (key === "reasoning" || key === "reasoningEffort") {
+    if (typeof value !== "string" || !value.trim()) invalidTuning(key)
+    return value.trim()
+  }
+  if (key === "textVerbosity") {
+    if (!["low", "medium", "high"].includes(value)) invalidTuning(key)
+    return value
+  }
+  invalidTuning(key)
+}
+
+export function agentRequestBodyFromDefinition(definition) {
+  const source = definition && typeof definition === "object" && !Array.isArray(definition) ? definition : {}
+  if (source.reasoning !== undefined && source.reasoningEffort !== undefined) {
+    throw new TypeError("Conflicting native agent tuning fields: reasoning and reasoningEffort")
+  }
+  const body = {}
+  for (const key of tuningKeys) {
+    if (source[key] !== undefined) body[key] = validatedTuningValue(key, source[key])
+  }
+  return body
+}
+
 function modelRef(value, variant) {
   if (typeof value !== "string") return undefined
   const match = /^([^/]+)\/(.+)$/.exec(value.trim())
@@ -51,6 +101,9 @@ export function applyLegacyAgentDefinition(agent, id, definition) {
   agent.steps = Number.isFinite(source.steps) ? source.steps : undefined
   const model = modelRef(source.model, source.variant)
   if (model) agent.model = model
+  const request = agent.request && typeof agent.request === "object" && !Array.isArray(agent.request) ? agent.request : {}
+  const requestBody = request.body && typeof request.body === "object" && !Array.isArray(request.body) ? request.body : {}
+  agent.request = { ...request, body: { ...requestBody, ...agentRequestBodyFromDefinition(source) } }
   // Info.default() already supplies a valid request and baseline rules.  The
   // generated definition is authoritative for every rule it declares.
   const rules = nativePermissionRules(source.permissions ?? source.permission)
@@ -97,7 +150,7 @@ export function resolveProactiveAgentModels(agents, listModels) {
   return resolved
 }
 
-export async function registerNativeAgents(agentDomain, manifest, { listModels } = {}) {
+export async function registerNativeAgents(agentDomain, manifest, { listModels, onAgentRequest } = {}) {
   if (typeof agentDomain?.transform !== "function" || typeof agentDomain?.reload !== "function") {
     throw new Error("OpenCode V2 agent.transform/agent.reload is unavailable")
   }
@@ -121,6 +174,7 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels }
         applyLegacyAgentDefinition(agent, id, definition)
         const proactive = proactiveModels.get(id)
         if (proactive) agent.model = proactive
+        onAgentRequest?.(id, agent.request.body)
       })
     }
     if (typeof manifest.defaultAgent === "string" && agents[manifest.defaultAgent]) editor.default(manifest.defaultAgent)

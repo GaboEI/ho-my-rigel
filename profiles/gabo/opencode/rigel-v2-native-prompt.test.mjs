@@ -47,6 +47,75 @@ test("request-stage roster recovers from the startup two-agent race and replaces
   expect(calls).toBe(2)
 })
 
+test("translates native agent request tuning into an OpenAI Responses provider payload", async () => {
+  const observed = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [],
+    getAgentRequestBody: () => ({
+      temperature: 0.1,
+      top_p: 0.8,
+      maxTokens: 64000,
+      thinking: { type: "enabled", budgetTokens: 32000 },
+      reasoning: "high",
+      textVerbosity: "low",
+    }),
+    onAgentTuningApplied: (event) => observed.push(event),
+  })
+  const input = {
+    agent: "Sisyphus-Junior",
+    model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" },
+    request: new Request("https://example.invalid/responses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "deepseek-v4.1-flash", input: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body).toMatchObject({
+    temperature: 0.1,
+    top_p: 0.8,
+    max_output_tokens: 64000,
+    thinking: { type: "enabled", budgetTokens: 32000 },
+    reasoning: { effort: "high" },
+    text: { verbosity: "low" },
+  })
+  expect(observed).toEqual([{
+    agent: "Sisyphus-Junior",
+    providerID: "opencode-go",
+    shape: "responses",
+    payload: {
+      temperature: 0.1,
+      top_p: 0.8,
+      max_output_tokens: 64000,
+      thinking: { type: "enabled", budgetTokens: 32000 },
+      reasoning: { effort: "high" },
+      text: { verbosity: "low" },
+    },
+  }])
+})
+
+test("translates legacy reasoningEffort and maxTokens into a Chat provider payload", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [],
+    getAgentRequestBody: () => ({ reasoningEffort: "medium", maxTokens: 8192 }),
+  })
+  const input = {
+    agent: "fixture",
+    model: { providerID: "openai-compatible", id: "fixture" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "fixture", messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+  await hook(input)
+  expect(await input.request.clone().json()).toMatchObject({
+    max_tokens: 8192,
+    reasoning_effort: "medium",
+  })
+})
+
 test("request-stage roster is never injected into a child session", async () => {
   const hook = createNativeRequestHook({
     getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],

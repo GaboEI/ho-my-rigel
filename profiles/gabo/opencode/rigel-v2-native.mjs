@@ -14,6 +14,8 @@ import {
   resolveCategoryFromClients,
 } from "./rigel-v2-native-categories.mjs"
 import fs from "node:fs"
+import path from "node:path"
+import { randomUUID } from "node:crypto"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 import { agentChain, categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
@@ -24,6 +26,24 @@ import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guar
 import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninteractive.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
+
+function recordAgentTuning(event) {
+  const stateRoot = process.env.XDG_STATE_HOME
+  if (!stateRoot) return
+  const directory = path.join(stateRoot, "ho-my-rigel")
+  const receipt = path.join(directory, "agent-tuning-applied.json")
+  const temporary = `${receipt}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
+    fs.writeFileSync(temporary, `${JSON.stringify({ recordedAt: new Date().toISOString(), ...event }, null, 2)}\n`, { mode: 0o600 })
+    fs.renameSync(temporary, receipt)
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }) } catch (cleanupError) {
+      console.error(`[ho-my-rigel] Could not remove incomplete native V2 tuning receipt: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+    }
+    console.error(`[ho-my-rigel] Could not record native V2 agent tuning: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
 
 export function createTaskPresentation() {
   return `Spawn one delegated task through the OpenCode V2 agent runtime.
@@ -60,12 +80,18 @@ export default {
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
+    const agentRequestBodies = new Map()
     const registeredAgents = await registerNativeAgents(context.agent, manifest, {
       // Proactive fallback runs at this pre-selection boundary: the live
       // inventory decides each agent's starting model before `agent.reload`,
       // so an agent whose primary is absent starts on the next chain rung
       // instead of being rejected by V2 before any request hook can run.
       listModels: () => listV2ModelsFromClients([context, context?.client], location),
+      onAgentRequest: (id, body) => {
+        agentRequestBodies.set(id.toLocaleLowerCase(), body)
+        const name = manifest.agents?.[id]?.name
+        if (typeof name === "string") agentRequestBodies.set(name.toLocaleLowerCase(), body)
+      },
     })
     const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
     const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
@@ -343,6 +369,10 @@ export default {
       ),
       categories: availableCategoryNames(),
       resolveModel: resolveNativeModel,
+      getAgentRequestBody: (agent) => agentRequestBodies.get(String(agent ?? "").toLocaleLowerCase()),
+      onAgentTuningApplied: (event) => {
+        recordAgentTuning(event)
+      },
       ultraworkPrompt,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
       getDirectoryInstructions: directoryInstructions.guidance,

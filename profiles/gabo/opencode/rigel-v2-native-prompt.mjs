@@ -106,6 +106,27 @@ function mergeInstructions(instructions, injections) {
   return base ? `${base}\n\n${appended}` : appended
 }
 
+function applyAgentTuning(body, tuning, shape) {
+  if (!tuning || typeof tuning !== "object" || Array.isArray(tuning)) return undefined
+  const payload = {}
+  if (tuning.temperature !== undefined) payload.temperature = tuning.temperature
+  if (tuning.top_p !== undefined) payload.top_p = tuning.top_p
+  if (tuning.thinking !== undefined) payload.thinking = tuning.thinking
+  const effort = tuning.reasoning ?? tuning.reasoningEffort
+  if (shape === "responses") {
+    if (tuning.maxTokens !== undefined) payload.max_output_tokens = tuning.maxTokens
+    if (effort !== undefined) payload.reasoning = { ...(body.reasoning && typeof body.reasoning === "object" ? body.reasoning : {}), effort }
+    if (tuning.textVerbosity !== undefined) payload.text = { ...(body.text && typeof body.text === "object" ? body.text : {}), verbosity: tuning.textVerbosity }
+  } else {
+    if (tuning.maxTokens !== undefined) payload.max_tokens = tuning.maxTokens
+    if (effort !== undefined) payload.reasoning_effort = effort
+    if (tuning.textVerbosity !== undefined) payload.text_verbosity = tuning.textVerbosity
+  }
+  if (Object.keys(payload).length === 0) return undefined
+  Object.assign(body, payload)
+  return payload
+}
+
 /**
  * V2.0.22 exposes prompt/context hooks, but their mutations do not reach the
  * provider. The HTTP request hook does. Keep roster injection and model
@@ -126,6 +147,8 @@ export function createNativeRequestHook({
   isRootSession = async () => true,
   onDelegationRoster,
   resolveModel,
+  getAgentRequestBody,
+  onAgentTuningApplied,
   ultraworkPrompt = "",
   defaultUltrawork = false,
   getDirectoryInstructions,
@@ -149,6 +172,18 @@ export function createNativeRequestHook({
     const isChatShape = Array.isArray(body?.messages)
     const isResponsesShape = !isChatShape && Array.isArray(body?.input)
     if (!isChatShape && !isResponsesShape) return
+    const shape = isResponsesShape ? "responses" : "chat"
+    const tuning = typeof getAgentRequestBody === "function" ? getAgentRequestBody(input.agent) : undefined
+    const tuningPayload = applyAgentTuning(body, tuning, shape)
+    if (tuningPayload) {
+      input.request = new Request(input.request, { body: JSON.stringify(body) })
+      onAgentTuningApplied?.({
+        agent: input.agent,
+        providerID: input.model?.providerID ?? input.model?.provider,
+        shape,
+        payload: tuningPayload,
+      })
+    }
     const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
     // Proactive model fallback runs before the root/child guard. The payload
     // `model` is a bare id (no provider prefix) at this boundary, while
