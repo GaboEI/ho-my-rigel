@@ -1,74 +1,69 @@
 # Ho My Rigel fork guide
 
-Ho My Rigel is a maintained community fork of
-[Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent). It rebuilds
-the OmO OpenCode integration natively on the OpenCode V2 `setup()` plugin
-runtime, with no V1 bridge at runtime: the upstream plugin serves only as a
-build-time and test-time reference (agent manifest generation, differential
-oracles). OpenCode remains an independently installable and updatable
-dependency.
+Ho My Rigel is a community fork of
+[Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent). It ports the
+OmO OpenCode integration to the OpenCode V2 plugin runtime while keeping
+OpenCode itself independent and upgradeable.
 
-## What Rigel adds
+Rigel targets OpenCode V2 exclusively. Update OpenCode to V2 before installing
+Rigel. Running Rigel while retaining an active V1 installation is neither
+recommended nor supported because shared state can contaminate V1.
 
-- A single native V2 runtime (`profiles/gabo/opencode/rigel-v2-native.mjs`)
-  that registers the selected OmO agents through `agent.transform` and
-  `agent.reload`, delegates through the native `rigel_task` tool, and injects
-  roster/ultrawork context at the `http.request` boundary. No agent
-  definitions are written into OpenCode configuration.
-- An isolated single-runtime invariant: the retired V1 bridge and legacy
-  activation paths are quarantined under `profiles/gabo/attic/`; profile
-  validation fails if any active file references them.
-- A single integrated `Judge` acceptance auditor, based on the generic core
-  of the original Gabo workflow and separated from project-specific rules.
-- A portable profile kit covering agent governance, skill policy, MCP
-  singleton ownership, and isolated acceptance checks.
+## Project boundary
 
-The current V2 migration boundary is tracked row by row in
-[profiles/gabo/V2_MIGRATION_INVENTORY.md](profiles/gabo/V2_MIGRATION_INVENTORY.md):
-`Migrado`, `Migrado parcialmente`, `Incompatible (con evidencia)` and pending
-rows each carry their own proof. Do not treat an unverified row as migrated.
+The fork targets feature-completeness on V2, not a smaller reimplementation.
+Agents, delegation, skills, permissions, tools, context handling, and
+continuity all belong to the compatibility goal. Fork-specific product work
+comes after a compatible base has been demonstrated.
 
-## Supported setup model
+The former OmO integration remains a feature reference during migration, but
+Rigel is not designed to run on OpenCode V1. A legacy module loading under V2
+is not proof that its tools or lifecycle behavior work, so claims must be based
+on observable V2 behavior.
 
-Rigel is currently installed from a source checkout. It requires OpenCode V2
-(verified against 2.0.22), Bun, and Node.js; the isolated QA contracts spawn
-the V2 binary with a temporary HOME/XDG sandbox and a deterministic fake
-provider. Docker is only needed by the heavier lab runners. Start with:
+## Current availability
 
-```bash
-node profiles/gabo/validate-profile.mjs
-bun test profiles/gabo/opencode
-node profiles/gabo/qa-v2-lab-install-contract.mjs
-node profiles/gabo/qa-v2-agent-transform-contract.mjs
-node profiles/gabo/qa-v2-native-delegation.mjs
-bash profiles/gabo/run-v2-isolated.sh
-bash profiles/gabo/run-delegation-e2e.sh
-```
+Rigel V2 is a developer preview. The source tree contains working foundations
+for agents, orchestration, delegation, permissions, model routing, and context
+integration, with additional OmO surfaces still being ported or verified.
 
-The `gabo` profile is a reference integration kit, not a credential installer.
-It deliberately excludes account pools, keys, hosts, database connections,
-and project-local rules. It preserves existing model-authentication plugins and
-the Obsidian MCP connection through fingerprint checks during the controlled
-runtime refresh.
+The upstream OmO installation commands install upstream OmO, not Rigel. Use the
+[clean V2 source installation](HO-MY-RIGEL.md#install-and-run-the-v2-preview)
+for this preview. Do not interpret the preview as feature-complete or ready for
+production use.
 
-## Runtime refresh safety
+OpenCode V2 and its plugin API are evolving dependencies. Contributors should
+expect host API changes and should record the OpenCode version and observable
+behavior when reporting compatibility results.
 
-Activate only after taking a configuration freeze and only with the isolated
-V2 lab instance stopped. The refresh validates protected configuration,
-generates the native agent manifest, updates the V2 runtime, then restarts the
-service. `Judge` is registered from Rigel's manifest alongside the other
-selected agents; it does not remove or rewrite a locally discovered user file.
-The stable V1 installation (`~/.local/bin/opencode`, port 4096) is never
-touched by Rigel tooling.
+## Evaluating or contributing from source
+
+Start with the [clean V2 installation routes](HO-MY-RIGEL.md#install-and-run-the-v2-preview)
+and a narrow contribution target. Before changing
+anything:
+
+1. Read [HO-MY-RIGEL.md](HO-MY-RIGEL.md) for the current public status and
+   compatibility principles.
+2. Read [CONTRIBUTING.md](CONTRIBUTING.md) for repository setup, conventions,
+   tests, and pull request expectations.
+3. Identify the OmO behavior to port and the V2 plugin API surface that can
+   represent it.
+4. Add or update a test around observable behavior, then document any remaining
+   limitation instead of hiding it behind a prompt or a load-time success.
+
+Useful contributions include porting OmO surfaces, V2 behavior tests, focused
+QA, documentation, and integration review. If a safe reproduction needs
+machine-specific state or credentials, open an issue with a minimal public
+description rather than publishing private configuration.
 
 ## License and attribution
 
-This repository is a derivative of OmO. The inherited code remains under the
+This repository is a derivative of OmO. Inherited code remains under the
 upstream [Sustainable Use License 1.0](LICENSE.md), which restricts use and
-distribution to free, non-commercial purposes. It is **not** an OSI-approved
-open-source license, and this fork cannot unilaterally change that fact.
+distribution to free, non-commercial purposes and is not an OSI-approved
+open-source license.
 
-Rigel-specific original additions are separately offered under the MIT License
-in [LICENSE-RIGEL-ADDITIONS.md](LICENSE-RIGEL-ADDITIONS.md). That permission
-does not grant rights to the inherited OmO code or turn the combined work into
-an MIT-licensed project. See [NOTICE-RIGEL.md](NOTICE-RIGEL.md).
+Rigel-specific original additions are separately offered under the
+[MIT License](LICENSE-RIGEL-ADDITIONS.md). That permission does not grant rights
+to inherited OmO code or turn the combined work into an MIT-licensed project.
+See [NOTICE-RIGEL.md](NOTICE-RIGEL.md).

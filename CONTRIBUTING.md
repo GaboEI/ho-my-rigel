@@ -2,10 +2,17 @@
 
 First off, thanks for taking the time to contribute! This document provides guidelines and instructions for contributing to oh-my-opencode.
 
+> [!NOTE]
+> **Contributing to Ho My Rigel's OpenCode V2 migration?** Read
+> [HO-MY-RIGEL.md](HO-MY-RIGEL.md) for the V2 goal, installation routes, and preview
+> status, then [FORK.md](FORK.md) for the fork boundary. Rigel prioritizes
+> feature-completeness on V2 before adding fork-specific features.
+
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
 - [Language Policy](#language-policy)
+- [Contributing to the OpenCode V2 Migration](#contributing-to-the-opencode-v2-migration)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Development Setup](#development-setup)
@@ -55,6 +62,41 @@ If English isn't your first language, don't worry! We value your contributions r
 - Use translation tools to help compose messages
 - Ask for help from other community members
 - Focus on clear, simple communication rather than perfect prose
+
+## Contributing to the OpenCode V2 Migration
+
+Ho My Rigel is building a developer preview of OmO exclusively for the evolving
+OpenCode V2 plugin API. Update OpenCode to V2 before installing Rigel. Do not
+keep an active OpenCode V1 installation in parallel because shared state can
+contaminate V1. The complete OmO feature set has not yet been demonstrated on
+V2, and the preview is not ready for production use.
+
+The compatibility target includes agents, delegation, skills, permissions,
+tools, context handling, and continuity. Do not remove or silently weaken one
+of these surfaces to simplify a port. Propose fork-specific enhancements only
+after the relevant compatibility behavior is established.
+
+Good first contribution shapes include:
+
+- Port one clearly bounded OmO surface to a documented V2 API.
+- Add a test for observable behavior on OpenCode V2.
+- Reproduce and document a preview limitation or an OpenCode V2 API change.
+- Review an integration for lost context, weakened permissions, or false
+  load-time success.
+- Improve public setup, status, or architecture documentation without exposing
+  credentials or machine-specific details.
+
+For migration pull requests, describe:
+
+1. The OmO behavior being ported.
+2. The V2 API surface used to represent it.
+3. The observable result and how another contributor can reproduce it.
+4. Any remaining incompatibility or host-version dependency.
+
+Begin with the [agent-first or human V2 installation](HO-MY-RIGEL.md#install-and-run-the-v2-preview), continue with
+[FORK.md](FORK.md), then use the repository-wide setup and workflow below.
+Every environment differs. Verify the OpenCode version and resolved config and
+state paths before running integration QA; stop when isolation is uncertain.
 
 ## Getting Started
 
@@ -327,7 +369,14 @@ export function createMyHook(deps: { logger: Logger }) {
 
 ## QA Discipline
 
-Any change to `packages/omo-opencode` (the OpenCode side) must be QA'd with the `opencode-qa` skill. Any change to `packages/omo-codex` (the Codex Light side) must be QA'd with the `codex-qa` skill. Any change to `packages/omo-senpi` or `packages/senpi-task` (the Senpi side) must be QA'd with the `senpi-qa` skill. Record QA evidence under `.omo/evidence/<date>-<slug>/`; live Senpi QA records it under `.omo/evidence/omo-senpi-adapter/<slug>/`, resolved by `.agents/skills/senpi-qa/scripts/resolve-evidence-dir.mjs`. Evidence stays local: `.omo/evidence/` is gitignored and `script/tracked-evidence-paths-audit.test.ts` fails when any evidence path is tracked, so summarize the captures in the PR's QA & Evidence section instead of committing them.
+Changes to an integration must be tested through the harness they affect, not
+only by typechecking or running unit tests. A pull request should explain the
+surface exercised, the behavior observed, why the checks cover the intended
+change, and any validation that could not be completed. Keep credentials,
+machine-specific paths, private infrastructure, and raw secret-bearing logs out
+of commits and pull request descriptions. Detailed QA evidence remains local
+and untracked; the pull request includes only a sanitized summary of the
+surface, results, and limitations.
 
 "It typechecks" or "`bun test` is green" is not QA. You must drive the real harness and record the observed behavior.
 
@@ -357,7 +406,7 @@ Any change to `packages/omo-opencode` (the OpenCode side) must be QA'd with the 
 - [ ] `bun test` passes
 - [ ] `bun run test:codex` passes (if Codex-side changed)
 - [ ] Tested locally with OpenCode
-- [ ] QA evidence recorded under `.omo/evidence/` and summarized in the PR body, not committed (if harness-connected changes)
+- [ ] Harness-level QA is summarized with reproducible, sanitized observations (if integration behavior changed)
 - [ ] Updated documentation if needed (README, AGENTS.md)
 - [ ] No version changes in `package.json`
 
