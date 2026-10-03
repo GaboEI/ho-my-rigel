@@ -33,7 +33,7 @@ if (beforeFingerprint.obsidian !== protectedFingerprint.obsidian || beforeFinger
 if (!fs.existsSync(agentManifest)) fail("no existe el manifiesto nativo de agentes; genéralo antes de activar el runtime")
 
 fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
-for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-permissions.mjs"]) {
+for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-permissions.mjs"]) {
   fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), path.join(runtime, file === "rigel-v2-native.mjs" ? "index.js" : file))
 }
 const ultraworkSource = fs.readFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), "utf8")
@@ -42,7 +42,7 @@ const ultraworkSource = fs.readFileSync(path.join(sourceRoot, "packages/prompts-
 fs.writeFileSync(path.join(runtime, "prompts/ultrawork-default.md"), ultraworkSource.replace(/\btask\(/g, "rigel_task("), { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-permissions.mjs", "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
+for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-permissions.mjs", "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
 
 const candidate = structuredClone(before)
 const plugins = Array.isArray(candidate.plugin) ? candidate.plugin : []

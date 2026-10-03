@@ -33,8 +33,10 @@ if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skill
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")
 const v2Selection = readJson("v2-agent-selection.json")
-if ((v2Selection.optionalAgentIds ?? []).includes("Hephaestus - Deep Agent") || !v2Selection.excludedOmOAgentIds?.includes("Hephaestus - Deep Agent")) fail("the OpenAI-only Hephaestus agent must remain excluded")
-if (v2Selection.nativeAgentModeOverrides?.["Prometheus - Plan Builder"] !== "all") fail("Prometheus must be callable by the translated native V2 Ultrawork prompt")
+if (!v2Selection.orchestratedAgentIds?.includes("Hephaestus - Deep Agent") || v2Selection.excludedOmOAgentIds?.includes("Hephaestus - Deep Agent")) fail("Hephaestus must be in the V2 roster; its provider/model gate lives in the native runtime, not in profile exclusion")
+const coordinatorModeOverrides = v2Selection.nativeAgentModeOverrides ?? {}
+if (coordinatorModeOverrides["Prometheus - Plan Builder"] || coordinatorModeOverrides["Atlas - Plan Executor"]) fail("coordinators must keep their upstream primary mode; the translated Ultrawork flow delegates planning to the demoted plan agent")
+if (!(v2Selection.demotedAgentIds ?? []).includes("plan") || !(v2Selection.demotedAgentIds ?? []).includes("build")) fail("the demoted plan and build agents must be carried in demotedAgentIds")
 const judge = v2Selection.independentJudge
 if (judge?.id !== "judge" || judge.removeRigelLegacyAlias !== "juez") fail("Judge must use the canonical id and retire the duplicate Rigel alias")
 if (judge?.source !== "opencode/agents/judge.md" || judge.legacyExternalDefinitionPath !== ".config/opencode/agents/judge.md") fail("Judge must be packaged as a Rigel V2 source and migrate the former local definition")

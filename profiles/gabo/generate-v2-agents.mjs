@@ -6,6 +6,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import legacyModule from "../../dist/index.js"
+import { sortAgentsByCanonicalOrder } from "./opencode/rigel-v2-native-agent-order.mjs"
 
 const args = process.argv.slice(2)
 const take = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined }
@@ -34,6 +35,9 @@ try {
   for (const id of selection?.optionalAgentIds ?? []) {
     if (allAgents[id]) selected[id] = allAgents[id]
   }
+  for (const id of selection?.demotedAgentIds ?? []) {
+    if (allAgents[id]) selected[id] = allAgents[id]
+  }
   for (const [id, mode] of Object.entries(selection?.nativeAgentModeOverrides ?? {})) {
     if (selected[id] && ["primary", "subagent", "all"].includes(mode)) {
       selected[id] = { ...selected[id], mode }
@@ -42,9 +46,18 @@ try {
   const judge = judgePath ? JSON.parse(fs.readFileSync(judgePath, "utf8")) : null
   if (selection?.independentJudge?.id && !judge) throw new Error("Rigel Judge definition is required")
   if (judge) selected[selection?.independentJudge?.id ?? "judge"] = judge
+  // Task 13 (Ho My Rigel Phase 2 migration): manifest order must be canonical
+  // at the source. Core agents come first in Sisyphus -> Hephaestus ->
+  // Prometheus -> Atlas order; every other key keeps its insertion order, so
+  // the judge stays in the remainder tail. The canonical keys stay owned by
+  // the shared order module, not hardcoded here.
+  const orderedSelected = {}
+  for (const { id } of sortAgentsByCanonicalOrder(Object.keys(selected).map((key) => ({ id: key, name: key })))) {
+    orderedSelected[id] = selected[id]
+  }
   const materialized = {
     defaultAgent: config.default_agent,
-    agents: selected,
+    agents: orderedSelected,
     metadata: {
       generatedBy: "Ho My Rigel V2 native runtime",
       profile: process.env.OMO_PROFILE || null,

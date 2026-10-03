@@ -6,7 +6,35 @@
  */
 
 const callableModes = new Set(["subagent", "all"])
+import { sortAgentsByCanonicalOrder } from "./rigel-v2-native-agent-order.mjs"
 import { childTaskPrompt } from "./rigel-v2-native-prompt.mjs"
+
+// Coordinator guard, ported from upstream OmO:
+//   packages/omo-opencode/src/tools/delegate-task/constants.ts:405-414 defines
+//   COORDINATOR_AGENT_NAMES = ["prometheus"]. Atlas is not a coordinator.
+//   packages/omo-opencode/src/tools/delegate-task/subagent-request-preflight.ts:58-67
+//   rejects a delegation whose target is a coordinator, before any session is
+//   created. A coordinator owns an orchestration loop, so delegating to one
+//   duplicates coordinators and splits team state; workers must be selected
+//   instead.
+export const COORDINATOR_AGENT_NAMES = ["prometheus"]
+
+function normalizeAgentName(value) {
+  return String(value ?? "").trim().toLocaleLowerCase().split(/\s+-\s+/)[0].trim()
+}
+
+export function isCoordinatorAgent(name) {
+  return COORDINATOR_AGENT_NAMES.includes(normalizeAgentName(name))
+}
+
+// Demoted-agent detection, ported from upstream OmO
+// packages/omo-opencode/src/tools/delegate-task/subagent-discovery.ts:71-75:
+// a hidden subagent named `plan` stays delegable so the translated Ultrawork
+// flow can reach the plan builder, while every other hidden agent (including
+// `build`) is excluded from delegation.
+export function isDemotedPlanAgent(agent) {
+  return agent?.mode === "subagent" && agent?.hidden === true && normalizeAgentName(agent?.name) === "plan"
+}
 
 export function normalizeAgentInventory(response) {
   const data = Array.isArray(response) ? response : (response?.data ?? response?.agents)
@@ -23,7 +51,13 @@ export function normalizeAgentInventory(response) {
 }
 
 export function callableAgents(response) {
-  return normalizeAgentInventory(response).filter((agent) => callableModes.has(agent.mode) && !agent.hidden)
+  // Task 13 (Ho My Rigel Phase 2 migration): the callable inventory is the one
+  // place host order enters the roster (prompt injection and delegation both
+  // read it), so the canonical Sisyphus -> Hephaestus -> Prometheus -> Atlas
+  // head is applied here; remaining agents keep their input order.
+  return sortAgentsByCanonicalOrder(
+    normalizeAgentInventory(response).filter((agent) => callableModes.has(agent.mode) && (!agent.hidden || isDemotedPlanAgent(agent))),
+  )
 }
 
 export async function listCallableAgents(client, location) {
@@ -66,7 +100,9 @@ export function resolveNamedAgent(agents, requestedName) {
   // OmO's prompts use stable lowercase identifiers (`explore`, `oracle`),
   // while V2 can surface a display-cased builtin (`Explore`). Resolve names
   // case-insensitively, but preserve V2's stable `id` for session.create.
-  const alias = requested.toLocaleLowerCase() === "plan" ? "prometheus - plan builder" : requested
+  // The demoted `plan` agent is registered in the inventory under its natural
+  // name, so no alias is applied here.
+  const alias = requested
   const agent = agents.find((candidate) => candidate.name === alias)
     ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === alias.toLocaleLowerCase())
   if (agent) {

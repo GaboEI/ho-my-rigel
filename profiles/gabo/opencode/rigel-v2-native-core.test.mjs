@@ -6,6 +6,8 @@ import {
   listCallableAgents,
   resolveNamedAgent,
   taskResult,
+  isCoordinatorAgent,
+  isDemotedPlanAgent,
 } from "./rigel-v2-native-core.mjs"
 
 describe("Rigel native OpenCode V2 delegation", () => {
@@ -39,6 +41,27 @@ describe("Rigel native OpenCode V2 delegation", () => {
   test("rejects hidden, primary, and unknown names with a usable inventory", async () => {
     const agents = [{ name: "explore", mode: "subagent", hidden: false }]
     expect(() => resolveNamedAgent(agents, "oracle")).toThrow('Unknown agent: "oracle". Available agents: explore')
+    const callable = await listCallableAgents({
+      agent: { list: async () => ({ data: [
+        { id: "build", name: "build", mode: "subagent", hidden: true },
+        { id: "plan", name: "plan", mode: "subagent", hidden: true },
+        { id: "explore", name: "explore", mode: "subagent" },
+      ] }) },
+    }, { directory: "/isolated/project" })
+    expect(callable.map((agent) => agent.id).sort()).toEqual(["explore", "plan"])
+  })
+
+  test("classifies coordinator agents and the demoted plan agent", () => {
+    for (const name of ["Prometheus - Plan Builder", "prometheus", "  PROMETHEUS  "]) {
+      expect(isCoordinatorAgent(name)).toBe(true)
+    }
+    for (const name of ["Atlas - Plan Executor", "atlas", "Sisyphus - ultraworker", "explore", "", undefined]) {
+      expect(isCoordinatorAgent(name)).toBe(false)
+    }
+    expect(isDemotedPlanAgent({ name: "plan", mode: "subagent", hidden: true })).toBe(true)
+    expect(isDemotedPlanAgent({ name: "plan", mode: "subagent", hidden: false })).toBe(false)
+    expect(isDemotedPlanAgent({ name: "build", mode: "subagent", hidden: true })).toBe(false)
+    expect(isDemotedPlanAgent({ name: "Prometheus - Plan Builder", mode: "primary", hidden: false })).toBe(false)
   })
 
   test("creates a parent-linked foreground child and returns its final text through V2 sessions", async () => {
@@ -75,8 +98,14 @@ describe("Rigel native OpenCode V2 delegation", () => {
     ] })).toBe("final evidence")
   })
 
-  test("maps the V1 plan name and resumes a native V2 child session", async () => {
-    expect(resolveNamedAgent([{ id: "Prometheus - Plan Builder", name: "Prometheus - Plan Builder", mode: "subagent" }], "plan")).toMatchObject({ id: "Prometheus - Plan Builder" })
+  test("resolves the demoted plan agent by its natural name and resumes a native V2 child session", async () => {
+    const inventory = [
+      { id: "Prometheus - Plan Builder", name: "Prometheus - Plan Builder", mode: "primary" },
+      { id: "plan", name: "plan", mode: "subagent", hidden: true },
+    ]
+    const resolved = resolveNamedAgent(inventory, "plan")
+    expect(resolved).toMatchObject({ id: "plan" })
+    expect(resolved.name).not.toBe("Prometheus - Plan Builder")
     const calls = []
     const resumed = await resumeDelegatedSession({
       client: { session: {
@@ -93,6 +122,31 @@ describe("Rigel native OpenCode V2 delegation", () => {
       ["prompt", { sessionID: "ses_child", text: "<rigel-native-child-task>\ncontinue the analysis", resume: true }],
       ["wait", { sessionID: "ses_child" }],
       ["context", { sessionID: "ses_child" }],
+    ])
+  })
+
+  test("places a callable core-mode inventory at the canonical head regardless of host order", async () => {
+    const inventory = [
+      { id: "judge", name: "Judge", mode: "all" },
+      { id: "atlas", name: "Atlas - Plan Executor", mode: "all" },
+      { id: "explore", name: "Explore", mode: "subagent" },
+      { id: "prometheus", name: "Prometheus - Plan Builder", mode: "all" },
+      { id: "oracle", name: "oracle", mode: "subagent" },
+      { id: "hephaestus", name: "Hephaestus - Deep Agent", mode: "all" },
+      { id: "sisyphus", name: "Sisyphus - ultraworker", mode: "all" },
+    ]
+    const agents = await listCallableAgents(
+      { agent: { list: async () => ({ data: inventory }) } },
+      { directory: "/isolated/project" },
+    )
+    expect(agents.map((agent) => agent.name)).toEqual([
+      "Sisyphus - ultraworker",
+      "Hephaestus - Deep Agent",
+      "Prometheus - Plan Builder",
+      "Atlas - Plan Executor",
+      "Judge",
+      "Explore",
+      "oracle",
     ])
   })
 })

@@ -6,6 +6,7 @@ import {
   resumeDelegatedSessionFromClients,
   completedChildText,
   backgroundHandoffPrompt,
+  isCoordinatorAgent,
 } from "./rigel-v2-native-core.mjs"
 import {
   availableCategoryNames,
@@ -360,6 +361,9 @@ export default {
         input: taskInput,
         execute: async (input, toolContext) => {
           console.error(`[ho-my-rigel] Native V2 task context: name=${taskName}; setup=${Object.keys(context ?? {}).sort().join(",")}; tool=${Object.keys(toolContext ?? {}).sort().join(",")}`)
+          if (isCoordinatorAgent(input.subagent_type)) {
+            throw new Error(`Cannot delegate to coordinator agent "${String(input.subagent_type).trim()}" via task. Coordinator agents (prometheus) own the orchestration loop and must not be used as subagent targets - doing so creates duplicate coordinators and conflicting team state. Select a worker agent (e.g., sisyphus-junior via category, hephaestus, oracle) instead.`)
+          }
           // In the V2 setup() API, the context itself is the typed service
           // surface. Tool execution receives only turn metadata, not a second
           // API client. Do not assume the V1 `context.client` shape.

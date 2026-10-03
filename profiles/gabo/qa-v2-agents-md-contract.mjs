@@ -58,7 +58,7 @@ try {
   fs.writeFileSync(path.join(project, "AGENTS.md"), "# V2 AGENTS contract\n\nV2_AGENTS_MD_MARKER: this directive must reach the provider.\n", { mode: 0o600 })
   fs.writeFileSync(path.join(project, "README.md"), "# V2 README contract\n\nV2_README_MD_MARKER: this documentation must reach the provider.\n", { mode: 0o600 })
   fs.writeFileSync(path.join(project, "sample.txt"), "sample\n", { mode: 0o600 })
-  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-agent-manifest.mjs"]) {
+  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-agent-manifest.mjs"]) {
     fs.copyFileSync(path.join(root, "profiles/gabo/opencode", name), path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name))
   }
   // The source manifest is generated during a profile install. This isolated
@@ -77,7 +77,7 @@ try {
     "Hephaestus - Deep Agent": {
       mode: "primary",
       name: "Hephaestus - Deep Agent",
-      model: "rigel-fixture/fixture",
+      model: "openai/gpt-6-sol",
       prompt: "Implement carefully.",
     },
   },
@@ -91,6 +91,16 @@ try {
         npm: "@ai-sdk/openai-compatible",
         options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "fixture" },
         models: { fixture: { name: "Fixture", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 8192, output: 512 } } },
+      },
+      // Hephaestus must satisfy the native registration gate: a required
+      // provider plus a supported GPT model. This entry points at the same
+      // local mock, so the fixture keeps capturing the provider trace without
+      // real credentials.
+      openai: {
+        name: "Rigel fixture (required-provider alias)",
+        npm: "@ai-sdk/openai-compatible",
+        options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "fixture" },
+        models: { "gpt-6-sol": { name: "Fixture GPT", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 8192, output: 512 } } },
       },
     },
     model: "rigel-fixture/fixture",

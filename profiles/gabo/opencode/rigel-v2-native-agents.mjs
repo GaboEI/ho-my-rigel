@@ -14,6 +14,8 @@
 
 import { agentChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { mergePermissionRules, translateV1Permissions } from "./rigel-v2-native-permissions.mjs"
+import { evaluateHephaestusGate, isHephaestusAgentId } from "./rigel-v2-native-hephaestus.mjs"
+import { sortAgentsByCanonicalOrder } from "./rigel-v2-native-agent-order.mjs"
 
 const tuningKeys = ["temperature", "top_p", "maxTokens", "thinking", "reasoning", "reasoningEffort", "textVerbosity"]
 
@@ -176,6 +178,20 @@ export function resolveProactiveAgentModels(agents, listModels) {
   return resolved
 }
 
+/**
+ * Manifest insertion order is not canonical. Reorder the entry list so
+ * canonical core agents register first in Sisyphus -> Hephaestus -> Prometheus
+ * -> Atlas order; every other entry keeps its manifest insertion order (Task
+ * 13, Ho My Rigel Phase 2 migration). The canonical keys stay owned by
+ * `rigel-v2-native-agent-order.mjs`; this only maps entries onto it.
+ */
+function canonicalAgentEntries(agents) {
+  const entries = Object.entries(agents)
+  const byId = new Map(entries)
+  return sortAgentsByCanonicalOrder(entries.map(([id]) => ({ id, name: id })))
+    .map((entry) => [entry.id, byId.get(entry.id)])
+}
+
 export async function registerNativeAgents(agentDomain, manifest, { listModels, onAgentRequest, onAgentPermissions } = {}) {
   if (typeof agentDomain?.transform !== "function" || typeof agentDomain?.reload !== "function") {
     throw new Error("OpenCode V2 agent.transform/agent.reload is unavailable")
@@ -197,8 +213,23 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels, 
     }
   }
   const proactiveModels = resolveProactiveAgentModels(agents, Array.isArray(inventory) ? inventory : undefined)
+  const registered = []
   await agentDomain.transform((editor) => {
-    for (const [id, definition] of Object.entries(agents)) {
+    for (const [id, definition] of canonicalAgentEntries(agents)) {
+      const source = definition && typeof definition === "object" ? definition : {}
+      // Hephaestus is selectable only when the V1 registration gate holds: a
+      // required provider connected (skipped when the inventory is absent, the
+      // V1 first-run equivalent) and a supported GPT model resolved. A blocked
+      // gate leaves the agent out of the roster with the V1-equivalent
+      // message instead of registering something V2 would reject.
+      if (isHephaestusAgentId(id)) {
+        const candidate = proactiveModels.get(id) ?? modelRef(source.model, source.variant)
+        const gate = evaluateHephaestusGate({ definition: source, model: candidate, inventory })
+        if (!gate.eligible) {
+          console.error(gate.message)
+          continue
+        }
+      }
       editor.update(id, (agent) => {
         const permissions = applyLegacyAgentDefinition(agent, id, definition, globalRules)
         const proactive = proactiveModels.get(id)
@@ -206,9 +237,10 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels, 
         onAgentRequest?.(id, agent.request.body)
         onAgentPermissions?.(id, permissions)
       })
+      registered.push(id)
     }
     if (typeof manifest.defaultAgent === "string" && agents[manifest.defaultAgent]) editor.default(manifest.defaultAgent)
   })
   await agentDomain.reload()
-  return Object.keys(agents)
+  return registered
 }

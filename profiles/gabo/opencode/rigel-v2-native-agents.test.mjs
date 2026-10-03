@@ -148,6 +148,103 @@ test("registerNativeAgents keeps manifest models when the inventory read fails",
   expect(applied.explore).toEqual({ providerID: "kimi-for-coding", id: "kimi-for-coding-highspeed", variant: "off" })
 })
 
+function createHephaestusHarness() {
+  const applied = {}
+  const editor = {
+    update(id, callback) {
+      const agent = { request: { headers: {}, body: {} }, permissions: [] }
+      callback(agent)
+      applied[id] = agent.model
+    },
+    default() {},
+  }
+  const agentDomain = {
+    transform: async (callback) => { callback(editor); return { dispose() {} } },
+    reload: async () => {},
+  }
+  return { applied, agentDomain }
+}
+
+// The Hephaestus registration gate is a roster contract: when it blocks, the
+// agent must be absent from the registered roster and from editor.update, not
+// merely logged. A permissive gate would register an agent V2 rejects at
+// session start; a provider gate that ignores the first-run equivalent would
+// drop the agent on machines without a readable inventory.
+test("registerNativeAgents registers a Hephaestus whose resolved model is a supported GPT", async () => {
+  const { applied, agentDomain } = createHephaestusHarness()
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "openai/gpt-6-sol", variant: "medium" },
+      explore: { name: "Explore", mode: "subagent", model: "kimi-for-coding/kimi-for-coding-highspeed", variant: "off" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, {
+    listModels: async () => [{ providerID: "openai", id: "gpt-6-sol", enabled: true }],
+  })
+  expect(registered).toEqual(["Hephaestus - Deep Agent", "explore"])
+  expect(applied["Hephaestus - Deep Agent"]).toEqual({ providerID: "openai", id: "gpt-6-sol", variant: "medium" })
+})
+
+test("registerNativeAgents leaves a Hephaestus whose model is not GPT out of the roster", async () => {
+  const { applied, agentDomain } = createHephaestusHarness()
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "openai/kimi-k3" },
+      explore: { name: "Explore", mode: "subagent", model: "kimi-for-coding/kimi-for-coding-highspeed", variant: "off" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, {
+    listModels: async () => [{ providerID: "openai", id: "kimi-k3", enabled: true }],
+  })
+  expect(registered).toEqual(["explore"])
+  expect(applied["Hephaestus - Deep Agent"]).toBeUndefined()
+})
+
+test("registerNativeAgents skips Hephaestus when no required provider is connected", async () => {
+  const { applied, agentDomain } = createHephaestusHarness()
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "openai/gpt-6-sol", variant: "medium" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, {
+    listModels: async () => [{ providerID: "opencode-go", id: "qwen3.7-plus", enabled: true }],
+  })
+  expect(registered).toEqual([])
+  expect(applied["Hephaestus - Deep Agent"]).toBeUndefined()
+})
+
+test("registerNativeAgents keeps the V1 first-run equivalent when the inventory is unavailable", async () => {
+  // V1 registers Hephaestus on a first run with no provider caches; the V2
+  // equivalent is an inventory read failure: the provider check is skipped and
+  // the supported-model gate alone decides.
+  const { applied, agentDomain } = createHephaestusHarness()
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "openai/gpt-6-sol", variant: "medium" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, {
+    listModels: async () => { throw new Error("inventory down") },
+  })
+  expect(registered).toEqual(["Hephaestus - Deep Agent"])
+  expect(applied["Hephaestus - Deep Agent"]).toEqual({ providerID: "openai", id: "gpt-6-sol", variant: "medium" })
+})
+
+test("registerNativeAgents still applies the model gate without an inventory", async () => {
+  const { applied, agentDomain } = createHephaestusHarness()
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "opencode-go/kimi-k3" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, {
+    listModels: async () => { throw new Error("inventory down") },
+  })
+  expect(registered).toEqual([])
+  expect(applied["Hephaestus - Deep Agent"]).toBeUndefined()
+})
+
 test("registerNativeAgents exposes acceptance tuning from the applied AgentV2Info request bodies", async () => {
   const requests = new Map()
   const editor = {
@@ -210,4 +307,41 @@ test("expands the V1 read-only wildcard so every non-read V2 action is denied", 
     expect(agent.permissions).toContainEqual({ action, resource: "*", effect: "deny" })
   }
   expect(agent.permissions.filter((rule) => rule.action !== "read").every((rule) => rule.effect === "deny")).toBe(true)
+})
+
+test("registerNativeAgents registers canonical core agents first from a shuffled manifest", async () => {
+  const updateOrder = []
+  const editor = {
+    update(id, callback) {
+      callback({ request: { headers: {}, body: {} }, permissions: [] })
+      updateOrder.push(id)
+    },
+    default() {},
+  }
+  const agentDomain = {
+    transform: async (callback) => { callback(editor); return { dispose() {} } },
+    reload: async () => {},
+  }
+  // Manifest insertion order is deliberately not canonical: core agents are
+  // scattered among secondaries so a host-order pass-through cannot pass.
+  const manifest = {
+    agents: {
+      judge: { name: "Judge", mode: "primary", model: "kimi-for-coding/kimi-for-coding-highspeed" },
+      "Atlas - Plan Executor": { name: "Atlas - Plan Executor", mode: "primary", model: "kimi-for-coding/kimi-for-coding-highspeed" },
+      explore: { name: "Explore", mode: "subagent", model: "kimi-for-coding/kimi-for-coding-highspeed" },
+      "Prometheus - Plan Builder": { name: "Prometheus - Plan Builder", mode: "all", model: "kimi-for-coding/kimi-for-coding-highspeed" },
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "primary", model: "openai/gpt-6-sol", variant: "medium" },
+      "Sisyphus - ultraworker": { name: "Sisyphus - ultraworker", mode: "primary", model: "kimi-for-coding/kimi-for-coding-highspeed" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest)
+  expect(registered).toEqual([
+    "Sisyphus - ultraworker",
+    "Hephaestus - Deep Agent",
+    "Prometheus - Plan Builder",
+    "Atlas - Plan Executor",
+    "judge",
+    "explore",
+  ])
+  expect(updateOrder).toEqual(registered)
 })

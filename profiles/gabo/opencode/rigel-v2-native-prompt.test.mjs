@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { callableAgents } from "./rigel-v2-native-core.mjs"
 import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
 
 test("request-stage roster recovers from the startup two-agent race and replaces stale entries", async () => {
@@ -426,4 +427,35 @@ test("Responses instructions do not accumulate across repeated passes", async ()
   expect((second.match(/ULTRAWORK MODE ENABLED!/g) ?? [])).toHaveLength(1)
   expect((second.match(/<rigel-native-delegation-roster>/g) ?? [])).toHaveLength(2)
   expect(second).toContain("You are a helpful agent.")
+})
+
+test("renders the delegation roster with the canonical core head from a shuffled inventory", async () => {
+  const inventory = [
+    { id: "judge", name: "Judge", mode: "all" },
+    { id: "atlas", name: "Atlas - Plan Executor", mode: "all" },
+    { id: "explore", name: "Explore", mode: "subagent" },
+    { id: "prometheus", name: "Prometheus - Plan Builder", mode: "all" },
+    { id: "sisyphus", name: "Sisyphus - ultraworker", mode: "all" },
+  ]
+  const hook = createNativeRequestHook({ getDelegationRoster: async () => callableAgents({ data: inventory }) })
+  const input = {
+    kind: "primary",
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "delegate this" }] }),
+    }),
+  }
+  await hook(input)
+  const content = (await input.request.clone().json()).messages
+    .map((message) => message.content)
+    .find((value) => typeof value === "string" && value.includes("<rigel-native-delegation-roster>"))
+  const rows = [...content.matchAll(/^- "([^"]+)":/gm)].map((match) => match[1])
+  expect(rows).toEqual([
+    "Sisyphus - ultraworker",
+    "Prometheus - Plan Builder",
+    "Atlas - Plan Executor",
+    "Judge",
+    "Explore",
+  ])
 })

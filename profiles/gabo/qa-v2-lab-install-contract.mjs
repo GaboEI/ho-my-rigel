@@ -68,7 +68,8 @@ try {
   const agents = manifest.default?.agents
   assert.ok(agents?.oracle, "native manifest lacks oracle")
   assert.ok(agents?.judge, "native manifest lacks the independent judge")
-  assert.equal(agents?.["Prometheus - Plan Builder"]?.mode, "all", "Prometheus is not callable from the translated V2 Ultrawork prompt")
+  assert.equal(agents?.["Prometheus - Plan Builder"]?.mode, "primary", "coordinators must keep their upstream primary mode; planning delegates to the demoted plan agent")
+  assert.equal(agents?.["Atlas - Plan Executor"]?.mode, "primary", "coordinators must keep their upstream primary mode; planning delegates to the demoted plan agent")
   assert.equal(manifest.default?.modes?.defaultUltrawork, true, "native manifest lost the selected default Ultrawork mode")
   assert.ok(fs.existsSync(path.join(runtime, "index.js")), "native runtime was not materialized")
   const stagedUltrawork = fs.readFileSync(path.join(runtime, "prompts/ultrawork-default.md"), "utf8")

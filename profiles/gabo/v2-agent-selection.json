@@ -1,6 +1,7 @@
 {
   "orchestratedAgentIds": [
     "Sisyphus - ultraworker",
+    "Hephaestus - Deep Agent",
     "Prometheus - Plan Builder",
     "Atlas - Plan Executor",
     "explore",
@@ -19,13 +20,10 @@
     "removeRigelLegacyAlias": "juez"
   },
   "optionalAgentIds": [],
+  "demotedAgentIds": ["plan", "build"],
   "disabledLegacyAgentIds": ["forja"],
-  "excludedOmOAgentIds": ["judge", "build", "plan", "Hephaestus - Deep Agent"],
+  "excludedOmOAgentIds": ["judge", "build", "plan"],
   "nativeModes": {
     "defaultUltrawork": true
-  },
-  "nativeAgentModeOverrides": {
-    "Prometheus - Plan Builder": "all",
-    "Atlas - Plan Executor": "all"
   }
 }

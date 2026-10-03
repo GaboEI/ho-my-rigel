@@ -118,6 +118,35 @@ test("native runtime uses the V2 setup context, not context.client", async () =>
   await dispose()
 })
 
+test("native runtime rejects coordinator delegation before any agent or session work", async () => {
+  let definition
+  const calls = []
+  const context = {
+    location: { directory: "/native-v2" },
+    agent: {
+      list: async ({ location }) => {
+        calls.push(["agents", location])
+        return { data: [{ id: "explore", name: "Explore", mode: "subagent" }] }
+      },
+      transform: async (callback) => { callback({ update() {}, default() {} }); return { dispose() {} } },
+      reload: async () => {},
+    },
+    session: {
+      hook: async () => ({ dispose() {} }),
+      create: async (input) => { calls.push(["create", input]); return { data: { id: "ses_native" } } },
+      prompt: async (input) => { calls.push(["prompt", input]); return { data: {} } },
+    },
+    tool: { transform: async (callback) => {
+      callback({ add: (value) => { definition = value } })
+      return { dispose() {} }
+    } },
+  }
+  const dispose = await plugin.setup(context)
+  await expect(definition.execute({ subagent_type: "Prometheus - Plan Builder", prompt: "Plan this.", run_in_background: true }, {})).rejects.toThrow("Cannot delegate to coordinator agent")
+  expect(calls).toEqual([])
+  await dispose()
+})
+
 test("native runtime wakes only the recorded parent when a background child succeeds", async () => {
   let definition
   let yieldEvent
