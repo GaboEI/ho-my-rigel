@@ -48,8 +48,9 @@ export default {
   "comment-checker": {
     classification: "Migrar",
     rationale:
-      "El guard V1 en `hooks/comment-checker/hook.ts` invoca el binario y respeta la anotación @allow y la desactivación por archivo; se migra al runtime nativo V2 desde tool.execute.after con la misma invocación al binario.",
-    futureEvidence: "task:18",
+      "V1 guard in `hooks/comment-checker/hook.ts` invokes the real binary (`check`, JSON on stdin, exit 0 clean / exit 2 comments); the native V2 runtime replicates the protocol from tool.execute.after against the cached binary (0.8.0 marker) and IMPLEMENTS both `// @allow` and `// comment-checker-disable-file` in the native layer, which the 0.8.0 binary does not honor by itself. Both bypasses are LIVE-PROVEN in the lab (file-disable vs control: control warned, disabled not; @allow: not warned) and covered by positive/negative contracts for write, edit and multiedit.",
+    status: "Migrado",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/task-18.txt",
   },
   "delegate-task-retry": {
     classification: "Migrar",
@@ -82,6 +83,13 @@ export default {
     rationale:
       "La sesión V1 en `hooks/interactive-bash-session/hook.ts` gestiona el ciclo de vida tmux de interactive_bash; se migra al runtime nativo V2 cuando tmux está disponible, replicando el tracker y el estado por sesión.",
     futureEvidence: "task:16",
+  },
+  "json-error-recovery": {
+    classification: "Equivale a builtin V2",
+    status: "Migrado",
+    rationale:
+      "V1 hook `hooks/json-error-recovery/hook.ts` appends a model-visible reminder when a tool result carries a JSON parse error. In V2 the host plugin `opencode.tool.input.repair` (decompiled from the v2.0.22 binary) normalizes tool arguments at execute.before (stringified objects/arrays are parsed, string numbers/booleans coerced), so the malformed-argument case never becomes a tool result and no observable event reaches the runtime. RAW lab evidence (opencode-v2-lab.service): over real sessions every tool call arrives as a parsed object; the model never emits string/malformed arguments (explicit attempts refused); and a JSON string injected by the runtime's execute.before was NOT repaired and the tool errored, so the native hook cannot be the observer and has no trigger. The V1-shaped extraction is retained only as a defensive after-result fallback.",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/json-input-recovery/",
   },
   "legacy-plugin-toast": {
     classification: "Migrar",
@@ -128,14 +136,16 @@ export default {
   "plan-format-validator": {
     classification: "Migrar",
     rationale:
-      "El validador V1 en `hooks/plan-format-validator/hook.ts` verifica el formato de checkboxes en los planes boulder; se migra al runtime nativo V2 en tool.execute.before validando Write y Edit sobre esos planes.",
-    futureEvidence: "task:18",
+      "V1 validator in `hooks/plan-format-validator/hook.ts` checks checkbox format in boulder plans; the native V2 runtime runs it in tool.execute.after on Write/Edit of `.omo/plans/*.md`, rewrites `**Effort:** <duration>` to its band and appends the malformed-row warning. Parity with `boulder-state` is pinned by test.",
+    status: "Migrado",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/task-18.txt",
   },
   "prometheus-md-only": {
     classification: "Migrar",
     rationale:
-      "El guard V1 en `hooks/prometheus-md-only/hook.ts` limita a Prometheus a escribir solo archivos .md; se migra al runtime nativo V2 en tool.execute.before aplicando la misma política de rutas y el matcher de agente.",
-    futureEvidence: "task:18",
+      "V1 guard in `hooks/prometheus-md-only/hook.ts` restricts Prometheus to writing only .md files; the native V2 runtime runs it in tool.execute.before with the same path policy (`isAllowedFile`: confinement, `.omo` segment, `.md` extension) and the session-resolved agent matcher.",
+    status: "Migrado",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/task-18.txt",
   },
   "question-label-truncator": {
     classification: "Migrar",
@@ -218,7 +228,8 @@ export default {
   "webfetch-redirect-guard": {
     classification: "Migrar",
     rationale:
-      "El guard V1 en `hooks/webfetch-redirect-guard/hook.ts` resuelve y controla las redirecciones de webfetch; se migra al runtime nativo V2 en tool.execute.before con la misma resolución de redirección.",
-    futureEvidence: "task:18",
+      "V1 guard in `hooks/webfetch-redirect-guard/hook.ts` resolves and bounds webfetch redirects; the native V2 runtime replicates `resolveWebFetchRedirects` (max 10, statuses 301/302/303/307/308, normalized timeout) in tool.execute.before/after, tested against a real local HTTP server.",
+    status: "Migrado",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/task-18.txt",
   },
 }

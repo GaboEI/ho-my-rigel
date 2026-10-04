@@ -2,6 +2,7 @@
 /** Proves that a matched V1-style rule reaches a real V2 provider turn. */
 import childProcess from "node:child_process"
 import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
+import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -35,8 +36,12 @@ try {
   fs.copyFileSync(path.join(sourceRoot, ".omo/rules/rigel.md"), path.join(workspace, ".omo/rules/rigel.md"))
   fs.writeFileSync(path.join(workspace, ".omo/rules/hermetic.md"), "---\nalwaysApply: true\ndescription: Hermetic always-apply rule for the rules-injector contract.\n---\n\nHERMETIC_RULE_MARKER: this always-apply rule must reach the provider after a read.\n", { mode: 0o600 })
   fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-rules.test.mjs"), path.join(workspace, "src/rules-target.test.mjs"))
-  const files = ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs"]
-  for (const file of files) fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), path.join(runtime, file === "rigel-v2-native.mjs" ? "index.js" : file))
+  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native.mjs"), path.join(runtime, "index.js"))
+  for (const file of discoverRuntimeModules(path.join(sourceRoot, "profiles/gabo/opencode"))) {
+    const destination = path.join(runtime, file)
+    fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
+    fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), destination)
+  }
   fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
   fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
   fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({ defaultAgent: "Sisyphus - ultraworker", modes: { defaultUltrawork: false }, agents: { "Sisyphus - ultraworker": { mode: "primary", name: "Sisyphus - ultraworker", model: "rigel-fixture/fixture", prompt: "Coordinate.", permission: { read: "allow", external_directory: "allow" } } } })}\n`, { mode: 0o600 })

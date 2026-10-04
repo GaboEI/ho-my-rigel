@@ -185,8 +185,9 @@ export default {
   "tool-execute-after": {
     classification: "Migrar",
     rationale:
-      "`plugin/tool-execute-after.ts` ejecuta truncado, comment-checker, hashline read tagging y recuperación de errores; se migra al hook `execute.after` nativo que `rigel-v2-native.mjs` ya registra.",
-    futureEvidence: "task:18",
+      "`plugin/tool-execute-after.ts` runs truncation, comment-checker, hashline read tagging and error recovery; the native `execute.after` hook registered by `rigel-v2-native.mjs` now invokes recovery (edit + JSON), the comment-checker (real binary) and the plan-format validator, on top of the reminders and rules already migrated.",
+    status: "Migrado",
+    futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/task-18.txt",
   },
   "tool-execute-before": {
     classification: "Migrar",

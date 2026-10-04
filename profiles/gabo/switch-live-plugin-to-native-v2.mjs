@@ -5,6 +5,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
 
 const labRoot = process.env.RIGEL_V2_LAB_ROOT || path.join(os.homedir(), ".local/share/opencode-v2-lab")
 const home = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
@@ -39,25 +40,7 @@ fs.mkdirSync(path.join(runtime, "tools"), { recursive: true, mode: 0o700 })
 // silently drops a newly added module and the lab then fails to import it; the
 // discovery keeps the deployed runtime equal to the source by construction.
 const sourceOpen = path.join(sourceRoot, "profiles/gabo/opencode")
-function discoverRuntimeModules(entry) {
-  const seen = new Set()
-  const stack = [entry]
-  while (stack.length > 0) {
-    const file = stack.pop()
-    if (seen.has(file)) continue
-    const absolute = path.join(sourceOpen, file)
-    if (!fs.existsSync(absolute)) continue
-    seen.add(file)
-    const text = fs.readFileSync(absolute, "utf8")
-    for (const match of text.matchAll(/from\s+"(\.[^"]+)"/g)) {
-      let target = match[1]
-      if (!target.endsWith(".mjs")) target += ".mjs"
-      stack.push(path.normalize(path.join(path.dirname(file), target)))
-    }
-  }
-  return [...seen].filter((file) => file !== "rigel-v2-native.mjs").sort()
-}
-const runtimeModules = discoverRuntimeModules("rigel-v2-native.mjs")
+const runtimeModules = discoverRuntimeModules(sourceOpen)
 for (const file of runtimeModules) {
   const destination = path.join(runtime, file)
   fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })

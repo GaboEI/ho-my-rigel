@@ -26,6 +26,10 @@ import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
 import { createNativeRulesInjector } from "./rigel-v2-native-rules.mjs"
 import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guard.mjs"
 import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninteractive.mjs"
+import { createNativeCommentChecker } from "./rigel-v2-native-comment-checker.mjs"
+import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-redirect-guard.mjs"
+import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
+import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { readNativeDisabled, readNativeGates } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
@@ -246,9 +250,10 @@ export default {
     // execution-time resolver and the orchestrator roster so a user category is
     // selectable and routable exactly like a built-in.
     const userCategories = readUserCategories(context)
+    const sessionAgentResolver = createSessionAgentResolver(context)
     const permissionWiring = createNativePermissionWiring({
       manifest,
-      resolveAgent: createSessionAgentResolver(context),
+      resolveAgent: sessionAgentResolver,
     })
     const registeredAgents = await registerNativeAgents(context.agent, manifest, {
       // Proactive fallback runs at this pre-selection boundary: the live
@@ -423,6 +428,10 @@ export default {
     const rules = createNativeRulesInjector({ directory: location.directory })
     const writeGuard = createNativeWriteExistingFileGuard({ directory: location.directory })
     const nonInteractiveEnv = createNativeNonInteractiveEnvGuard()
+    const commentChecker = createNativeCommentChecker()
+    const webFetchGuard = createNativeWebFetchRedirectGuard()
+    const planFormatValidator = createNativePlanFormatValidator({ directory: location.directory })
+    const prometheusMdOnly = createNativePrometheusMdOnly({ resolveAgent: sessionAgentResolver, directory: location.directory })
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
     // Session/todo surface (Fase 3 T5b). V2 has no native session-todo API, so
@@ -470,6 +479,8 @@ export default {
               reminders.clear(sessionID)
               rules.clear(sessionID)
               writeGuard.clear(sessionID)
+              commentChecker.clear(sessionID)
+              webFetchGuard.clear(sessionID)
               sessionFallback.delete(sessionID)
               categoryChildSessions.delete(sessionID)
               // Task 14: drop a session's embedded skill MCP clients when its
@@ -605,10 +616,18 @@ export default {
         reminders.after(input)
         applyNativeRecoveryReminder(input)
         rules.after(input)
+        await commentChecker.after(input)
+        planFormatValidator.after(input)
+        webFetchGuard.after(input)
       })
       : undefined
     const writeGuardRegistration = typeof context?.tool?.hook === "function"
-      ? await context.tool.hook("execute.before", async (input) => writeGuard.before(input))
+      ? await context.tool.hook("execute.before", async (input) => {
+        await prometheusMdOnly.before(input)
+        writeGuard.before(input)
+        commentChecker.before(input)
+        await webFetchGuard.before(input)
+      })
       : undefined
     const nonInteractiveRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => nonInteractiveEnv.before(input))
@@ -659,6 +678,8 @@ export default {
       reminders.clearAll()
       rules.clearAll()
       writeGuard.clearAll()
+      commentChecker.clearAll()
+      webFetchGuard.clearAll()
       await skillMcpManager.disconnectAll()
       // Stop any live monitor PTY before the plugin tears down, so no watcher
       // process outlives the session.

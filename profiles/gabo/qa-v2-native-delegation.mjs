@@ -6,6 +6,7 @@
  */
 import childProcess from "node:child_process"
 import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
+import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -35,7 +36,9 @@ function writeEvidence(name, value) {
 }
 
 function copyRuntimeFile(name) {
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", name), path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name))
+  const destination = path.join(runtime, name === "rigel-v2-native.mjs" ? "index.js" : name)
+  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
+  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", name), destination)
 }
 
 function waitFor(check, message, timeout = 12_000) {
@@ -61,7 +64,8 @@ try {
   fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(configHome, "opencode"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-  for (const name of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-agent-manifest.mjs"]) copyRuntimeFile(name)
+  copyRuntimeFile("rigel-v2-native.mjs")
+  for (const name of discoverRuntimeModules(path.join(sourceRoot, "profiles/gabo/opencode"))) copyRuntimeFile(name)
   fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
   fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({
     defaultAgent: "Sisyphus - ultraworker",
