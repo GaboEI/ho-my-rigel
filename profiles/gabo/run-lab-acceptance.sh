@@ -27,26 +27,17 @@ v1_roots=(
   "$HOME/.cache/opencode"
 )
 
-goals_file="$HOME/.local/share/opencode-goal-plugin/goals.json"
-goals_probe() {
-  python3 - "$goals_file" <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    goals = d.get("goals")
-    print(d.get("version"), len(goals) if isinstance(goals, (list, dict)) else 0)
-except Exception:
-    print("unreadable 0")
-PY
-}
+goal_gate="$root/profiles/gabo/lab-goal-gate.mjs"
+goal_mode=$(node "$goal_gate" --mode "$HOME")
+goal_probe() { node "$goal_gate" --probe "$HOME"; }
 
 mkdir -p "$evidence_dir"
 echo "== Rigel lab acceptance =="
 
-read -r before_version before_goals <<<"$(goals_probe)"
+before_goals=$(goal_probe)
 before_config_hash=$(sha256sum "$HOME/.config/opencode/opencode.json" 2>/dev/null | cut -d' ' -f1)
 before_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>/dev/null | wc -l; done | tr '\n' ',')
-echo "v1: config_hash=${before_config_hash:0:16} goals_version=$before_version goals_count=$before_goals counts=$before_counts"
+echo "v1: config_hash=${before_config_hash:0:16} goal_mode=$goal_mode goal_state=$before_goals counts=$before_counts"
 
 if [ "${1:-}" = "--refresh" ]; then
   echo "-- refresh through apply-v2-runtime-service.sh (only touches $service) --"
@@ -116,18 +107,17 @@ else
   bad "lab API did not return config"
 fi
 
-read -r after_version after_goals <<<"$(goals_probe)"
+after_goals=$(goal_probe)
 after_config_hash=$(sha256sum "$HOME/.config/opencode/opencode.json" 2>/dev/null | cut -d' ' -f1)
 after_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>/dev/null | wc -l; done | tr '\n' ',')
 
 [ "$before_config_hash" = "$after_config_hash" ] && pass "V1 config hash unchanged" || bad "V1 config hash changed"
 [ "$before_counts" = "$after_counts" ] && pass "V1 root file counts unchanged" || bad "V1 root file counts changed"
-# The protection property requires both snapshots to be version 1 and equal.
-# Equality alone would falsely accept an invariant schema 2 after the incident.
-{ [ "$before_version" = "1" ] && [ "$after_version" = "1" ] && [ "$before_version" = "$after_version" ]; } \
-  && pass "V1 goal schema still version 1 (unchanged)" \
-  || bad "V1 goal schema is not version 1 or changed ($before_version -> $after_version)"
-[ "$before_goals" = "$after_goals" ] && pass "V1 goal count unchanged" || bad "V1 goal count changed"
+if goal_verdict=$(node "$goal_gate" --verify "$goal_mode" "$before_goals" "$after_goals" 2>&1); then
+  pass "goal invariant ($goal_mode): $goal_verdict"
+else
+  bad "goal invariant ($goal_mode): $goal_verdict"
+fi
 
 {
   echo "service=$service"
@@ -136,9 +126,10 @@ after_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>
   echo "v1_config_hash_after=$after_config_hash"
   echo "v1_counts_before=$before_counts"
   echo "v1_counts_after=$after_counts"
-  echo "goals_version=$after_version"
-  echo "goals_count_before=$before_goals"
-  echo "goals_count_after=$after_goals"
+  echo "goal_mode=$goal_mode"
+  echo "goal_state_before=$before_goals"
+  echo "goal_state_after=$after_goals"
+  echo "goal_verdict=${goal_verdict:-}"
   echo "failed_steps=$fail"
 } > "$evidence_dir/lab-acceptance.txt"
 
