@@ -32,9 +32,6 @@ For an additional real-model delegation run, explicitly opt into the locally run
 OH_MY_RIGEL_USE_OPENGO=1 bash profiles/gabo/run-delegation-e2e.sh
 ```
 
-The legacy `HO_MY_RIGEL_USE_OPENGO` name is still accepted as an alias during the
-identity transition; `OH_MY_RIGEL_USE_OPENGO` is canonical.
-
 This command neither mounts the active OpenCode configuration nor copies credentials. It only uses the locally running provider selected by the operator.
 
 ## Accept or roll back

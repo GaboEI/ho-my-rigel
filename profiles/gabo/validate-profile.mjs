@@ -133,14 +133,20 @@ if (!agentMaterialization.includes("rigel-v2-agent-manifest.mjs") || !agentMater
 if (!agentMaterialization.includes("opencode-v2-lab") || agentMaterialization.includes('path.join(home, ".config/opencode/opencode.json")')) fail("agent materialization must default to the isolated V2 configuration")
 
 // Personal-path scan: every tracked artifact under profiles/gabo (attic is
-// historical and exempt) must be machine-independent.
+// historical and exempt) must be machine-independent. The same walk rejects the
+// retired h-before-o identity so no active file can reintroduce the obsolete
+// compatibility name. The pattern is written with character classes so this
+// file does not itself contain the literal it forbids.
+const retiredIdentity = /[hH][oO][-_ ][mM][yY][-_ ][rR][iI][gG][eE][lL]/
 function walkPersonalPaths(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "attic") continue
     const path = join(dir, entry.name)
     if (entry.isDirectory()) { walkPersonalPaths(path); continue }
     if (!/\.(mjs|sh|md|json|jsonc)$/.test(entry.name)) continue
-    if (/\/home\/gabodev/.test(readFileSync(path, "utf8"))) fail(`personal path leaked into ${path.replace(root, "profiles/gabo")}`)
+    const text = readFileSync(path, "utf8")
+    if (/\/home\/gabodev/.test(text)) fail(`personal path leaked into ${path.replace(root, "profiles/gabo")}`)
+    if (retiredIdentity.test(text)) fail(`retired identity leaked into ${path.replace(root, "profiles/gabo")}`)
   }
 }
 walkPersonalPaths(root)

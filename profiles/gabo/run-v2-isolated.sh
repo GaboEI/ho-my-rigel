@@ -6,7 +6,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 sandbox="$(mktemp -d "${TMPDIR:-/tmp}/oh-my-rigel-v2.XXXXXX")"
-port="${OH_MY_RIGEL_V2_PORT:-${HO_MY_RIGEL_V2_PORT:-4317}}"
+port="${OH_MY_RIGEL_V2_PORT:-4317}"
 password="oh-my-rigel-isolated"
 container_name="oh-my-rigel-v2-$$"
 

@@ -19,12 +19,8 @@ const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const rigelSkills = path.join(sourceRoot, "profiles/gabo/skills")
 const legacySkills = path.join(home, ".config/opencode/skills")
 const targetRoot = path.join(home, ".agents/skills")
-// Canonical state path. The legacy `ho-my-rigel` directory is only consulted
-// for reads when the canonical directory does not exist yet (pre-cutover).
 const stateDir = path.join(home, ".local/share/oh-my-rigel")
-const legacyStateDir = path.join(home, ".local/share/ho-my-rigel")
-const readStateDir = fs.existsSync(stateDir) ? stateDir : legacyStateDir
-const stateFile = path.join(readStateDir, "skills-v2.json")
+const stateFile = path.join(stateDir, "skills-v2.json")
 
 function isSkill(directory) {
   return fs.existsSync(path.join(directory, "SKILL.md"))
