@@ -62,12 +62,16 @@ const NATIVE_ACTION_BY_KEY = Object.freeze({
 // V1-only surfaces with no native V2 action domain are governed by their real
 // tool name instead of collapsing into `subagent` or another shared action.
 // `teammate` is deliberately absent: it gates the whole `team_*` family, not a
-// single tool name.
+// single tool name. `question` is included because the V2 host owns the
+// `question` tool and Rigel does not re-register it: the translated `question`
+// permission must still gate the host tool by name, or a denied agent could
+// ask anyway.
 const EXACT_GATE_BY_KEY = Object.freeze({
   call_omo_agent: "call_omo_agent",
   look_at: "look_at",
   skill_mcp: "skill_mcp",
   interactive_bash: "interactive_bash",
+  question: "question",
 })
 
 const FAMILY_GATE_RULES = Object.freeze([
