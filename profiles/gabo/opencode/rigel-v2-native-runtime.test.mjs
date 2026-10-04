@@ -101,7 +101,7 @@ test("native runtime uses the V2 setup context, not context.client", async () =>
       prompt: async (input) => { calls.push(["prompt", input]); return { data: {} } },
     },
     tool: { transform: async (callback) => {
-      callback({ add: (value) => { definition = value } })
+      callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } })
       return { dispose() {} }
     } },
   }
@@ -137,7 +137,7 @@ test("native runtime rejects coordinator delegation before any agent or session 
       prompt: async (input) => { calls.push(["prompt", input]); return { data: {} } },
     },
     tool: { transform: async (callback) => {
-      callback({ add: (value) => { definition = value } })
+      callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } })
       return { dispose() {} }
     } },
   }
@@ -170,7 +170,7 @@ test("native runtime wakes only the recorded parent when a background child succ
       context: async () => [{ type: "assistant", content: [{ type: "text", text: "SPECIALIST_EVIDENCE" }] }],
       prompt: async (input) => { prompts.push(input); return { data: {} } },
     },
-    tool: { transform: async (callback) => { callback({ add: (value) => { definition = value } }); return { dispose() {} } } },
+    tool: { transform: async (callback) => { callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } }); return { dispose() {} } } },
   }
   const dispose = await plugin.setup(context)
   await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, { sessionID: "ses_parent" })
@@ -253,7 +253,7 @@ test("native runtime keeps reactive fallback inside the provider V2 already sele
         return { data: {} }
       },
     },
-    tool: { transform: async (callback) => { callback({ add: (value) => { definition = value } }); return { dispose() {} } } },
+    tool: { transform: async (callback) => { callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } }); return { dispose() {} } } },
   }
   const dispose = await plugin.setup(context)
   await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, { sessionID: "ses_parent" })
@@ -388,7 +388,7 @@ test("native runtime seeds a category child so a pre-request failure still falls
     },
     tool: { transform: async (callback) => {
       let definition
-      callback({ add: (value) => { definition = value }, get: () => definition })
+      callback({ add: (value) => { if (value?.name === "rigel_task") definition = value }, get: () => definition })
       feed.definition = definition
       return { dispose() {} }
     } },

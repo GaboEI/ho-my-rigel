@@ -74,11 +74,11 @@ export async function listV2ModelsFromClients(clients, location) {
   throw new Error(`OpenCode V2 model inventory is unavailable: ${diagnostics.join("; ")}`)
 }
 
-export async function resolveCategoryFromClients(clients, location, categoryName) {
+export async function resolveCategoryFromClients(clients, location, categoryName, options = {}) {
   const diagnostics = []
   for (const client of clients.filter(Boolean)) {
     try {
-      return await resolveCategory(client, location, categoryName)
+      return await resolveCategory(client, location, categoryName, options)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       // A semantic category error must not be hidden by probing another
@@ -90,8 +90,25 @@ export async function resolveCategoryFromClients(clients, location, categoryName
   throw new Error(`OpenCode V2 category model inventory is unavailable: ${diagnostics.join("; ")}`)
 }
 
-export function availableCategoryNames() {
-  return Object.keys(manifest.categories).sort()
+/**
+ * Merge the built-in category set with the user's `pluginConfig.categories`,
+ * mirroring V1 `mergeCategories` (`packages/omo-opencode/src/shared/merge-categories.ts`):
+ * a user entry overrides the built-in of the same name, a user-only entry is
+ * added, and a `disable: true` entry is dropped from the enabled set. The
+ * built-in manifest stays the source of the description/guidance/prompt text
+ * and the primary lane; a user entry may override any of those fields.
+ */
+export function mergeCategories(userCategories) {
+  const merged = userCategories && typeof userCategories === "object" && !Array.isArray(userCategories)
+    ? { ...manifest.categories, ...userCategories }
+    : { ...manifest.categories }
+  return Object.fromEntries(
+    Object.entries(merged).filter(([, config]) => !config?.disable),
+  )
+}
+
+export function availableCategoryNames(userCategories) {
+  return Object.keys(mergeCategories(userCategories)).sort()
 }
 
 function manifestLane(config, available) {
@@ -103,14 +120,27 @@ function manifestLane(config, available) {
   return selected ? { ...selected, ...(config.variant ? { variant: config.variant } : {}) } : undefined
 }
 
-export async function resolveCategory(client, location, categoryName) {
+export async function resolveCategory(client, location, categoryName, options = {}) {
   const name = String(categoryName ?? "").trim()
-  const config = manifest.categories[name]
+  const userCategories = options?.userCategories
+  const enabled = mergeCategories(userCategories)
+  const config = enabled[name]
   if (!config) {
-    throw new Error(`Unknown category: "${name}". Available categories: ${availableCategoryNames().join(", ")}`)
+    // V1-equivalent tolerant resolution error: name the requested category and
+    // the full enabled set (built-ins plus user categories) instead of an
+    // opaque failure, so the caller can correct the request.
+    throw new Error(`Unknown category: "${name}". Available: ${Object.keys(enabled).sort().join(", ")}`)
   }
   const available = await listV2Models(client, location)
-  const chain = categoryChain(name)
+  const userConfig = userCategories && typeof userCategories === "object" ? userCategories[name] : undefined
+  // A user entry may carry its own model chain (`models`), a single `model`, or
+  // neither. The canonical built-in chain stays the source of truth for a
+  // built-in category; a user chain replaces it, and a user single model is the
+  // explicit override V1 honours before the built-in lane.
+  const userChain = Array.isArray(userConfig?.models) && userConfig.models.length > 0
+    ? userConfig.models.map((entry) => normalizeUserChainEntry(entry))
+    : undefined
+  const chain = userChain ?? categoryChain(name)
   // First reachable rung of the canonical chain, provider-scoped per rung.
   // `sameProviderAs` is intentionally omitted: category resolution runs before
   // V2 selects the provider, so choosing a rung on another provider is
@@ -129,12 +159,33 @@ export async function resolveCategory(client, location, categoryName) {
   }
   return {
     name,
-    description: manifest.descriptions[name],
-    callerGuidance: manifest.guidance[name],
-    promptAppend: manifest.prompts[name] ?? "",
+    description: userConfig?.description ?? manifest.descriptions[name],
+    callerGuidance: userConfig?.caller_guidance ?? manifest.guidance[name],
+    promptAppend: userConfig?.prompt_append ?? manifest.prompts[name] ?? "",
     model: selected,
     configuredModel: config.model,
   }
+}
+
+/**
+ * Normalize one user category chain entry into the `{ providers, model, variant }`
+ * shape `resolveFallbackModel` walks. A bare string is `provider/model` (or a
+ * bare id); an object may carry `model`, `variant`, and `providers`. A user
+ * entry with no provider list is left provider-less so the resolver matches the
+ * id on any provider, which is the V1 user-chain behaviour.
+ */
+function normalizeUserChainEntry(entry) {
+  if (typeof entry === "string") {
+    const parsed = parseModel(entry)
+    return parsed ? { providers: parsed.providerID ? [parsed.providerID] : [], model: parsed.id, ...(parsed.variant ? { variant: parsed.variant } : {}) } : undefined
+  }
+  if (!entry || typeof entry !== "object") return undefined
+  const model = typeof entry.model === "string" ? entry.model : undefined
+  if (!model) return undefined
+  const providers = Array.isArray(entry.providers)
+    ? entry.providers.filter((providerID) => typeof providerID === "string" && providerID)
+    : (typeof entry.providerID === "string" && entry.providerID ? [entry.providerID] : [])
+  return { providers, model, ...(typeof entry.variant === "string" && entry.variant ? { variant: entry.variant } : {}) }
 }
 
 export function categoryTaskPrompt(prompt, category) {

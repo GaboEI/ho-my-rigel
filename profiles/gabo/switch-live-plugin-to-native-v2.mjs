@@ -33,16 +33,44 @@ if (beforeFingerprint.obsidian !== protectedFingerprint.obsidian || beforeFinger
 if (!fs.existsSync(agentManifest)) fail("no existe el manifiesto nativo de agentes; genéralo antes de activar el runtime")
 
 fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
-for (const file of ["rigel-v2-native.mjs", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-permissions.mjs"]) {
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), path.join(runtime, file === "rigel-v2-native.mjs" ? "index.js" : file))
+fs.mkdirSync(path.join(runtime, "tools"), { recursive: true, mode: 0o700 })
+// Copy every runtime module the native entry transitively imports, discovered
+// from the source tree instead of a hand-maintained list. A hardcoded list
+// silently drops a newly added module and the lab then fails to import it; the
+// discovery keeps the deployed runtime equal to the source by construction.
+const sourceOpen = path.join(sourceRoot, "profiles/gabo/opencode")
+function discoverRuntimeModules(entry) {
+  const seen = new Set()
+  const stack = [entry]
+  while (stack.length > 0) {
+    const file = stack.pop()
+    if (seen.has(file)) continue
+    const absolute = path.join(sourceOpen, file)
+    if (!fs.existsSync(absolute)) continue
+    seen.add(file)
+    const text = fs.readFileSync(absolute, "utf8")
+    for (const match of text.matchAll(/from\s+"(\.[^"]+)"/g)) {
+      let target = match[1]
+      if (!target.endsWith(".mjs")) target += ".mjs"
+      stack.push(path.normalize(path.join(path.dirname(file), target)))
+    }
+  }
+  return [...seen].filter((file) => file !== "rigel-v2-native.mjs").sort()
 }
+const runtimeModules = discoverRuntimeModules("rigel-v2-native.mjs")
+for (const file of runtimeModules) {
+  const destination = path.join(runtime, file)
+  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
+  fs.copyFileSync(path.join(sourceOpen, file), destination)
+}
+fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native.mjs"), path.join(runtime, "index.js"))
 const ultraworkSource = fs.readFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), "utf8")
 // The original prompt targets OmO's V1 `task` tool. V2 reserves that name,
 // so the native runtime exposes `rigel_task`; translate only actual calls.
 fs.writeFileSync(path.join(runtime, "prompts/ultrawork-default.md"), ultraworkSource.replace(/\btask\(/g, "rigel_task("), { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-for (const file of ["index.js", "rigel-v2-native-core.mjs", "rigel-v2-native-agent-order.mjs", "rigel-v2-native-prompt.mjs", "rigel-v2-directory-instructions.mjs", "rigel-v2-native-reminders.mjs", "rigel-v2-native-recovery.mjs", "rigel-v2-native-rules.mjs", "rigel-v2-native-write-guard.mjs", "rigel-v2-native-noninteractive.mjs", "rigel-v2-native-categories.mjs", "rigel-v2-native-model-chains.mjs", "rigel-v2-category-manifest.mjs", "rigel-v2-native-agents.mjs", "rigel-v2-native-hephaestus.mjs", "rigel-v2-native-permissions.mjs", "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
+for (const file of ["index.js", ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
 
 const candidate = structuredClone(before)
 const plugins = Array.isArray(candidate.plugin) ? candidate.plugin : []

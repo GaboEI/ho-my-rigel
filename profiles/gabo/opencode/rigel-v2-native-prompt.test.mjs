@@ -1,6 +1,23 @@
 import { expect, test } from "bun:test"
 import { callableAgents } from "./rigel-v2-native-core.mjs"
-import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
+import { createNativeRequestHook, formatDelegationRoster } from "./rigel-v2-native-prompt.mjs"
+
+test("delegation roster renders each category's description and caller guidance", () => {
+  const roster = formatDelegationRoster(
+    [{ name: "explore", mode: "subagent" }],
+    [
+      { name: "quick", description: "Trivial tasks", callerGuidance: "<Caller_Warning>write explicit steps</Caller_Warning>" },
+      { name: "my-lane", description: "Custom lane" },
+    ],
+  )
+  expect(roster).toContain('"quick": Trivial tasks <Caller_Warning>write explicit steps</Caller_Warning>')
+  expect(roster).toContain('"my-lane": Custom lane')
+})
+
+test("delegation roster still accepts bare category names", () => {
+  const roster = formatDelegationRoster([{ name: "explore", mode: "subagent" }], ["quick"])
+  expect(roster).toContain('- "quick"')
+})
 
 test("request-stage roster recovers from the startup two-agent race and replaces stale entries", async () => {
   let calls = 0

@@ -9,9 +9,9 @@ import {
   isCoordinatorAgent,
 } from "./rigel-v2-native-core.mjs"
 import {
-  availableCategoryNames,
   categoryTaskPrompt,
   listV2ModelsFromClients,
+  mergeCategories,
   resolveCategoryFromClients,
 } from "./rigel-v2-native-categories.mjs"
 import fs from "node:fs"
@@ -28,6 +28,83 @@ import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninterac
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
+import { registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
+import { createSkillMcpManager, createSkillMcpToolDefinition, registerSkillMcpServers } from "./rigel-v2-native-skill-mcp.mjs"
+import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
+import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
+
+/**
+ * Read the user's category overrides from the V2 setup context. V2 exposes the
+ * merged plugin configuration on `context.config`; the shape is the same
+ * `pluginConfig.categories` V1 reads (`packages/omo-opencode/src/plugin-handlers/agent-config-assembly.ts`).
+ * A missing or malformed value degrades to no overrides so setup never fails
+ * closed on a config read.
+ */
+export function readUserCategories(context) {
+  const config = context?.config
+  const categories = config?.categories
+  if (!categories || typeof categories !== "object" || Array.isArray(categories)) return undefined
+  return categories
+}
+
+/**
+ * Build the category roster the orchestrator prompt receives. Each entry
+ * carries the name plus the description and caller guidance the resolved
+ * category owns, so the roster is selection data rather than a names-only list.
+ * The built-in manifest supplies the text; a user override replaces it.
+ */
+export function buildCategoryRoster(userCategories) {
+  const enabled = mergeCategories(userCategories)
+  const descriptions = manifest.descriptions ?? {}
+  const guidance = manifest.guidance ?? {}
+  return Object.entries(enabled).map(([name]) => ({
+    name,
+    description: userCategories?.[name]?.description ?? descriptions[name],
+    callerGuidance: userCategories?.[name]?.caller_guidance ?? guidance[name],
+  }))
+}
+
+/**
+ * Skill-injection integration point for delegated children.
+ *
+ * The real resolver is Task 14 (`rigel-v2-native-skills.mjs`), which discovers
+ * SKILL.md bodies and matches them by name. Resolved skills are injected as
+ * `<skill name="...">` blocks via the module's own formatter; names that do not
+ * resolve (unknown, disabled, or restricted to another agent) keep the textual
+ * fallback notice so the gap is visible and the child can still try to load
+ * them itself.
+ *
+ * `resolveSkill` is `(name) => Promise<{ name, body } | undefined>`.
+ */
+export async function applyRequestedSkills(prompt, requestedSkills, { resolveSkill } = {}) {
+  if (!Array.isArray(requestedSkills) || requestedSkills.length === 0) return prompt
+  if (typeof resolveSkill !== "function") {
+    // No resolver available: never fake an injected skill, but do not drop the
+    // request either. Emit the textual fallback for the whole set.
+    const notice = `<rigel-requested-skills>Before working, load these native skills if available: ${requestedSkills.join(", ")}</rigel-requested-skills>`
+    return `${prompt}\n\n${notice}`
+  }
+  const injected = []
+  const missing = []
+  for (const name of requestedSkills) {
+    try {
+      const result = await resolveSkill(name)
+      if (result && typeof result.body === "string" && result.body.trim()) {
+        injected.push({ name: result.name ?? name, body: result.body })
+      } else {
+        missing.push(name)
+      }
+    } catch (error) {
+      missing.push(name)
+      console.error(`[ho-my-rigel] Native V2 skill resolution failed: skill=${name}; ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (missing.length > 0) {
+    console.error(`[ho-my-rigel] Native V2 skill injection incomplete; unresolved skills: ${missing.join(", ")}`)
+  }
+  const injection = formatSkillInjection({ injected, missing })
+  return injection ? `${prompt}\n\n${injection}` : prompt
+}
 
 function recordAgentTuning(event) {
   const stateRoot = process.env.XDG_STATE_HOME
@@ -147,6 +224,11 @@ export default {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
     const agentRequestBodies = new Map()
+    // User category overrides come from the merged plugin config V2 exposes on
+    // the setup context. They are read once and threaded through both the
+    // execution-time resolver and the orchestrator roster so a user category is
+    // selectable and routable exactly like a built-in.
+    const userCategories = readUserCategories(context)
     const permissionWiring = createNativePermissionWiring({
       manifest,
       resolveAgent: createSessionAgentResolver(context),
@@ -166,6 +248,32 @@ export default {
       // here, so the `execute.before` hook below governs the real roster.
       onAgentPermissions: (id, permissions) => permissionWiring.onAgentPermissions(id, permissions),
     })
+    // Native skill surface (Task 14). Discovered skills are registered into
+    // V2's own skill registry (`context.skill.transform`), and their embedded
+    // MCP servers into V2's MCP registry (`context.mcp.transform`). The same
+    // discovered list feeds real body injection for delegated children and the
+    // per-session `skill_mcp` manager. When the host lacks a domain (older lab
+    // build or a test fixture), the family degrades to an empty, inert set
+    // instead of throwing during setup.
+    const skillRegistry = typeof context?.skill?.transform === "function"
+      ? await registerNativeSkills(context, {
+        directory: location.directory,
+        // Test seam: a fixture may point discovery at a disposable home/XDG pair
+        // so the host's real skill inventory is never read.
+        home: context?.options?.skillsHome,
+        env: context?.options?.skillsEnv,
+      })
+      : { skills: [], registered: [], dispose: undefined }
+    const skillMcpManager = createSkillMcpManager()
+    const skillMcpRegistration = await registerSkillMcpServers(context, skillRegistry.skills)
+    // Real skill-body injection for delegated children: resolve each requested
+    // name through the discovered registry and inject the body. Disabled or
+    // target-restricted names resolve to nothing and are reported, never faked.
+    const resolveSkillForChild = async (name) => {
+      const selected = selectSkillsForChild(skillRegistry.skills, [name])
+      const match = selected.injected?.[0]
+      return match ? { name: match.name, body: match.body } : undefined
+    }
     const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
     const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
     if (manifest.modes?.defaultUltrawork === true && !ultraworkPrompt.trim()) {
@@ -300,6 +408,10 @@ export default {
     const nonInteractiveEnv = createNativeNonInteractiveEnvGuard()
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
+    // Task 15: the monitor registry is created inside `tool.transform` (it needs
+    // the V2 pty/storage/event domains) and disposed on teardown. It is `let`
+    // because the transform callback runs after this declaration.
+    let nativeToolRegistry
     const handoffBackgroundChild = async (sessionID, status) => {
       const child = backgroundChildren.get(sessionID)
       if (!child) return
@@ -331,12 +443,22 @@ export default {
               writeGuard.clear(sessionID)
               sessionFallback.delete(sessionID)
               categoryChildSessions.delete(sessionID)
+              // Task 14: drop a session's embedded skill MCP clients when its
+              // session is deleted, so a per-session MCP process never outlives
+              // the session that spawned it.
+              await skillMcpManager.disconnectSession(sessionID)
             }
             // Reactive fallback: a failed execution marks the last-sent model
             // failed for that session, so the next request resolves the next
             // reachable rung. Independent of the background-handoff wake.
             if (typeof sessionID === "string" && (event.type === "session.execution.failed" || event.type === "session.error")) {
               await applyReactiveFallback(sessionID)
+            }
+            // Task 15: a monitor's PTY exit is observed here so its record
+            // transitions to `exited` without polling. The registry is created
+            // later in `tool.transform`; guard for the pre-registration window.
+            if (nativeToolRegistry && typeof nativeToolRegistry.handleEvent === "function") {
+              await nativeToolRegistry.handleEvent(event)
             }
             if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
@@ -354,6 +476,16 @@ export default {
       : undefined
     const registration = await context.tool.transform((editor) => {
       const before = editor.get?.(taskName)
+      // Register the skill MCP tool before the delegation tool so a single
+      // editor.add capture (used by the runtime tests) still resolves to
+      // `rigel_task`. Only expose it once a skill was discovered; a host with
+      // no skill MCP server has nothing for it to call.
+      if (skillRegistry.skills.length > 0) {
+        editor.add(createSkillMcpToolDefinition({
+          manager: skillMcpManager,
+          getSkills: async () => skillRegistry.skills,
+        }))
+      }
       editor.add({
         name: taskName,
         options: { codemode: false },
@@ -371,9 +503,10 @@ export default {
           const requestedSkills = Array.isArray(input.load_skills)
             ? input.load_skills.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())
             : []
-          const prompt = requestedSkills.length > 0
-            ? `${input.prompt}\n\n<rigel-requested-skills>Before working, load these native skills if available: ${requestedSkills.join(", ")}</rigel-requested-skills>`
-            : input.prompt
+          // Inject the real skill bodies each requested name resolves to.
+          // Unknown or disabled names are reported, never silently rewritten
+          // into a fake "loaded" notice.
+          const prompt = await applyRequestedSkills(input.prompt, requestedSkills, { resolveSkill: resolveSkillForChild })
           if (input.task_id) {
             const resumed = await resumeDelegatedSessionFromClients({
               clients,
@@ -388,7 +521,7 @@ export default {
           }
           const agents = await listCallableAgentsFromClients(clients, location)
           const category = input.category
-            ? await resolveCategoryFromClients(clients, location, input.category)
+            ? await resolveCategoryFromClients(clients, location, input.category, { userCategories })
             : undefined
           const agent = category
             ? resolveNamedAgent(agents, "Sisyphus-Junior")
@@ -416,6 +549,21 @@ export default {
       if (process.env.RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION === "1") {
         const after = editor.get?.(taskName)
         console.error(`[ho-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
+      }
+      // Task 15: register the session, look_at, and (gate-permitting) monitor
+      // families through the F2 aggregator. The aggregator reads the manifest's
+      // materialized gates via the config adapter, so a disabled family adds no
+      // tool name to the editor.
+      const families = createNativeToolFamilies({
+        clients: [context, context.client],
+        location,
+        manifest,
+        context,
+        pluginConfig: context?.config,
+      })
+      nativeToolRegistry = families.registry
+      for (const [name, definition] of Object.entries(families.tools)) {
+        editor.add({ name, options: { codemode: false }, ...definition })
       }
     })
     const directoryReadRegistration = typeof context?.tool?.hook === "function"
@@ -449,7 +597,7 @@ export default {
         [context, context?.client],
         context.location,
       ),
-      categories: availableCategoryNames(),
+      categories: buildCategoryRoster(userCategories),
       resolveModel: resolveNativeModel,
       getAgentRequestBody: (agent) => agentRequestBodies.get(String(agent ?? "").toLocaleLowerCase()),
       onAgentTuningApplied: (event) => {
@@ -468,13 +616,30 @@ export default {
         && !agents.some((agent) => agent.name.toLocaleLowerCase() === String(input.agent ?? "").toLocaleLowerCase()),
     }))
     console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
+    // Conditional native tool families (interactive_bash / task_* / goal_*).
+    // Gates come from the materialized manifest; a disabled family is never
+    // registered.
+    const conditionalTools = await registerConditionalNativeTools({
+      context,
+      manifest,
+      directory: location.directory,
+    })
     return async () => {
       abortBackgroundHandoffs.abort()
       directoryInstructions.clearAll()
       reminders.clearAll()
       rules.clearAll()
       writeGuard.clearAll()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), rosterRegistration?.dispose?.(), eventSubscription])
+      await skillMcpManager.disconnectAll()
+      // Stop any live monitor PTY before the plugin tears down, so no watcher
+      // process outlives the session.
+      if (typeof nativeToolRegistry?.shutdown === "function") {
+        try { await nativeToolRegistry.shutdown() } catch (error) {
+          console.error(`[ho-my-rigel] Native V2 monitor shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      await conditionalTools?.dispose?.()
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), rosterRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription])
     }
   },
 }

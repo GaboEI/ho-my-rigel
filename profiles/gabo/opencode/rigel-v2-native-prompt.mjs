@@ -30,6 +30,23 @@ function agentPurpose(name) {
   return "its configured specialist role"
 }
 
+/**
+ * Render one category roster line. A category may arrive as a bare name string
+ * (legacy callers) or as `{ name, description, callerGuidance }` (the resolved
+ * category set). The description and caller guidance are the machine-consumed
+ * selection data V1 injects into the orchestrator prompt, so they are rendered
+ * here rather than dropped: the orchestrator needs them to route a task to the
+ * right category and to write the child prompt the category expects.
+ */
+function categoryRosterLine(category) {
+  const name = safeSingleLine(typeof category === "string" ? category : category?.name)
+  if (!name) return ""
+  const description = safeSingleLine(typeof category === "object" ? category?.description : "", 240)
+  const guidance = safeSingleLine(typeof category === "object" ? category?.callerGuidance : "", 400)
+  const detail = [description, guidance].filter(Boolean).join(" ")
+  return detail ? `- ${JSON.stringify(name)}: ${detail}` : `- ${JSON.stringify(name)}`
+}
+
 export function formatDelegationRoster(agents, categories = []) {
   const rows = Array.isArray(agents)
     ? agents
@@ -39,7 +56,7 @@ export function formatDelegationRoster(agents, categories = []) {
       .map((name) => `- ${JSON.stringify(name)}: ${agentPurpose(name)}`)
     : []
   const categoryRows = Array.isArray(categories)
-    ? categories.map((name) => safeSingleLine(name)).filter(Boolean).map((name) => `- ${JSON.stringify(name)}`)
+    ? categories.map(categoryRosterLine).filter(Boolean)
     : []
   if (rows.length === 0) return ""
   const categoryBlock = categoryRows.length > 0
