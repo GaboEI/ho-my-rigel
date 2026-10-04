@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import plugin from "./rigel-v2-native.mjs"
 import * as nativeRuntime from "./rigel-v2-native.mjs"
+import nativeManifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 
 // Deterministic event feed for the reactive-fallback tests. The generator
@@ -641,4 +645,115 @@ test("native runtime registers one additional execute.before hook and disposes i
   expect(beforeHooks.length).toBe(3)
   await dispose()
   expect(beforeHooks.every((registration) => registration.disposed)).toBe(true)
+})
+
+// Task 19: the hashline edit tool is registered only when the materialized
+// `hashline_edit` gate is on. The runtime reads the manifest singleton at setup
+// time, so the gated case turns the gate on for the duration of one setup and
+// restores it; the negative control exercises the shipped default manifest,
+// whose gate is absent.
+function editorCaptureContext() {
+  const added = []
+  const context = {
+    location: { directory: "/native-v2" },
+    agent: {
+      list: async () => ({ data: [] }),
+      transform: async (callback) => { callback({ update() {}, default() {} }); return { dispose() {} } },
+      reload: async () => {},
+    },
+    model: { list: async () => ({ data: [] }) },
+    session: {
+      hook: async () => ({ dispose() {} }),
+      create: async () => ({ data: { id: "ses_native" } }),
+      prompt: async () => ({ data: {} }),
+    },
+    tool: {
+      transform: async (callback) => {
+        callback({ add: (definition) => added.push(definition?.name), get: () => undefined })
+        return { dispose() {} }
+      },
+    },
+  }
+  return { context, added }
+}
+
+test("native runtime registers hashline_edit when the manifest gate is on", async () => {
+  // The generator replaces the manifest default export with the materialized
+  // gates at installation time. Mutate the shared manifest object the runtime
+  // reads, then restore it, so the gated registration runs against a real
+  // setup instead of a fixture-only editor.
+  const originalMetadata = nativeManifest.metadata
+  nativeManifest.metadata = { global: { gates: { hashline_edit: true } } }
+  try {
+    const { context, added } = editorCaptureContext()
+    const dispose = await plugin.setup(context)
+    expect(added).toContain("hashline_edit")
+    await dispose()
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
+})
+
+test("native runtime omits hashline_edit when the manifest gate is absent", async () => {
+  const { context, added } = editorCaptureContext()
+  const dispose = await plugin.setup(context)
+  expect(added).toContain("rigel_task")
+  expect(added).not.toContain("hashline_edit")
+  await dispose()
+})
+
+// Task 19: a real compaction clears the file-read-scoped context and writes an
+// observable receipt under $XDG_STATE_HOME. The event feed resolves only after
+// the runtime finished handling the pushed event, so awaiting it is the
+// synchronization point.
+test("native runtime records a context-cleared receipt on compaction", async () => {
+  const previousStateHome = process.env.XDG_STATE_HOME
+  const stateRoot = mkdtempSync(join(tmpdir(), "rigel-native-runtime-"))
+  process.env.XDG_STATE_HOME = stateRoot
+  try {
+    const feed = createEventFeed()
+    const context = reactiveFallbackContext(feed)
+    const dispose = await plugin.setup(context)
+
+    const consumed = feed.consumed()
+    feed.push({ type: "session.compacted", data: { sessionID: "ses_compact" } })
+    await consumed
+
+    const receiptPath = join(stateRoot, "ho-my-rigel", "context-cleared-on-compaction.json")
+    expect(existsSync(receiptPath)).toBe(true)
+    expect(JSON.parse(readFileSync(receiptPath, "utf8"))).toMatchObject({
+      sessionID: "ses_compact",
+      eventType: "session.compacted",
+    })
+    await dispose()
+  } finally {
+    if (previousStateHome === undefined) delete process.env.XDG_STATE_HOME
+    else process.env.XDG_STATE_HOME = previousStateHome
+    rmSync(stateRoot, { recursive: true, force: true })
+  }
+})
+
+// Task 19: the live V2 stream delivers compaction as `session.compaction.*`
+// with the session id under `properties`, so the handler must accept that name
+// and shape too, not only `session.compacted` with `data.sessionID`.
+test("native runtime records the clear for the streamed compaction event name", async () => {
+  const previousStateHome = process.env.XDG_STATE_HOME
+  const stateRoot = mkdtempSync(join(tmpdir(), "rigel-native-runtime-compaction-stream-"))
+  process.env.XDG_STATE_HOME = stateRoot
+  try {
+    const feed = createEventFeed()
+    const context = reactiveFallbackContext(feed)
+    const dispose = await plugin.setup(context)
+    const consumed = feed.consumed()
+    feed.push({ type: "session.compaction.started", properties: { sessionID: "ses_compact_stream" } })
+    await consumed
+    const receipt = JSON.parse(readFileSync(join(stateRoot, "ho-my-rigel", "context-cleared-on-compaction.json"), "utf8"))
+    expect(receipt).toMatchObject({ sessionID: "ses_compact_stream", eventType: "session.compaction.started" })
+    await dispose()
+  } finally {
+    if (previousStateHome === undefined) delete process.env.XDG_STATE_HOME
+    else process.env.XDG_STATE_HOME = previousStateHome
+    rmSync(stateRoot, { recursive: true, force: true })
+  }
 })

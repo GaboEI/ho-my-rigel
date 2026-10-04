@@ -53,7 +53,7 @@ function fakeContext({ storage, pty, onSubscription } = {}) {
   }
 }
 
-const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false }
+const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false, hashline_edit: false }
 
 describe("gate reader", () => {
   test("defaults every gate to false and only accepts explicit true", () => {

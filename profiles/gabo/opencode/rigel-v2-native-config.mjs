@@ -69,7 +69,7 @@ const PROFILE_KEYS = new Set(["categories", "disabled_skills", "[opencode]", "[n
 
 const TARGET_KEYS = new Set([
   "monitor", "goal", "experimental", "disabled_tools", "disabled_agents",
-  "disabled_skills", "categories", "ralph_loop",
+  "disabled_skills", "categories", "ralph_loop", "hashline_edit",
 ])
 
 const MAX_PROJECT_CONFIG_DIRECTORY_DEPTH = 256
@@ -406,6 +406,12 @@ function validateExperimental(value, path, diagnostics) {
     if (typeof value.task_system === "boolean") parsed.task_system = value.task_system
     else warn(diagnostics, `config: ${path}: experimental.task_system ignored (invalid value)`)
   }
+  // V1 migrates experimental.hashline_edit up to the root key; keep the legacy
+  // placement readable so an older profile still enables the hashline surface.
+  if ("hashline_edit" in value) {
+    if (typeof value.hashline_edit === "boolean") parsed.hashline_edit = value.hashline_edit
+    else warn(diagnostics, `config: ${path}: experimental.hashline_edit ignored (invalid value)`)
+  }
   return parsed
 }
 
@@ -515,6 +521,9 @@ function parseConfigView(view, diagnostics) {
     } else if (key === "experimental") {
       const section = validateExperimental(value, view.path, diagnostics)
       if (section !== undefined) parsed.experimental = section
+    } else if (key === "hashline_edit") {
+      if (typeof value === "boolean") parsed.hashline_edit = value
+      else warn(diagnostics, `config: ${view.path}: hashline_edit ignored (invalid value)`)
     } else if (STRING_ARRAY_KEYS.has(key)) {
       if (Array.isArray(value)) parsed[key] = value.filter((entry) => typeof entry === "string")
       else warn(diagnostics, `config: ${view.path}: ${key} ignored (invalid value)`)
@@ -727,7 +736,11 @@ export function resolveNativePluginConfig(options = {}) {
   const view = {
     monitor,
     goal,
-    experimental: { task_system: config.experimental?.task_system ?? false },    disabled: {
+    experimental: { task_system: config.experimental?.task_system ?? false },
+    // Root hashline_edit is authoritative; the legacy experimental placement is
+    // folded in when the root key is absent, mirroring V1's config migration.
+    hashline_edit: config.hashline_edit === true || config.experimental?.hashline_edit === true,
+    disabled: {
       tools: config.disabled_tools ?? [],
       agents: config.disabled_agents ?? [],
       skills: config.disabled_skills ?? [],
@@ -743,7 +756,7 @@ export function resolveNativePluginConfig(options = {}) {
 // Reads materialized gates from the generated agent manifest so a tool
 // family is registered only when its gate is enabled. Distinct from
 // resolveNativePluginConfig (which reads omo.jsonc directly).
-const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "interactive_bash"])
+const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "interactive_bash", "hashline_edit"])
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -816,6 +829,7 @@ export function deriveNativeGates(view) {
     goal: view?.goal?.enabled === true,
     task_system: view?.experimental?.task_system === true,
     interactive_bash: !disabledTools.includes("interactive_bash"),
+    hashline_edit: view?.hashline_edit === true,
   }
 }
 

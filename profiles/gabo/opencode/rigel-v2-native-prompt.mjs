@@ -168,8 +168,9 @@ export function createNativeRequestHook({
   onAgentTuningApplied,
   ultraworkPrompt = "",
   defaultUltrawork = false,
-  getDirectoryInstructions,
   getInitialDirectoryInstructions,
+  getCategorySkillReminder,
+  onCategorySkillReminderConsumed,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
@@ -225,9 +226,6 @@ export function createNativeRequestHook({
         input.request = new Request(input.request, { body: JSON.stringify(body) })
       }
     }
-    const directoryGuidance = sessionID && typeof getDirectoryInstructions === "function"
-      ? getDirectoryInstructions(sessionID)
-      : ""
     const initialDirectoryGuidance = sessionID && typeof getInitialDirectoryInstructions === "function"
       ? getInitialDirectoryInstructions({ sessionID, agent: input.agent })
       : ""
@@ -237,21 +235,10 @@ export function createNativeRequestHook({
       return
     }
     const isRoot = await isRootSession(input, agents)
-    if (!isRoot && !directoryGuidance) return
-    if (!isRoot) {
-      if (isChatShape) {
-        const messages = body.messages.filter((message) => !isDirectoryInstructionMessage(message))
-        const index = messages.findIndex((message) => message?.role !== "system")
-        messages.splice(index < 0 ? messages.length : index, 0, { role: "system", content: directoryGuidance })
-        body.messages = messages
-      } else {
-        // Responses has no discrete system messages; the directory guidance is
-        // appended to `instructions` (the system prompt) instead.
-        body.instructions = mergeInstructions(body.instructions, [directoryGuidance])
-      }
-      input.request = new Request(input.request, { body: JSON.stringify(body) })
-      return
-    }
+    // Per-read directory context is appended to the read tool result by the
+    // directory injector, not injected here; only the Hephaestus root-AGENTS
+    // guidance remains a system-level injection.
+    if (!isRoot) return
     const explicitUltrawork = isChatShape ? hasUltraworkKeyword(body.messages) : responsesHasUltraworkKeyword(body)
     if (sessionID && (defaultUltrawork || explicitUltrawork)) ultraworkSessions.add(sessionID)
     const ultraworkActive = defaultUltrawork || explicitUltrawork || Boolean(sessionID && ultraworkSessions.has(sessionID))
@@ -259,9 +246,15 @@ export function createNativeRequestHook({
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
     const injections = []
     if (initialDirectoryGuidance) injections.push(initialDirectoryGuidance)
-    if (directoryGuidance) injections.push(directoryGuidance)
     if (ultraworkActive && ultraworkPrompt.trim()) injections.push(ultraworkPrompt)
     if (roster) injections.push(roster)
+    // V1's category-skill reminder is injected once per session at the system
+    // boundary. It is consumed on the same pass so a repeated request never
+    // duplicates it.
+    const categorySkillReminder = sessionID && typeof getCategorySkillReminder === "function"
+      ? getCategorySkillReminder(sessionID)
+      : ""
+    if (categorySkillReminder) injections.push(categorySkillReminder)
     if (isChatShape) {
       const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
       if (injections.length > 0) {
@@ -270,12 +263,13 @@ export function createNativeRequestHook({
       }
       body.messages = messages
     } else {
-      // Responses: the roster, ultrawork directive, and directory guidance are
-      // all system-level text, so they merge into `instructions`. `input` is
-      // left untouched.
+      // Responses: the roster, the Hephaestus root-AGENTS guidance, the ultrawork
+      // directive, and the category-skill reminder are all system-level text, so
+      // they merge into `instructions`. `input` is left untouched.
       body.instructions = mergeInstructions(body.instructions, injections)
     }
     input.request = new Request(input.request, { body: JSON.stringify(body) })
+    if (categorySkillReminder) onCategorySkillReminderConsumed?.(sessionID)
   }
 }
 

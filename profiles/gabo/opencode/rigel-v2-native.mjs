@@ -40,6 +40,8 @@ import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
 import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
+import { createHashlineEditTool, createHashlineReadEnhancer } from "./rigel-v2-native-hashline.mjs"
+import { createNativeCategorySkillReminder } from "./rigel-v2-native-category-skill-reminder.mjs"
 import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
 
 /**
@@ -424,8 +426,30 @@ export default {
       sessionFallback.set(sessionID, state)
     }
     const directoryInstructions = createDirectoryInstructionStore({ directory: location.directory })
-    const reminders = createNativeToolResultReminders()
-    const rules = createNativeRulesInjector({ directory: location.directory })
+    const reminders = createNativeToolResultReminders({ storage: context?.storage })
+    // Task 19: hydration reads the session transcript to suppress a rule whose
+    // emitted marker is still present, so a lost in-memory cache does not
+    // re-inject it. An absent session context degrades to an empty transcript.
+    const rules = createNativeRulesInjector({
+      directory: location.directory,
+      getSessionMessages: (sessionID) => (typeof context?.session?.context === "function"
+        ? context.session.context({ sessionID })
+        : Promise.resolve([])),
+    })
+    // Task 19: hashline is gated by the materialized `hashline_edit` gate. When
+    // on, the read enhancer tags V2 read output with LINE#ID and an equivalent
+    // `hashline_edit` tool validates the anchor hash before writing.
+    const nativeGates = readNativeGates(manifest)
+    const hashlineEnabled = nativeGates.hashline_edit === true
+    const hashline = hashlineEnabled ? createHashlineReadEnhancer() : undefined
+    const hashlineEditTool = hashlineEnabled ? createHashlineEditTool({ directory: location.directory }) : undefined
+    // Task 19: category-skill reminder. The formatter is built once from the
+    // discovered skill registry; `scope` maps to the formatter's `location` so
+    // builtin skills are classified as builtin and the rest as user skills.
+    const categorySkillReminder = createNativeCategorySkillReminder({
+      getSkills: () => skillRegistry.skills.map((skill) => ({ name: skill.name, location: skill.scope })),
+      getAgent: async ({ sessionID, agent }) => (await sessionAgentResolver({ sessionID })) ?? agent,
+    })
     const writeGuard = createNativeWriteExistingFileGuard({ directory: location.directory })
     const nonInteractiveEnv = createNativeNonInteractiveEnvGuard()
     const commentChecker = createNativeCommentChecker()
@@ -470,6 +494,17 @@ export default {
         console.error(`[ho-my-rigel] Native V2 background handoff failed: child=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
       }
     }
+    // Task 19: V2 names a real compaction across two event vocabularies
+    // (`session.compacted`, and the streamed `session.compaction.*` /
+    // `session.next.compaction.*` families). Any of them clears the
+    // file-read-scoped context so the next read re-injects.
+    const compactionEventTypes = new Set([
+      "session.compacted",
+      "session.compaction.started",
+      "session.compaction.ended",
+      "session.next.compaction.started",
+      "session.next.compaction.ended",
+    ])
     const eventSubscription = typeof context?.event?.subscribe === "function"
       ? (async () => {
         try {
@@ -487,6 +522,14 @@ export default {
               // session is deleted, so a per-session MCP process never outlives
               // the session that spawned it.
               await skillMcpManager.disconnectSession(sessionID)
+            }
+            // Task 19: a real V2 compaction clears the file-read-scoped rule and
+            // directory context, so the next read re-injects instead of relying
+            // on a pre-compaction cache. A receipt records the clear observably.
+            if (typeof sessionID === "string" && compactionEventTypes.has(event.type)) {
+              rules.clear(sessionID)
+              directoryInstructions.clear(sessionID)
+              writeStateReceipt("context-cleared-on-compaction.json", { sessionID, eventType: event.type })
             }
             // Reactive fallback: a failed execution marks the last-sent model
             // failed for that session, so the next request resolves the next
@@ -605,17 +648,22 @@ export default {
       for (const [name, definition] of Object.entries(families.tools)) {
         editor.add({ name, options: { codemode: false }, ...definition })
       }
+      if (hashlineEditTool) {
+        editor.add({ name: "hashline_edit", options: { codemode: false }, ...normalizeToolDefinition(hashlineEditTool) })
+      }
     })
     const directoryReadRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.after", async (input) => {
-        if (input?.status === "completed") directoryInstructions.recordRead(input)
+        directoryInstructions.after(input)
       })
       : undefined
     const remindersRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.after", async (input) => {
-        reminders.after(input)
+        await hashline?.after(input)
+        await reminders.after(input)
+        await categorySkillReminder.after(input)
         applyNativeRecoveryReminder(input)
-        rules.after(input)
+        await rules.after(input)
         await commentChecker.after(input)
         planFormatValidator.after(input)
         webFetchGuard.after(input)
@@ -653,7 +701,6 @@ export default {
       },
       ultraworkPrompt,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
-      getDirectoryInstructions: directoryInstructions.guidance,
       getInitialDirectoryInstructions: ({ agent }) => /\bhephaestus\b/i.test(String(agent ?? ""))
         ? directoryInstructions.rootAgentsGuidance()
         : "",
@@ -662,6 +709,8 @@ export default {
       // never allowed to receive the parent's delegation menu.
       isRootSession: (input, agents) => !childSessionIDs.has(input.sessionID)
         && !agents.some((agent) => agent.name.toLocaleLowerCase() === String(input.agent ?? "").toLocaleLowerCase()),
+      getCategorySkillReminder: (sessionID) => (sessionID ? categorySkillReminder.pending(sessionID) : ""),
+      onCategorySkillReminderConsumed: (sessionID) => { categorySkillReminder.consume(sessionID) },
     }))
     console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     // Conditional native tool families (interactive_bash / task_* / goal_*).
@@ -677,6 +726,7 @@ export default {
       directoryInstructions.clearAll()
       reminders.clearAll()
       rules.clearAll()
+      categorySkillReminder.clearAll()
       writeGuard.clearAll()
       commentChecker.clearAll()
       webFetchGuard.clearAll()

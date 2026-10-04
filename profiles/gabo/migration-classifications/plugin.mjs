@@ -112,9 +112,10 @@ export default {
   },
   "messages-transform": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/messages-transform.ts` inyecta contexto y valida bloques de pensamiento y pares de herramientas, pero V2 no tiene mapeo verificado para `experimental.chat.messages.transform`; se adapta en la frontera `http.request`.",
-    futureEvidence: "task:19",
+      "`plugin/messages-transform.ts` cablea los inyectores sobre `experimental.chat.messages.transform` y ademas valida bloques de pensamiento, pares de herramientas y repara la cola assistant-prefill; es una superficie mas amplia que T19. T19 reubico la inyeccion de directorio y reglas al resultado de lectura (`tool.execute.after`) y el roster, ultrawork, la guia raiz de Hephaestus y el recordatorio de categoria en `http.request`; la validacion de pensamiento/pares y la reparacion de prefill no se reimplementaron y siguen pendientes.",
+    futureEvidence: "`rigel-v2-native-prompt.mjs`; `rigel-v2-directory-instructions.mjs`; `rigel-v2-native-rules.mjs`",
   },
   "native-skills": {
     classification: "Migrar",

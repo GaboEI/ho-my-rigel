@@ -3,6 +3,13 @@
 // Interno de build (sin superficie de runtime), con su rationale y la evidencia
 // futura (tarea, contrato o gate) que demostrará la equivalencia.
 export default {
+  "agent-usage-reminder": {
+    classification: "Migrar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/agent-usage-reminder/` decora el resultado de una herramienta de búsqueda o fetch dirigida a un agente orquestador, se detiene tras usar una herramienta de delegación y limita el aviso a tres veces por sesión. El reemplazo nativo en `rigel-v2-native-reminders.mjs` reproduce el conjunto exacto de orquestadores, el mensaje byte a byte, el tope de MAX 3, el conteo de diez herramientas no-task y la persistencia por sessionID mediante storage inyectado (get/set/delete), con la continuidad tras reinicio comprobada por prueba.",
+    futureEvidence: "`rigel-v2-native-reminders.mjs`; `rigel-v2-native-reminders.test.mjs`",
+  },
   "anthropic-context-window-limit-recovery": {
     classification: "Migrar",
     rationale:
@@ -35,9 +42,10 @@ export default {
   },
   "category-skill-reminder": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El recordatorio V1 en `hooks/category-skill-reminder/hook.ts` sugiere cargar skills antes de invocar una categoría; se migra al runtime nativo V2 inyectando el recordatorio en la frontera http.request del orquestador.",
-    futureEvidence: "task:19",
+      "El recordatorio V1 en `hooks/category-skill-reminder/` avisa cargar skills tras tres herramientas delegables sin delegar, una vez por sesión. El reemplazo nativo en `rigel-v2-native-category-skill-reminder.mjs` conserva el conjunto de agentes objetivo, el umbral de tres, la supresión por delegación, el formateador byte a byte y el consumo único; `rigel-v2-native-prompt.mjs` lee `pending` y llama `consume` en la frontera http.request del orquestador sin mutar el resultado de la herramienta.",
+    futureEvidence: "`rigel-v2-native-category-skill-reminder.mjs`; `rigel-v2-native-category-skill-reminder.test.mjs`; `rigel-v2-native-prompt.mjs`",
   },
   "claude-code-hooks": {
     classification: "Migrar",
@@ -58,6 +66,20 @@ export default {
       "El reintento V1 en `hooks/delegate-task-retry/hook.ts` reintenta delegaciones fallidas sobre el resultado de la herramienta; se migra al runtime nativo V2 en tool.execute.after con los mismos patrones de fallo.",
     futureEvidence: "task:20",
   },
+  "directory-agents-injector": {
+    classification: "Migrar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/directory-agents-injector/` descubre los `AGENTS.md` aplicables a una lectura y los anexa al resultado de lectura (`output.output +=`). El reemplazo nativo en `rigel-v2-directory-instructions.mjs` reproduce el recorrido hacia arriba con `skipRoot`, el orden raiz primero, la contencion canonica por realpath, la deduplicacion por directorio y la truncacion por tokens, y anexa el sobre `<rigel-native-directory-agents>` al mismo resultado de lectura en `tool.execute.after`.",
+    futureEvidence: "`rigel-v2-directory-instructions.mjs`; `rigel-v2-directory-instructions.test.mjs`",
+  },
+  "directory-readme-injector": {
+    classification: "Migrar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/directory-readme-injector/` conserva los `README.md` aplicables a una lectura y los anexa al resultado de lectura. El mismo almacen nativo en `rigel-v2-directory-instructions.mjs` recorre los README incluido el de la raiz del workspace, aplica el orden raiz primero, la deduplicacion por directorio y la truncacion por tokens, y anexa el bloque al mismo resultado de lectura en `tool.execute.after`.",
+    futureEvidence: "`rigel-v2-directory-instructions.mjs`; `rigel-v2-directory-instructions.test.mjs`",
+  },
   "fsync-skip-warning": {
     classification: "Migrar",
     rationale:
@@ -72,10 +94,11 @@ export default {
     futureEvidence: "task:16",
   },
   "hashline-read-enhancer": {
-    classification: "Adaptar",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El enhancer V1 en `hooks/hashline-read-enhancer/hook.ts` etiqueta cada lectura con LINE#ID; V2 no expone el mismo gancho de lectura, así que se adapta con un enhancer nativo en tool.execute.after más un equivalente de hashline_edit que valida el hash antes de escribir.",
-    futureEvidence: "task:19",
+      "El enhancer V1 en `hooks/hashline-read-enhancer/hook.ts` etiqueta cada lectura con LINE#ID. La superficie V2 mutable de `tool.execute.after` permite portarlo directamente: `createHashlineReadEnhancer` en `rigel-v2-native-hashline.mjs` reescribe el contenido del resultado de lectura (cabecera `Read file ...` incluida) con LINE#ID y reescribe el marcador de escritura. La paridad con `hashline-core` de V1 está fijada por prueba y la ejecución viva lo comprueba en la sesión del laboratorio.",
+    futureEvidence: "`rigel-v2-native-hashline.mjs`; `rigel-v2-native-hashline.test.mjs`",
   },
   "interactive-bash-session": {
     classification: "Migrar",
@@ -158,6 +181,13 @@ export default {
     rationale:
       "El redimensionador V1 en `hooks/read-image-resizer/hook.ts` reduce las imágenes grandes que se leen; se migra al runtime nativo V2 en tool.execute.after reescribiendo el resultado con la imagen reducida.",
     futureEvidence: "task:20",
+  },
+  "rules-injector": {
+    classification: "Migrar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/rules-injector/` descubre reglas de proyecto y de usuario y las anexa al resultado de la herramienta. El reemplazo nativo en `rigel-v2-native-rules.mjs` porta el descubrimiento por marcador de raíz, el recorrido por ancestros con orden por distancia, el parser de frontmatter, el matcher de globs, el truncador por tokens y la deduplicación por sesión con `clear` en compactación. La prueba fija la paridad del matcher con picomatch en modo dot+bash sobre un corpus de globs, clases de caracteres, llaves y negaciones.",
+    futureEvidence: "`rigel-v2-native-rules.mjs`; `rigel-v2-native-rules.test.mjs`",
   },
   "runtime-fallback": {
     classification: "Migrar",

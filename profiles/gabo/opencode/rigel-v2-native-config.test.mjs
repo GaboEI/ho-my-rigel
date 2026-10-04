@@ -297,21 +297,21 @@ describe("#given a resolved native plugin config view", () => {
     // when
     const offGates = deriveNativeGates(off)
     // then
-    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, interactive_bash: true })
+    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, interactive_bash: true, hashline_edit: false })
 
     // given
     const on = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: [] } }
     // when
     const onGates = deriveNativeGates(on)
     // then
-    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: true })
+    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: true, hashline_edit: false })
 
     // given
     const disabled = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: ["interactive_bash"] } }
     // when
     const disabledGates = deriveNativeGates(disabled)
     // then
-    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: false })
+    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: false, hashline_edit: false })
   })
 
   test("#when the view is malformed #then every config gate degrades closed", () => {

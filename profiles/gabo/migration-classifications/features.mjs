@@ -73,9 +73,10 @@ export default {
   },
   "context-injector": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "La inyección de `AGENTS.md` y `README.md` de `features/context-injector/` apoyada en `packages/agents-md-core/` usa un hook Transform ausente en V2; se adapta a la frontera `http.request` que ya usa `rigel-v2-native-prompt.mjs`.",
-    futureEvidence: "task:19",
+      "`features/context-injector/` es un colector generico de contexto (register/getPending/consume con orden por prioridad) mas un hook de transform; es una superficie mas amplia que T19. T19 cubre la inyeccion de `AGENTS.md`/`README.md` por `rigel-v2-directory-instructions.mjs` (anexada al resultado de lectura) y de reglas por `rigel-v2-native-rules.mjs`; la semantica generica de registro/prioridad/consumo del colector y sus consumidores fuera de alcance (claude-code-hooks, keyword-detector) siguen sin equivalente nativo.",
+    futureEvidence: "`rigel-v2-directory-instructions.mjs`; `rigel-v2-native-rules.mjs`",
   },
   "hook-message-injector": {
     classification: "Interno de build (sin superficie de runtime)",

@@ -77,6 +77,7 @@ try {
   if (gates.goal) tools["goal_*"] = true
   if (gates.monitor) tools["monitor_*"] = true
   if (gates.interactive_bash) tools["interactive_bash"] = true
+  if (gates.hashline_edit) tools["hashline_edit"] = true
   const materialized = {
     defaultAgent: config.default_agent,
     agents: orderedSelected,

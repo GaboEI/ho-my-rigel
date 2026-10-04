@@ -398,11 +398,11 @@ test("does not inject the roster into a Responses-shaped child session", async (
   expect(body.instructions).toBe("You are a helpful agent.")
 })
 
-test("appends directory guidance to Responses instructions for a child session", async () => {
+test("does not inject root system guidance into a child session", async () => {
   const hook = createNativeRequestHook({
     getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
     isRootSession: async () => false,
-    getDirectoryInstructions: () => "<rigel-native-directory-agents>\nAGENTS rules\n<rigel-native-directory-agents>",
+    ultraworkPrompt: "<ultrawork-mode>ULTRAWORK MODE ENABLED!</ultrawork-mode>",
   })
   const input = {
     sessionID: "ses_child",
@@ -413,9 +413,30 @@ test("appends directory guidance to Responses instructions for a child session",
   }
   await hook(input)
   const body = await input.request.clone().json()
-  expect(body.instructions).toContain("You are a helpful agent.")
-  expect(body.instructions).toContain("<rigel-native-directory-agents>")
+  // Per-read directory context lives in the tool result, so a child request is
+  // left untouched by the root system-injection path.
+  expect(body.instructions).toBe("You are a helpful agent.")
+  expect(body.instructions).not.toContain("<ultrawork-mode>")
   expect(body.input).toHaveLength(1)
+})
+
+test("injects the Hephaestus root AGENTS.md guidance into a root session", async () => {
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    getInitialDirectoryInstructions: () => "<rigel-native-directory-agents>\nROOT_AGENTS\n<rigel-native-directory-agents>",
+  })
+  const input = {
+    sessionID: "ses_hep",
+    agent: "Hephaestus - Deep Agent",
+    request: new Request("https://example.invalid/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(responsesBody()),
+    }),
+  }
+  await hook(input)
+  const body = await input.request.clone().json()
+  expect(body.instructions).toContain("You are a helpful agent.")
+  expect(body.instructions).toContain("ROOT_AGENTS")
 })
 
 test("Responses instructions do not accumulate across repeated passes", async () => {
@@ -475,4 +496,59 @@ test("renders the delegation roster with the canonical core head from a shuffled
     "Judge",
     "Explore",
   ])
+})
+
+// Task 19: the category-skill reminder is injected once at the root system
+// boundary and consumed on the same pass, so a repeated request never
+// duplicates it and a child session never receives it.
+test("category-skill reminder injects once for a root session and is consumed", async () => {
+  let reminder = "[Category+Skill Reminder]\nLoad the obsidian skill before writing."
+  const consumed = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    getCategorySkillReminder: () => reminder,
+    onCategorySkillReminderConsumed: (sessionID) => consumed.push(sessionID),
+  })
+  const requestBody = () => new Request("https://example.invalid/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [
+      { role: "system", content: "ordinary system text" },
+      { role: "user", content: "work" },
+    ] }),
+  })
+
+  const first = { sessionID: "ses_root", request: requestBody() }
+  await hook(first)
+  const firstBody = await first.request.clone().json()
+  expect(firstBody.messages.some((message) => message.content?.includes("[Category+Skill Reminder]"))).toBe(true)
+  expect(consumed).toEqual(["ses_root"])
+
+  reminder = ""
+  const second = { sessionID: "ses_root", request: requestBody() }
+  await hook(second)
+  const secondBody = await second.request.clone().json()
+  expect(secondBody.messages.some((message) => message.content?.includes("[Category+Skill Reminder]"))).toBe(false)
+  expect(consumed).toEqual(["ses_root"])
+})
+
+test("category-skill reminder is never injected into a child session", async () => {
+  const consumed = []
+  const hook = createNativeRequestHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    getCategorySkillReminder: () => "[Category+Skill Reminder]\nchild must not see this",
+    onCategorySkillReminderConsumed: (sessionID) => consumed.push(sessionID),
+    isRootSession: async () => false,
+  })
+  const input = {
+    sessionID: "ses_child",
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "child work" }] }),
+    }),
+  }
+  await hook(input)
+  expect((await input.request.clone().json()).messages).toEqual([{ role: "user", content: "child work" }])
+  expect(consumed).toEqual([])
 })

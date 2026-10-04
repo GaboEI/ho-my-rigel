@@ -38,10 +38,11 @@ export default {
     futureEvidence: "contract:qa-v2-builtin-parity.mjs",
   },
   "hashline-edit": {
-    classification: "Adaptar",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El editor por hashes de `tools/hashline-edit/tools.ts` se adapta al modelo de edición de V2: el read enhancer LINE#ID y un equivalente de `hashline_edit` con validación de hash sobre la superficie nativa.",
-    futureEvidence: "task:19",
+      "El editor por hashes de `tools/hashline-edit/tools.ts` se adapta al modelo de edición de V2 con `createHashlineEditTool` en `rigel-v2-native-hashline.mjs`, registrado como `hashline_edit`: valida el hash LINE#ID antes de escribir, restaura el envoltorio de BOM y CRLF, permite crear un archivo ausente con append o prepend sin ancla y rechaza el hash obsoleto sin tocar el archivo. El port de `hashline-core` vive en `rigel-v2-native-hashline-core.mjs` y su paridad con V1 está fijada por prueba.",
+    futureEvidence: "`rigel-v2-native-hashline.mjs`; `rigel-v2-native-hashline-core.mjs`; `rigel-v2-native-hashline.test.mjs`",
   },
   "interactive-bash": {
     classification: "Migrar",

@@ -12,6 +12,7 @@
         "websearch": { "provider": "tavily" },
         "disabled_mcps": ["context7"],
         "browser_automation_engine": { "provider": "playwright" },
+        "hashline_edit": true,
         "goal": {
           "enabled": false,
           "auto_start": false,
