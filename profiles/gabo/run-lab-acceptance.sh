@@ -87,6 +87,14 @@ done
 openapi=$(curl_json /openapi.json)
 case "$openapi" in *'"openapi":"3'*|*'"openapi": "3'*) pass "lab API openapi 3";; *) bad "lab API did not answer openapi 3";; esac
 
+# V2 identity, not port identity: the lab must answer /api/info with its own
+# version and pid. A port number is never treated as proof of the server.
+info=$(curl_json /api/info)
+case "$info" in
+  *'"version"'*'"pid"'*) pass "lab API identifies as V2 via /api/info";;
+  *) bad "lab API /api/info did not return a V2 identity document";;
+esac
+
 curl_json /api/config > "$evidence_dir/api-config.json"
 if [ -s "$evidence_dir/api-config.json" ]; then
   verdicts=$(python3 - "$lab_root" "$HOME" "$evidence_dir/api-config.json" <<'PY'
