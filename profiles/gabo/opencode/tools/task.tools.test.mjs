@@ -117,6 +117,20 @@ describe("task_create / task_get / task_list / task_update contracts", () => {
     expect(result).toEqual({ error: "task_lock_unavailable", retryable: true })
   })
 
+  test("create reports validation_error for an invalid optional field type", async () => {
+    const { tools } = makeTools(memoryStorage())
+    const result = JSON.parse(await tools.task_create.execute({ subject: "x", description: 5 }, { sessionID: "ses" }))
+    expect(result.error).toBe("validation_error")
+    expect(result.message).toBe("Invalid type for description")
+  })
+
+  test("update reports validation_error for an invalid status", async () => {
+    const { tools } = makeTools(memoryStorage())
+    const result = JSON.parse(await tools.task_update.execute({ id: "T-seed-1", status: "bogus" }, { sessionID: "ses" }))
+    expect(result.error).toBe("validation_error")
+    expect(result.message).toBe("Invalid status")
+  })
+
   test("get returns the full task, null for absent, and invalid_task_id for a bad id", async () => {
     const storage = memoryStorage()
     const { store, tools } = makeTools(storage)

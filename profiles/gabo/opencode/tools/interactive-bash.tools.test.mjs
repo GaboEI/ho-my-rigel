@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  buildAdaptedBlockedTmuxCommandMessage,
   buildBlockedTmuxCommandMessage,
   buildProhibitedTmuxCommandMessage,
   classifyTmuxCommand,
@@ -36,6 +37,14 @@ describe("interactive_bash tokenizer and subcommand resolution", () => {
     expect(message).toContain("Error: 'capture-pane' is blocked in interactive_bash.")
     expect(message).toContain("tmux capture-pane -p -t omo-dev")
     expect(message).toContain("Do NOT retry with interactive_bash.")
+  })
+
+  test("adapted blocked message points at the read action and drops the Bash route", () => {
+    const message = buildAdaptedBlockedTmuxCommandMessage("capture-pane", ["capture-pane", "-t", "omo-dev"])
+    expect(message).toContain("Error: 'capture-pane' is blocked in interactive_bash.")
+    expect(message).toContain('"action": "read"')
+    expect(message).toContain("omo-dev")
+    expect(message).not.toContain("USE BASH TOOL INSTEAD")
   })
 
   test("prohibited message forbids kill-server", () => {
@@ -93,10 +102,139 @@ describe("interactive_bash tool execution", () => {
     expect(await tool.execute({ tmux_command: "list-sessions" })).toBe("Error: Timeout after 60000ms")
   })
 
-  test("exposes the V1 tool name and JSON Schema input", () => {
+  test("exposes the V1 tool name and the combined JSON Schema input", () => {
     const tool = toolWithRunner({ run: async () => ({ stdout: "", stderr: "", exitCode: 0 }) })
     expect(tool.name).toBe(INTERACTIVE_BASH_TOOL_NAME)
-    expect(tool.input.required).toEqual(["tmux_command"])
+    expect(Object.keys(tool.input.properties)).toContain("action")
+    expect(Object.keys(tool.input.properties)).toContain("tmux_command")
+    expect(tool.input.required).toEqual([])
+  })
+})
+
+describe("interactive_bash persistent-terminal (no tmux) path", () => {
+  function createFakeTerminalFactory() {
+    const calls = { start: [], write: [], snapshot: [], remove: [], list: 0 }
+    const terminals = []
+    let nextId = 1
+    const port = {
+      async start(input) {
+        calls.start.push(input)
+        const ptyID = `pty_${nextId++}`
+        terminals.push({ id: ptyID, command: input.command })
+        return { ok: true, ptyID, info: { id: ptyID } }
+      },
+      async write(input) {
+        calls.write.push(input)
+        return { ok: true }
+      },
+      async snapshot(input) {
+        calls.snapshot.push(input)
+        return { ok: true, text: `snap:${input.ptyID}` }
+      },
+      async remove(input) {
+        calls.remove.push(input)
+        const found = terminals.findIndex((terminal) => terminal.id === input.ptyID)
+        if (found >= 0) terminals.splice(found, 1)
+        return { ok: true }
+      },
+      async list() {
+        calls.list += 1
+        return { ok: true, terminals: [...terminals] }
+      },
+    }
+    return { factory: () => port, calls, terminals }
+  }
+
+  test("drives the persistent terminal through start/send/read/stop", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const ctx = { sessionID: "sess_actions" }
+
+    const started = await tool.execute({ action: "start", command: "bash", cwd: "/work" }, ctx)
+    expect(started).toContain("interactive_bash started")
+    expect(started).toContain("pty_1")
+    expect(fake.calls.start).toEqual([{ command: "bash", args: [], title: "bash", env: {}, cwd: "/work" }])
+
+    expect(await tool.execute({ action: "send", input: "ls\n" }, ctx)).toBe("ok")
+    expect(fake.calls.write).toEqual([{ ptyID: "pty_1", data: "ls\n" }])
+
+    expect(await tool.execute({ action: "read" }, ctx)).toBe("snap:pty_1")
+    expect(fake.calls.snapshot).toEqual([{ ptyID: "pty_1" }])
+
+    expect(await tool.execute({ action: "stop" }, ctx)).toBe("ok")
+    expect(fake.calls.remove).toEqual([{ ptyID: "pty_1" }])
+  })
+
+  test("lists the session terminals", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const ctx = { sessionID: "sess_list_terminals" }
+    await tool.execute({ action: "start" }, ctx)
+    const listed = await tool.execute({ action: "list" }, ctx)
+    expect(JSON.parse(listed)).toEqual([{ id: "pty_1", command: "/bin/bash" }])
+  })
+
+  test("an explicit target overrides the remembered terminal", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const ctx = { sessionID: "sess_target_override" }
+    await tool.execute({ action: "start" }, ctx)
+    await tool.execute({ action: "send", input: "x", target: "pty_other" }, ctx)
+    expect(fake.calls.write).toEqual([{ ptyID: "pty_other", data: "x" }])
+  })
+
+  test("errors when no terminal was started for the session", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    expect(await tool.execute({ action: "read" }, { sessionID: "sess_no_start" })).toContain("no active terminal")
+  })
+
+  test("translates the supported tmux verbs onto the persistent terminal", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const ctx = { sessionID: "sess_tmux_verbs" }
+    expect(await tool.execute({ tmux_command: "new-session -d -s omo-dev" }, ctx)).toContain("interactive_bash started")
+    expect(await tool.execute({ tmux_command: "send-keys -t omo-dev ls Enter" }, ctx)).toBe("ok")
+    expect(fake.calls.write).toEqual([{ ptyID: "pty_1", data: "ls\n" }])
+    expect(JSON.parse(await tool.execute({ tmux_command: "list-sessions" }, ctx))).toHaveLength(1)
+    expect(await tool.execute({ tmux_command: "kill-session -t omo-dev" }, ctx)).toBe("ok")
+    expect(fake.calls.remove).toEqual([{ ptyID: "pty_1" }])
+  })
+
+  test("names the supported verbs for an allowed-but-unmapped tmux verb", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const output = await tool.execute({ tmux_command: "select-pane -t 1" }, { sessionID: "sess_unmapped" })
+    expect(output).toContain("'select-pane' tmux verb is not supported")
+    expect(output).toContain("new-session")
+    expect(output).toContain("start, send, read, stop, list")
+  })
+
+  test("adapts the blocked capture-pane message to the read action on the no-tmux path", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const output = await tool.execute({ tmux_command: "capture-pane -t omo-dev" }, { sessionID: "sess_blocked" })
+    expect(output).toContain("'capture-pane' is blocked")
+    expect(output).toContain('"action": "read"')
+    expect(output).not.toContain("USE BASH TOOL INSTEAD")
+  })
+
+  test("returns the strong prohibition for kill-server on the no-tmux path", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const output = await tool.execute({ tmux_command: "-L omo-socket kill-server" }, { sessionID: "sess_prohibited" })
+    expect(output).toContain("Error: 'kill-server' is prohibited in interactive_bash.")
+  })
+
+  test("rejects providing both action and tmux_command", async () => {
+    const fake = createFakeTerminalFactory()
+    const tool = createInteractiveBashTool({ terminalFactory: fake.factory })
+    const output = await tool.execute({ action: "list", tmux_command: "list-sessions" })
+    expect(output).toContain("provide exactly one of 'action' or 'tmux_command'")
+  })
+
+  test("requires a runner or a terminalFactory", () => {
+    expect(() => createInteractiveBashTool({})).toThrow("requires a runner with run() or a terminalFactory")
   })
 })
 

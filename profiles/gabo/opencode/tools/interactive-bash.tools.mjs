@@ -169,6 +169,31 @@ tmux kill-session -t <session-name>
 If you created an omo-* session, kill only that exact session. Do not retry kill-server with Bash or any other tool.`
 }
 
+/**
+ * Blocked-command message for the no-tmux path.
+ *
+ * V1 pointed at the Bash tool; this host has neither tmux nor a Bash capture
+ * route, so the persistent terminal's own `read` action replaces it.
+ */
+export function buildAdaptedBlockedTmuxCommandMessage(command, parts) {
+  const sessionName = getTargetSessionName(parts)
+
+  return `Error: '${command}' is blocked in interactive_bash.
+
+**USE THE 'read' ACTION INSTEAD:**
+
+\`\`\`jsonc
+{ "action": "read", "target": "${sessionName}" }
+\`\`\`
+
+This host runs interactive_bash over a persistent terminal, not tmux. Read the
+session terminal with the \`read\` action (target defaults to this session's
+terminal; omit it to read the terminal you started). List terminals with
+\`{ "action": "list" }\`.
+
+Do NOT retry '${command}' with interactive_bash.`
+}
+
 /** Classify a raw tmux command against the V1 prohibited/blocked lists. */
 export function classifyTmuxCommand(parts) {
   const subcommandIndex = findSubcommandIndex(parts)
@@ -181,6 +206,61 @@ export function classifyTmuxCommand(parts) {
     return { kind: "blocked", rawSubcommand }
   }
   return { kind: "allowed", rawSubcommand }
+}
+
+export const SUPPORTED_TMUX_VERBS = ["new-session", "send-keys", "list-sessions", "kill-session"]
+
+/**
+ * Translate a tmux verb the no-tmux path can serve into an action input.
+ *
+ * The persistent-terminal port has no tmux session names, so a `-t <name>`
+ * target is not forwarded: start/send/stop act on the bound session terminal.
+ * Returns `{ action, input? }`, or `{ error }` when the verb has no action
+ * equivalent (never a silent no-op).
+ */
+export function translateTmuxCommand(parts) {
+  const subcommandIndex = findSubcommandIndex(parts)
+  const rawSubcommand = subcommandIndex === -1 ? "" : (parts[subcommandIndex] ?? "")
+  const verb = rawSubcommand.toLowerCase()
+
+  if (verb === "new-session") {
+    return { action: "start" }
+  }
+
+  if (verb === "send-keys") {
+    const keys = []
+    for (let index = subcommandIndex + 1; index < parts.length; index++) {
+      const token = parts[index] ?? ""
+      if (token === "-t") {
+        index++
+        continue
+      }
+      if (token.startsWith("-t") && token.length > 2) continue
+      if (token.startsWith("-")) continue
+      keys.push(token)
+    }
+    if (keys.length === 0) {
+      return { error: "Error: send-keys requires at least one key to send." }
+    }
+    const lastIndex = keys.length - 1
+    if (keys[lastIndex] === "Enter" || keys[lastIndex] === "C-m") keys[lastIndex] = "\n"
+    return { action: "send", input: keys.join("") }
+  }
+
+  if (verb === "list-sessions") {
+    return { action: "list" }
+  }
+
+  if (verb === "kill-session") {
+    return { action: "stop" }
+  }
+
+  return {
+    error: `Error: interactive_bash on this host runs without tmux; the '${rawSubcommand}' tmux verb is not supported.
+
+Supported tmux verbs: ${SUPPORTED_TMUX_VERBS.join(", ")}.
+Use the action form instead: start, send, read, stop, list.`,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -352,20 +432,161 @@ async function defaultPtyAttach({ pty, ptyID, location, timeoutMs, now, startedA
 export const INTERACTIVE_BASH_TOOL_INPUT = {
   type: "object",
   properties: {
+    action: {
+      type: "string",
+      enum: ["start", "send", "read", "stop", "list"],
+      description: "Persistent-terminal action (use instead of tmux_command on a host without tmux)",
+    },
+    command: { type: "string", description: "start: command to launch (default /bin/bash)" },
+    input: { type: "string", description: "send: text to write to the terminal" },
+    cwd: { type: "string", description: "start: working directory" },
+    timeout_ms: { type: "number", description: "send: optional write timeout in milliseconds" },
+    target: { type: "string", description: "Optional terminal id; defaults to the terminal started for this session" },
     tmux_command: { type: "string", description: "The tmux command to execute (without 'tmux' prefix)" },
   },
-  required: ["tmux_command"],
+  required: [],
   additionalProperties: false,
+}
+
+// Per-session default terminal id. Module-level so every tool instance shares
+// the binding; an explicit `target` always overrides it.
+const SESSION_TERMINALS = new Map()
+
+function resolveSessionID(toolContext, getSessionID) {
+  const fromContext = typeof toolContext?.sessionID === "string" ? toolContext.sessionID : ""
+  if (fromContext) return fromContext
+  const fromGetter = typeof getSessionID === "function" ? getSessionID() : ""
+  return typeof fromGetter === "string" && fromGetter ? fromGetter : "omo-session"
+}
+
+function describeError(error) {
+  if (error instanceof Error) return error.message
+  return String(error ?? "unknown error")
+}
+
+function terminalFailure(result) {
+  const error = result?.error
+  if (error && typeof error.message === "string" && error.message) return error.message
+  if (error) return String(error)
+  return "terminal action failed"
 }
 
 /**
  * Create the `interactive_bash` ToolDefinition for the V2 `tool.transform`
- * editor. `runner` returns `{ stdout, stderr, exitCode }`; `tmuxPath` is the
- * resolved executable used to launch the tmux client through the PTY.
+ * editor.
+ *
+ * Two mutually exclusive backends:
+ * - `runner` (+ `tmuxPath`): the V1 tmux path, unchanged.
+ * - `terminalFactory(sessionID)`: the no-tmux path over a persistent terminal
+ *   port, driven by the `action` interface and by the tmux verbs that map onto
+ *   it. The V1-compatible `tmux_command` input still works.
  */
-export function createInteractiveBashTool({ runner, tmuxPath = "tmux", timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  if (!runner || typeof runner.run !== "function") {
-    throw new TypeError("createInteractiveBashTool requires a runner with run()")
+export function createInteractiveBashTool({ runner, tmuxPath = "tmux", timeoutMs = DEFAULT_TIMEOUT_MS, terminalFactory, getSessionID } = {}) {
+  const hasRunner = Boolean(runner) && typeof runner.run === "function"
+  const hasTerminalFactory = typeof terminalFactory === "function"
+  if (!hasRunner && !hasTerminalFactory) {
+    throw new TypeError("createInteractiveBashTool requires a runner with run() or a terminalFactory")
+  }
+
+  async function runTmuxRunner(parts) {
+    try {
+      const result = await runner.run({ command: tmuxPath, args: parts, timeoutMs })
+      const stdout = typeof result?.stdout === "string" ? result.stdout : ""
+      const stderr = typeof result?.stderr === "string" ? result.stderr : ""
+      const exitCode = typeof result?.exitCode === "number" ? result.exitCode : 0
+      if (exitCode !== 0) {
+        const errorMsg = stderr.trim() || `Command failed with exit code ${exitCode}`
+        return `Error: ${errorMsg}`
+      }
+      return stdout || "(no output)"
+    } catch (error) {
+      return `Error: ${describeError(error)}`
+    }
+  }
+
+  async function executeAction(input, toolContext) {
+    if (!hasTerminalFactory) {
+      return "Error: this interactive_bash instance has no persistent-terminal factory"
+    }
+    const action = typeof input.action === "string" ? input.action : ""
+    const sessionID = resolveSessionID(toolContext, getSessionID)
+    let port
+    try {
+      port = terminalFactory(sessionID)
+    } catch (error) {
+      return `Error: ${describeError(error)}`
+    }
+    if (!port || typeof port !== "object") {
+      return "Error: terminalFactory did not return a terminal port"
+    }
+
+    if (action === "start") {
+      const command = typeof input.command === "string" && input.command ? input.command : "/bin/bash"
+      let result
+      try {
+        result = await port.start({ command, args: [], title: input.command ?? "interactive", env: {}, cwd: input.cwd })
+      } catch (error) {
+        return `Error: ${describeError(error)}`
+      }
+      if (!result?.ok) return `Error: ${terminalFailure(result)}`
+      const ptyID = result.ptyID
+      if (typeof ptyID === "string" && ptyID) SESSION_TERMINALS.set(sessionID, ptyID)
+      return `interactive_bash started\nterminal: ${typeof ptyID === "string" && ptyID ? ptyID : "unknown"}`
+    }
+
+    const target = typeof input.target === "string" && input.target ? input.target : SESSION_TERMINALS.get(sessionID)
+
+    if (action === "send") {
+      if (!target) return "Error: no active terminal for this session; run action 'start' first"
+      let result
+      try {
+        result = await port.write({ ptyID: target, data: typeof input.input === "string" ? input.input : "" })
+      } catch (error) {
+        return `Error: ${describeError(error)}`
+      }
+      return result?.ok ? "ok" : `Error: ${terminalFailure(result)}`
+    }
+
+    if (action === "read") {
+      if (!target) return "Error: no active terminal for this session; run action 'start' first"
+      let result
+      try {
+        result = await port.snapshot({ ptyID: target })
+      } catch (error) {
+        return `Error: ${describeError(error)}`
+      }
+      if (!result?.ok) return `Error: ${terminalFailure(result)}`
+      const text = typeof result.text === "string" ? result.text : ""
+      return text || "(no output)"
+    }
+
+    if (action === "stop") {
+      if (!target) return "Error: no active terminal for this session; run action 'start' first"
+      let result
+      try {
+        result = await port.remove({ ptyID: target })
+      } catch (error) {
+        return `Error: ${describeError(error)}`
+      }
+      if (!result?.ok) return `Error: ${terminalFailure(result)}`
+      if (SESSION_TERMINALS.get(sessionID) === target) SESSION_TERMINALS.delete(sessionID)
+      return "ok"
+    }
+
+    if (action === "list") {
+      let result
+      try {
+        result = await port.list()
+      } catch (error) {
+        return `Error: ${describeError(error)}`
+      }
+      if (!result?.ok) return `Error: ${terminalFailure(result)}`
+      const terminals = Array.isArray(result.terminals) ? result.terminals : []
+      if (terminals.length === 0) return "(no terminals)"
+      return JSON.stringify(terminals)
+    }
+
+    return `Error: unknown action '${action}'; supported actions: start, send, read, stop, list`
   }
 
   return {
@@ -373,35 +594,44 @@ export function createInteractiveBashTool({ runner, tmuxPath = "tmux", timeoutMs
     options: { codemode: false },
     description: INTERACTIVE_BASH_DESCRIPTION,
     input: INTERACTIVE_BASH_TOOL_INPUT,
-    async execute(input = {}) {
-      const raw = typeof input.tmux_command === "string" ? input.tmux_command : ""
-      const parts = tokenizeCommand(raw)
-      if (parts.length === 0) {
-        return "Error: Empty tmux command"
+    async execute(input = {}, toolContext) {
+      const hasAction = typeof input.action === "string" && input.action.length > 0
+      const hasTmuxCommand = typeof input.tmux_command === "string" && input.tmux_command.length > 0
+
+      if (hasAction && hasTmuxCommand) {
+        return "Error: provide exactly one of 'action' or 'tmux_command'"
       }
 
-      const classification = classifyTmuxCommand(parts)
-      if (classification.kind === "prohibited") {
-        return buildProhibitedTmuxCommandMessage(classification.rawSubcommand)
-      }
-      if (classification.kind === "blocked") {
-        return buildBlockedTmuxCommandMessage(classification.rawSubcommand, parts)
-      }
-
-      try {
-        const result = await runner.run({ command: tmuxPath, args: parts, timeoutMs })
-        const stdout = typeof result?.stdout === "string" ? result.stdout : ""
-        const stderr = typeof result?.stderr === "string" ? result.stderr : ""
-        const exitCode = typeof result?.exitCode === "number" ? result.exitCode : 0
-        if (exitCode !== 0) {
-          const errorMsg = stderr.trim() || `Command failed with exit code ${exitCode}`
-          return `Error: ${errorMsg}`
+      if (hasTmuxCommand) {
+        const parts = tokenizeCommand(input.tmux_command)
+        if (parts.length === 0) {
+          return "Error: Empty tmux command"
         }
-        return stdout || "(no output)"
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        return `Error: ${message}`
+
+        const classification = classifyTmuxCommand(parts)
+        if (classification.kind === "prohibited") {
+          return buildProhibitedTmuxCommandMessage(classification.rawSubcommand)
+        }
+        if (classification.kind === "blocked") {
+          return hasRunner
+            ? buildBlockedTmuxCommandMessage(classification.rawSubcommand, parts)
+            : buildAdaptedBlockedTmuxCommandMessage(classification.rawSubcommand, parts)
+        }
+
+        if (hasRunner) {
+          return await runTmuxRunner(parts)
+        }
+
+        const translated = translateTmuxCommand(parts)
+        if (translated.error) return translated.error
+        return await executeAction(translated, toolContext)
       }
+
+      if (hasAction) {
+        return await executeAction(input, toolContext)
+      }
+
+      return "Error: provide exactly one of 'action' or 'tmux_command'"
     },
   }
 }

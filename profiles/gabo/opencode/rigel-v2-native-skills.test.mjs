@@ -179,6 +179,28 @@ describe("#given the V2 native skill surface", () => {
     expect(registry.registered).toEqual(["alpha"])
   })
 
+  test("#when disabledSkills names a discovered skill #then it is excluded from the native registry", async () => {
+    const root = makeRoot()
+    const home = makeRoot()
+    const projectDir = path.join(root, "work")
+    writeSkill(projectDir, ".agents/skills/alpha", "alpha", { frontmatter: "name: alpha\ndescription: Alpha skill", body: "ALPHA_BODY" })
+    writeSkill(projectDir, ".agents/skills/beta", "beta", { frontmatter: "name: beta\ndescription: Beta skill", body: "BETA_BODY" })
+    const added = []
+    const context = {
+      location: { directory: projectDir },
+      skill: { transform: async (callback) => { callback({ add: (info) => added.push(info), list: () => [] }); return { dispose() {} } } },
+      options: { skillsHome: home, skillsEnv: { HOME: home, XDG_CONFIG_HOME: path.join(home, "empty") } },
+    }
+    const registry = await registerNativeSkills(context, {
+      directory: projectDir,
+      home,
+      env: { HOME: home, XDG_CONFIG_HOME: path.join(home, "empty") },
+      disabledSkills: new Set(["beta"]),
+    })
+    expect(registry.skills.map((skill) => skill.name)).toEqual(["alpha"])
+    expect(added.map((info) => info.name)).toEqual(["alpha"])
+  })
+
   test("#when the host exposes source() instead of add() #then registration still lands as an embedded source", async () => {
     const root = makeRoot()
     const projectDir = path.join(root, "work")

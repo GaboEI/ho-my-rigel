@@ -3,26 +3,37 @@
  *
  * Ports the observable semantics of
  * `packages/omo-opencode/src/tools/session-manager/tools.ts` onto the V2
- * session domain (`context.session.list/get/messages`). The V1 tool read
- * OpenCode's on-disk/SDK storage directly; V2 exposes the same data through
- * the plugin session domain, so this module adapts the V2 shapes to the V1
- * formatter contracts instead of re-reading storage.
+ * session domain. The V2 plugin setup context still exposes only `get` and
+ * `context` (one known session id), so scoped reads and searches keep working
+ * through it. Everything the setup context cannot do - enumerating sessions,
+ * cross-session search, and the persisted transcript - is served by the
+ * injected `serverApi` (`rigel-v2-native-http.mjs` `createServerApi`):
+ *   - `getSessions`        -> `session_list` and global `session_search`
+ *   - `getSessionContext`  -> per-session enrichment (the V1 N+1)
+ *   - `getSessionExport`   -> `session_read include_transcript` + `session_info`
+ *
+ * The HTTP transport is Basic-auth, loopback-only and injectable; this module
+ * never builds a URL, a port or a credential. `serverApi` is optional so the
+ * module loads before the runtime wires it: with no server API, `session_list`
+ * and global `session_search` return the typed
+ * `Error: OpenCode V2 server API unavailable` string (never a throw), while
+ * scoped tools keep using the setup context.
  *
  * Preserved V1 behavior:
- *   - `session_list`: project filter, `from_date`/`to_date` window, `limit`,
- *     and the exact markdown table format.
- *   - `session_read`: `session_id` required, `include_todos`, `limit` with
- *     `from_end` slicing, and the `Session not found:` error string.
- *   - `session_search`: `query` required, optional `session_id` scope,
- *     `case_sensitive`, `limit` (default 20), 60s timeout, and the
- *     `Found N matches:` format.
- *   - `session_info`: `session_id` required, the `Session not found:` error,
- *     and the exact info block.
- *
- * Every tool returns a string (V1 contract) and never throws for a normal
- * error: a failure becomes `Error: <message>`, matching V1.
+ *   - `session_list`: project_path default, parentID/main-session filter, the
+ *     "/" directory normalization, date filter on the last message, limit slice,
+ *     `time.updated` desc sort, the N+1 enrichment, and the distinct
+ *     "No sessions found." / "No valid sessions found." empties.
+ *   - `session_search`: `query` required, optional `session_id` scope, the
+ *     60s timeout, the global 50-session scan cap, accumulation to `limit`
+ *     (default 20), and the `Found N matches:` format.
+ *   - `session_read`: `session_id` required, `Session not found:` on a missing
+ *     or message-less session, `limit` + `from_end` slicing.
+ *   - `session_info`: `session_id` required, the `Session not found:` error, the
+ *     exact info block, and transcript counts from the export (not the parts).
  */
 
+import { normalize, parse, sep } from "node:path"
 import {
   formatSessionList,
   formatSessionMessages,
@@ -30,11 +41,23 @@ import {
   formatSearchResults,
   searchInMessages,
   buildSessionInfo,
+  normalizeTranscriptExport,
+  countExportEntries,
+  formatTranscript,
+  NO_SESSIONS_MESSAGE,
+  NO_VALID_SESSIONS_MESSAGE,
 } from "./session-formatter.mjs"
 
 const SEARCH_TIMEOUT_MS = 60_000
-const MAX_SESSIONS_TO_SCAN = 50
 const DEFAULT_SEARCH_LIMIT = 20
+const MAX_SEARCH_SESSIONS = 50
+// Ask the V2 `GET /api/session` endpoint for one high page so the server's own
+// default cap never truncates before our filter/sort/slice. `session_list`
+// enriches at most the sliced `limit` (default: this page) with
+// `getSessionContext`, which bounds the N+1.
+const SESSION_ENUM_LIMIT = 200
+const SERVER_API_UNAVAILABLE = "Error: OpenCode V2 server API unavailable"
+const SESSION_DOMAIN_UNAVAILABLE = "OpenCode V2 session domain is unavailable"
 
 export const SESSION_LIST_DESCRIPTION = `List all OpenCode sessions with optional filtering.
 
@@ -86,13 +109,7 @@ Example output:
 Found 3 matches across 2 sessions:
 
 [ses_abc123] Message msg_001 (user)
-...implement the **session manager** tool...
-
-[ses_abc123] Message msg_005 (assistant)
-...I'll create a **session manager** with full search...
-
-[ses_def456] Message msg_012 (user)
-...use the **session manager** to find...`
+...implement the **session manager** tool...`
 
 export const SESSION_INFO_DESCRIPTION = `Get metadata and statistics about an OpenCode session.
 
@@ -128,42 +145,23 @@ function asArray(value) {
   return Array.isArray(data) ? data : []
 }
 
-function sessionIdOf(session) {
-  return session?.id ?? session?.sessionID ?? session?.session?.id
+// ---- setup-context session domain (scoped reads, preserved V1 path) --------
+
+function sessionApiOf(client) {
+  return client?.session ?? client?.v2?.session
 }
 
-function sessionUpdatedAt(session) {
-  const updated = session?.time?.updated ?? session?.time?.created
-  return typeof updated === "number" ? updated : undefined
-}
-
-function normalizeProjectFilter(directory) {
-  if (directory === "/") return undefined
-  return directory
-}
-
-/**
- * Resolve the V2 session domain from a client. The plugin setup context is the
- * typed service surface; `client.session` is the compatible fallback. A host
- * that exposes neither is a hard error, never a silent empty result.
- */
-function sessionDomain(client) {
-  const api = client?.session ?? client?.v2?.session
-  if (typeof api?.list !== "function") {
-    throw new Error("OpenCode V2 session.list is unavailable")
+function pickClient(clients) {
+  for (const client of (clients ?? []).filter(Boolean)) {
+    const api = sessionApiOf(client)
+    if (typeof api?.get === "function" || typeof api?.context === "function") return client
   }
-  return api
+  return undefined
 }
 
-async function listSessions(client, directory) {
-  const api = sessionDomain(client)
-  const response = await api.list(directory ? { directory } : undefined)
-  return asArray(response)
-}
-
-async function getSession(client, sessionID) {
-  const api = sessionDomain(client)
-  if (typeof api.get !== "function") return undefined
+async function getClientMeta(client, sessionID) {
+  const api = sessionApiOf(client)
+  if (typeof api?.get !== "function") return undefined
   try {
     return responseData(await api.get({ sessionID }))
   } catch {
@@ -171,60 +169,179 @@ async function getSession(client, sessionID) {
   }
 }
 
-async function getMessages(client, sessionID) {
-  const api = sessionDomain(client)
-  if (typeof api.messages !== "function") return []
-  return asArray(await api.messages({ sessionID }))
+async function getClientMessages(client, sessionID) {
+  const api = sessionApiOf(client)
+  if (typeof api?.context !== "function") return []
+  return asArray(await api.context({ sessionID }))
+}
+
+// ---- injected HTTP server API ---------------------------------------------
+
+function hasServerApi(serverApi) {
+  return Boolean(serverApi) && typeof serverApi.getSessions === "function" && typeof serverApi.getSessionContext === "function"
+}
+
+function errorMessageOf(error) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function apiErrorMessage(result, fallback) {
+  return result?.error?.message || fallback
+}
+
+function listFromResult(result) {
+  const body = result?.data
+  if (Array.isArray(body?.data)) return body.data
+  if (Array.isArray(body)) return body
+  return []
+}
+
+async function fetchSessions(serverApi, query) {
+  const result = await serverApi.getSessions(query)
+  if (!result?.ok) throw new Error(apiErrorMessage(result, "OpenCode V2 session request failed"))
+  return listFromResult(result)
+}
+
+async function fetchContextMessages(serverApi, sessionID) {
+  const result = await serverApi.getSessionContext(sessionID)
+  if (result?.ok) return listFromResult(result)
+  const error = new Error(apiErrorMessage(result, `OpenCode V2 context request failed for ${sessionID}`))
+  if (result?.error?.code === "v2_http_not_found") error.code = result.error.code
+  throw error
+}
+
+function isNotFoundError(error) {
+  return Boolean(error) && error.code === "v2_http_not_found"
+}
+
+// ---- directory + date filtering (V1 storage.ts / directory-filter.ts) ------
+
+function comparisonSeparators(path) {
+  return sep === "\\" ? path.replace(/\\/g, "/") : path
+}
+
+function normalizeSessionDirectory(directory) {
+  const normalized = normalize(directory)
+  const root = parse(normalized).root
+  const withoutTrailing = normalized !== root && normalized.endsWith(sep) ? normalized.slice(0, -1) : normalized
+  return comparisonSeparators(withoutTrailing)
+}
+
+function sessionDirectoriesMatch(stored, filter) {
+  if (typeof stored !== "string" || typeof filter !== "string") return false
+  return normalizeSessionDirectory(stored) === normalizeSessionDirectory(filter)
+}
+
+// V1 `normalizeProjectFilter`: a multi-project server resolves `ctx.directory`
+// to "/", which never matches a stored directory; treat it as no filter.
+function normalizeProjectFilter(directory) {
+  if (typeof directory !== "string" || directory.length === 0) return undefined
+  if (directory === "/") return undefined
+  return directory
+}
+
+function sessionDirectory(session) {
+  if (typeof session?.directory === "string") return session.directory
+  const location = session?.location
+  if (typeof location === "string") return location
+  if (location && typeof location === "object") {
+    for (const key of ["directory", "path", "cwd"]) {
+      if (typeof location[key] === "string") return location[key]
+    }
+  }
+  return undefined
+}
+
+function sessionUpdatedAt(session) {
+  return session?.time?.updated ?? session?.time?.created ?? 0
+}
+
+// V1 `getMainSessions`: no parentID, optional directory match, newest first.
+async function enumerateMainSessions(serverApi, directory) {
+  const filter = normalizeProjectFilter(directory)
+  const query = { limit: SESSION_ENUM_LIMIT, order: "desc" }
+  if (filter) query.directory = filter
+  const sessions = await fetchSessions(serverApi, query)
+  return sessions
+    .filter((session) => !session?.parentID)
+    .filter((session) => !filter || sessionDirectoriesMatch(sessionDirectory(session), filter))
+    .sort((a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a))
+}
+
+// V1 `getAllSessions`: every session (children included), newest first.
+async function enumerateAllSessions(serverApi) {
+  const sessions = await fetchSessions(serverApi, { limit: SESSION_ENUM_LIMIT, order: "desc" })
+  return sessions
+    .slice()
+    .sort((a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a))
+    .map((session) => session?.id)
+    .filter(Boolean)
+}
+
+function parseDate(value) {
+  if (typeof value !== "string" || value.length === 0) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+function withinDateRange(info, from, to) {
+  if (!from && !to) return true
+  if (!info?.last_message) return false
+  if (from && info.last_message < from) return false
+  if (to && info.last_message > to) return false
+  return true
 }
 
 /**
- * V1's `formatSessionList` called `getSessionInfo(id)` per session, which read
- * the session's messages to derive `message_count` and `agents_used`. V2's
- * `session.list` does not return those fields, so this computes them from
- * `session.messages` to preserve the V1 table columns.
+ * Build the four `session_*` tool definitions.
+ *
+ * @param {object}   input
+ * @param {object[]} [input.clients]    ordered V2 setup-context client candidates
+ * @param {object}   [input.serverApi]  injected HTTP server API (createServerApi)
+ * @param {string}   [input.directory]  default project directory for session_list
+ * @param {Function} [input.readTodos]  per-session todo reader owned by the runtime
  */
-async function enrichSession(client, session) {
-  const id = sessionIdOf(session)
-  if (typeof id !== "string" || !id) return session
-  if (typeof session?.message_count === "number" && Array.isArray(session?.agents_used)) return session
-  let messages = []
-  try {
-    messages = await getMessages(client, id)
-  } catch {
-    messages = []
-  }
-  const agents = new Set()
-  let first
-  let last
-  for (const message of messages) {
-    const agent = message?.agent ?? message?.info?.agent
-    if (agent) agents.add(agent)
-    const created = message?.time?.created ?? message?.created
-    if (typeof created === "number") {
-      if (first === undefined || created < first) first = created
-      if (last === undefined || created > last) last = created
+export function createSessionTools({ clients = [], serverApi, directory, readTodos } = {}) {
+  async function readMessages(sessionID) {
+    const client = pickClient(clients)
+    if (client) return await getClientMessages(client, sessionID)
+    if (!hasServerApi(serverApi)) throw new Error(SESSION_DOMAIN_UNAVAILABLE)
+    try {
+      return await fetchContextMessages(serverApi, sessionID)
+    } catch (error) {
+      if (isNotFoundError(error)) return null
+      throw error
     }
   }
-  return {
-    ...session,
-    message_count: messages.length,
-    agents_used: Array.from(agents),
-    first_message: session?.first_message ?? first,
-    last_message: session?.last_message ?? last,
-  }
-}
 
-/**
- * Build the four `session_*` tool definitions. `clients` is the ordered list of
- * candidate V2 clients (setup context first, then the compatible client), so a
- * host that exposes the session domain on either surface works.
- */
-export function createSessionTools({ clients, directory }) {
-  const resolveClient = () => {
-    for (const client of clients.filter(Boolean)) {
-      if (typeof client?.session?.list === "function" || typeof client?.v2?.session?.list === "function") return client
+  async function readMeta(sessionID) {
+    const client = pickClient(clients)
+    if (!client) return undefined
+    return await getClientMeta(client, sessionID)
+  }
+
+  async function readTodosFor(sessionID) {
+    return typeof readTodos === "function" ? await readTodos(sessionID) : []
+  }
+
+  async function readTranscriptCount(sessionID) {
+    if (!hasServerApi(serverApi) || typeof serverApi.getSessionExport !== "function") return 0
+    const result = await serverApi.getSessionExport(sessionID)
+    if (!result?.ok) return 0
+    return countExportEntries(result.data)
+  }
+
+  // A successful export always renders a header; a failure states the reason
+  // instead of silently omitting the transcript.
+  async function transcriptSuffix(sessionID) {
+    if (!hasServerApi(serverApi) || typeof serverApi.getSessionExport !== "function") {
+      return "\ntranscript: unavailable (OpenCode V2 server API unavailable)"
     }
-    throw new Error("OpenCode V2 session domain is unavailable")
+    const result = await serverApi.getSessionExport(sessionID)
+    if (!result?.ok) {
+      return `\ntranscript: unavailable (${apiErrorMessage(result, "OpenCode V2 export request failed")})`
+    }
+    return formatTranscript(normalizeTranscriptExport(result.data))
   }
 
   const session_list = {
@@ -241,25 +358,31 @@ export function createSessionTools({ clients, directory }) {
     },
     async execute(args = {}) {
       try {
-        const client = resolveClient()
-        const projectFilter = normalizeProjectFilter(args.project_path ?? directory)
-        let sessions = await listSessions(client, projectFilter)
-        if (args.from_date || args.to_date) {
-          const from = args.from_date ? new Date(args.from_date).getTime() : undefined
-          const to = args.to_date ? new Date(args.to_date).getTime() : undefined
-          sessions = sessions.filter((session) => {
-            const updated = sessionUpdatedAt(session)
-            if (updated === undefined) return false
-            if (from !== undefined && updated < from) return false
-            if (to !== undefined && updated > to) return false
-            return true
-          })
+        if (!hasServerApi(serverApi)) return SERVER_API_UNAVAILABLE
+        const filterDirectory = args.project_path ?? directory
+        const mainSessions = await enumerateMainSessions(serverApi, filterDirectory)
+        let sessionIDs = mainSessions.map((session) => session?.id).filter(Boolean)
+        if (typeof args.limit === "number" && args.limit > 0) sessionIDs = sessionIDs.slice(0, args.limit)
+        if (sessionIDs.length === 0) return NO_SESSIONS_MESSAGE
+
+        const infos = []
+        for (const sessionID of sessionIDs) {
+          const messages = await fetchContextMessages(serverApi, sessionID)
+          if (messages.length === 0) continue
+          infos.push(buildSessionInfo(sessionID, messages, { todos: [], transcriptEntries: 0 }))
         }
-        if (typeof args.limit === "number" && args.limit > 0) sessions = sessions.slice(0, args.limit)
-        const enriched = await Promise.all(sessions.map((session) => enrichSession(client, session)))
-        return formatSessionList(enriched)
+        if (infos.length === 0) return NO_VALID_SESSIONS_MESSAGE
+
+        const from = parseDate(args.from_date)
+        const to = parseDate(args.to_date)
+        if (from || to) {
+          const ranged = infos.filter((info) => withinDateRange(info, from, to))
+          if (ranged.length === 0) return NO_SESSIONS_MESSAGE
+          return formatSessionList(ranged)
+        }
+        return formatSessionList(infos)
       } catch (error) {
-        return `Error: ${error instanceof Error ? error.message : String(error)}`
+        return `Error: ${errorMessageOf(error)}`
       }
     },
   }
@@ -280,19 +403,25 @@ export function createSessionTools({ clients, directory }) {
     },
     async execute(args = {}) {
       try {
-        const client = resolveClient()
         const sessionID = args.session_id
         if (typeof sessionID !== "string" || !sessionID) return "Error: Missing required parameter 'session_id'."
-        const session = await getSession(client, sessionID)
-        let messages = await getMessages(client, sessionID)
+        const session = await readMeta(sessionID)
+        let messages = await readMessages(sessionID)
+        if (messages === null) return `Session not found: ${sessionID}`
         if (!session && messages.length === 0) return `Session not found: ${sessionID}`
         if (messages.length === 0) return `Session not found: ${sessionID}`
         if (typeof args.limit === "number" && args.limit > 0) {
           messages = args.from_end ? messages.slice(-args.limit) : messages.slice(0, args.limit)
         }
-        return formatSessionMessages(messages, args.include_todos === true, [])
+        // V2 has no native session-todo API; the runtime injects a real reader
+        // over its own per-session registry. An absent reader is honest (no
+        // registry configured) and renders no todos, never a constant.
+        const todos = args.include_todos === true ? await readTodosFor(sessionID) : []
+        let output = formatSessionMessages(messages, args.include_todos === true, todos)
+        if (args.include_transcript === true) output += await transcriptSuffix(sessionID)
+        return output
       } catch (error) {
-        return `Error: ${error instanceof Error ? error.message : String(error)}`
+        return `Error: ${errorMessageOf(error)}`
       }
     },
   }
@@ -312,30 +441,31 @@ export function createSessionTools({ clients, directory }) {
     },
     async execute(args = {}) {
       try {
-        const client = resolveClient()
         const query = args.query
         if (typeof query !== "string" || !query) return "Error: Missing required parameter 'query'."
+        const scopedID = typeof args.session_id === "string" && args.session_id ? args.session_id : undefined
+        if (!scopedID && !hasServerApi(serverApi)) return SERVER_API_UNAVAILABLE
         const resultLimit = typeof args.limit === "number" && args.limit > 0 ? args.limit : DEFAULT_SEARCH_LIMIT
+        const caseSensitive = args.case_sensitive === true
         const searchOperation = async () => {
-          if (args.session_id) {
-            return searchInMessages(args.session_id, await getMessages(client, args.session_id), query, args.case_sensitive === true, resultLimit)
+          if (scopedID) {
+            const messages = (await readMessages(scopedID)) ?? []
+            return searchInMessages(scopedID, messages, query, caseSensitive, resultLimit)
           }
-          const sessions = (await listSessions(client, undefined)).slice(0, MAX_SESSIONS_TO_SCAN)
+          const sessionIDs = (await enumerateAllSessions(serverApi)).slice(0, MAX_SEARCH_SESSIONS)
           const allResults = []
-          for (const session of sessions) {
+          for (const sessionID of sessionIDs) {
             if (allResults.length >= resultLimit) break
-            const sessionID = sessionIdOf(session)
-            if (typeof sessionID !== "string" || !sessionID) continue
             const remaining = resultLimit - allResults.length
-            const sessionResults = searchInMessages(sessionID, await getMessages(client, sessionID), query, args.case_sensitive === true, remaining)
-            allResults.push(...sessionResults)
+            const messages = await fetchContextMessages(serverApi, sessionID)
+            allResults.push(...searchInMessages(sessionID, messages, query, caseSensitive, remaining))
           }
           return allResults.slice(0, resultLimit)
         }
         const results = await withTimeout(searchOperation(), SEARCH_TIMEOUT_MS, "Search")
         return formatSearchResults(results)
       } catch (error) {
-        return `Error: ${error instanceof Error ? error.message : String(error)}`
+        return `Error: ${errorMessageOf(error)}`
       }
     },
   }
@@ -350,15 +480,17 @@ export function createSessionTools({ clients, directory }) {
     },
     async execute(args = {}) {
       try {
-        const client = resolveClient()
         const sessionID = args.session_id
         if (typeof sessionID !== "string" || !sessionID) return "Error: Missing required parameter 'session_id'."
-        const messages = await getMessages(client, sessionID)
-        const session = await getSession(client, sessionID)
+        const messages = await readMessages(sessionID)
+        if (messages === null) return `Session not found: ${sessionID}`
+        const session = await readMeta(sessionID)
         if (!session && messages.length === 0) return `Session not found: ${sessionID}`
-        return formatSessionInfo(buildSessionInfo(sessionID, messages))
+        const todos = await readTodosFor(sessionID)
+        const transcriptEntries = await readTranscriptCount(sessionID)
+        return formatSessionInfo(buildSessionInfo(sessionID, messages, { todos, transcriptEntries }))
       } catch (error) {
-        return `Error: ${error instanceof Error ? error.message : String(error)}`
+        return `Error: ${errorMessageOf(error)}`
       }
     },
   }

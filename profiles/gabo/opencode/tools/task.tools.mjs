@@ -407,7 +407,7 @@ export function createTaskTools({ store, lock, idFactory = createTaskIdFactory()
         await syncTodos?.(task, threadID)
         return JSON.stringify({ task: { id: task.id, subject: task.subject } })
       } catch (error) {
-        if (error instanceof Error && error.message.includes("Required")) {
+        if (error instanceof Error && error.name === "ValidationError") {
           return JSON.stringify({ error: "validation_error", message: error.message })
         }
         return JSON.stringify({ error: "internal_error" })
@@ -426,7 +426,7 @@ export function createTaskTools({ store, lock, idFactory = createTaskIdFactory()
         const task = await store.readTask(args.id)
         return JSON.stringify({ task: task ?? null })
       } catch (error) {
-        if (error instanceof Error && error.message.includes("validation")) {
+        if (error instanceof Error && error.name === "ValidationError") {
           return JSON.stringify({ error: "invalid_arguments" })
         }
         return JSON.stringify({ error: "unknown_error" })
@@ -472,7 +472,7 @@ export function createTaskTools({ store, lock, idFactory = createTaskIdFactory()
         await syncTodos?.(updated, threadID)
         return JSON.stringify({ task: updated })
       } catch (error) {
-        if (error instanceof Error && error.message.includes("Required")) {
+        if (error instanceof Error && error.name === "ValidationError") {
           return JSON.stringify({ error: "validation_error", message: error.message })
         }
         return JSON.stringify({ error: "internal_error" })

@@ -6,8 +6,11 @@
  * V2 client reference, so they are unit-testable without a session domain.
  */
 
-export function formatSessionList(sessions) {
-  if (sessions.length === 0) return "No sessions found."
+export const NO_SESSIONS_MESSAGE = "No sessions found."
+export const NO_VALID_SESSIONS_MESSAGE = "No valid sessions found."
+
+export function formatSessionList(sessions, { emptyMessage = NO_SESSIONS_MESSAGE } = {}) {
+  if (sessions.length === 0) return emptyMessage
   const headers = ["Session ID", "Messages", "First", "Last", "Agents"]
   const rows = sessions.map((session) => {
     const id = session?.id ?? session?.sessionID ?? session?.session?.id ?? "unknown"
@@ -48,6 +51,8 @@ export function formatSessionMessages(messages, includeTodos, todos) {
       } else if (part?.type === "tool_result") {
         const output = part?.output ? String(part.output).substring(0, 200) : ""
         lines.push(`[tool result] ${output}...`)
+      } else if (part?.type === "reasoning" && (part?.text || part?.thinking)) {
+        lines.push(`[reasoning] ${String(part.text ?? part.thinking).substring(0, 200)}...`)
       }
     }
   }
@@ -97,6 +102,23 @@ export function messageParts(message) {
   return []
 }
 
+/**
+ * Count transcript entries from a real V2 source.
+ *
+ * V1 counted lines of a separate `transcripts/<sessionID>.jsonl` log
+ * (`session-manager/file-storage.ts` `getFileSessionTranscript`). V2 keeps no
+ * such log, so the honest equivalent is the persisted session activity: the
+ * number of message parts V2 actually stored. This is a real, per-session value
+ * (never a constant), and the semantic difference from a V1 JSONL line count is
+ * documented here and in the migration ledger.
+ */
+export function countTranscriptEntries(messages) {
+  if (!Array.isArray(messages)) return 0
+  let count = 0
+  for (const message of messages) count += messageParts(message).length
+  return count
+}
+
 export function messageCreatedAt(message) {
   const created = message?.time?.created ?? message?.created
   return typeof created === "number" ? created : undefined
@@ -108,6 +130,81 @@ export function messageRole(message) {
 
 export function messageAgent(message) {
   return message?.agent ?? message?.info?.agent
+}
+
+/**
+ * Tolerant extraction of the message array from a V2 session export body.
+ * Accepts `{ data: { messages } }` (the real
+ * `GET /api/experimental/session/{id}/export` shape), `{ messages }`, a bare
+ * array, and `{ data: [...] }` so a shape change degrades to the messages that
+ * are present instead of throwing.
+ */
+function exportMessages(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data?.messages)) return payload.data.messages
+  if (Array.isArray(payload?.messages)) return payload.messages
+  if (Array.isArray(payload?.data)) return payload.data
+  return []
+}
+
+function partPreview(part) {
+  const candidate = part?.text ?? part?.thinking ?? part?.tool ?? part?.output
+  return typeof candidate === "string" ? candidate : ""
+}
+
+function messagePreview(message) {
+  const candidate = message?.text ?? message?.summary
+  return typeof candidate === "string" ? candidate : ""
+}
+
+/**
+ * Flatten a V2 export body into bounded transcript entries. Each entry is
+ * `{ role, partType, time, preview }`, one per message part (or one per message
+ * when a message stored no parts).
+ */
+export function normalizeTranscriptExport(payload) {
+  const entries = []
+  for (const message of exportMessages(payload)) {
+    const role = messageRole(message)
+    const time = messageCreatedAt(message)
+    const parts = messageParts(message)
+    if (parts.length === 0) {
+      entries.push({ role, partType: "message", time, preview: messagePreview(message).substring(0, 200) })
+      continue
+    }
+    for (const part of parts) {
+      const partTime = part?.time?.created ?? time
+      entries.push({
+        role,
+        partType: part?.type ?? "unknown",
+        time: typeof partTime === "number" ? partTime : time,
+        preview: partPreview(part).substring(0, 200),
+      })
+    }
+  }
+  return entries
+}
+
+export function countExportEntries(payload) {
+  return normalizeTranscriptExport(payload).length
+}
+
+/**
+ * Render the transcript block appended by `session_read` when
+ * `include_transcript` is set. Always emits the header, including for zero
+ * entries, so a successful export is never confused with a missing one.
+ */
+export function formatTranscript(entries) {
+  const list = Array.isArray(entries) ? entries : []
+  const lines = [`\n\n=== Transcript (${list.length} entries) ===`]
+  list.forEach((entry, index) => {
+    const role = entry?.role ?? "unknown"
+    const partType = entry?.partType ?? "unknown"
+    const time = entry?.time ? new Date(entry.time).toISOString() : "Unknown time"
+    const preview = entry?.preview ? String(entry.preview).substring(0, 200) : ""
+    lines.push(`[${index + 1}] ${role}/${partType} ${time}${preview ? ` ${preview}` : ""}`)
+  })
+  return `${lines.join("\n")}\n`
 }
 
 export function searchInMessages(sessionID, messages, query, caseSensitive, maxResults) {
@@ -148,7 +245,7 @@ export function searchInMessages(sessionID, messages, query, caseSensitive, maxR
   return results
 }
 
-export function buildSessionInfo(sessionID, messages) {
+export function buildSessionInfo(sessionID, messages, { todos = [], transcriptEntries = 0 } = {}) {
   const agentsUsed = new Set()
   let firstMessage
   let lastMessage
@@ -162,15 +259,17 @@ export function buildSessionInfo(sessionID, messages) {
       if (!lastMessage || date > lastMessage) lastMessage = date
     }
   }
+  const todoList = Array.isArray(todos) ? todos : []
+  const entries = Number.isFinite(transcriptEntries) && transcriptEntries > 0 ? transcriptEntries : 0
   return {
     id: sessionID,
     message_count: messages.length,
     first_message: firstMessage,
     last_message: lastMessage,
     agents_used: Array.from(agentsUsed),
-    has_todos: false,
-    has_transcript: false,
-    todos: [],
-    transcript_entries: 0,
+    has_todos: todoList.length > 0,
+    has_transcript: entries > 0,
+    todos: todoList,
+    transcript_entries: entries,
   }
 }
