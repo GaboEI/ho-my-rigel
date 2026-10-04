@@ -195,7 +195,7 @@ export function createStdioMcpClient({ command, args = [], env, cwd }) {
   return {
     transport: "stdio",
     async initialize() {
-      await request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "ho-my-rigel", version: "1.0.0" } })
+      await request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "oh-my-rigel", version: "1.0.0" } })
       notify("notifications/initialized", {})
     },
     listTools: async () => (await request("tools/list", {})).tools ?? [],
@@ -250,7 +250,7 @@ export function createHttpMcpClient({ url, headers = {}, fetchImpl = fetch }) {
   return {
     transport: "http",
     async initialize() {
-      const result = await request("initialize", { protocolVersion, capabilities: {}, clientInfo: { name: "ho-my-rigel", version: "1.0.0" } })
+      const result = await request("initialize", { protocolVersion, capabilities: {}, clientInfo: { name: "oh-my-rigel", version: "1.0.0" } })
       if (typeof result?.protocolVersion === "string") protocolVersion = result.protocolVersion
       await post({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })
     },

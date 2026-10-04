@@ -1,5 +1,5 @@
 /**
- * Native OpenCode V2 configuration resolution for Ho My Rigel.
+ * Native OpenCode V2 configuration resolution for Oh My Rigel.
  *
  * Resolves the harness-neutral `omo.jsonc` chain into the plugin-facing keys that
  * gate the Phase 3 tool and category slices: `monitor.enabled`, `goal.enabled`,

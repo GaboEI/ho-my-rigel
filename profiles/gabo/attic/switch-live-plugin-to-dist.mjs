@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url"
 const home = process.env.HOME || "/home/gabodev"
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const configFile = path.join(home, ".config/opencode/opencode.json")
-const stateFile = path.join(home, ".local/share/ho-my-rigel/active-trial.json")
+const stateFile = path.join(home, ".local/share/oh-my-rigel/active-trial.json")
 const distEntry = `file://${path.join(sourceRoot, "dist/index.js")}`
 function fail(message) { console.error(`Rigel switch refused: ${message}`); process.exit(1) }
 if (process.env.RIGEL_ALLOW_LEGACY_SYSTEM_TRIAL !== "1") {

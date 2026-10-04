@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 
 const home = process.env.HOME || "/home/gabodev"
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const stateRoot = path.join(home, ".local/share/ho-my-rigel")
+const stateRoot = path.join(home, ".local/share/oh-my-rigel")
 const stateFile = path.join(stateRoot, "active-trial.json")
 const configFile = path.join(home, ".config/opencode/opencode.json")
 const adapterDir = path.join(stateRoot, "runtime/omo-v2-plugin")

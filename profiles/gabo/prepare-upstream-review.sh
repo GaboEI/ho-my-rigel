@@ -8,7 +8,7 @@ upstream_remote="${RIGEL_UPSTREAM_REMOTE:-upstream}"
 upstream_ref="${RIGEL_UPSTREAM_REF:-dev}"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 review_branch="rigel/upstream-review-$timestamp"
-review_root="${RIGEL_REVIEW_ROOT:-$root/../ho-my-rigel-upstream-review-$timestamp}"
+review_root="${RIGEL_REVIEW_ROOT:-$root/../oh-my-rigel-upstream-review-$timestamp}"
 
 git -C "$root" diff --quiet && git -C "$root" diff --cached --quiet || {
   echo "Refusing upstream review: the current checkout has uncommitted changes" >&2

@@ -19,7 +19,7 @@ unit_dir=/etc/systemd/system/opencode-lan.service.d
 
 systemctl stop opencode-lan.service
 runuser -u gabodev -- env HOME="$user_home" node "$root/profiles/gabo/activate-live-trial.mjs"
-install -D -m 0644 "$root/profiles/gabo/systemd/ho-my-rigel.conf" "$unit_dir/ho-my-rigel.conf"
+install -D -m 0644 "$root/profiles/gabo/systemd/oh-my-rigel.conf" "$unit_dir/oh-my-rigel.conf"
 systemctl daemon-reload
 systemctl start opencode-lan.service
 echo "Rigel is live through opencode-lan.service (OMO_PROFILE=gabo)."

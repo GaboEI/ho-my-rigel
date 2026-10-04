@@ -32,7 +32,7 @@ const runtimeLoaded = transcript.includes("Native runtime loaded: yes.")
 const reached = transcript.includes("Explicit `Ultraworker` keyword reached the root model request: yes.")
 const childIsolated = transcript.includes("Default Ultrawork stayed out of the child: yes.")
 const report = [
-  "# Ho My Rigel — native V2 Ultrawork keyword contract",
+  "# Oh My Rigel — native V2 Ultrawork keyword contract",
   "",
   `- Real isolated V2 server: ${result.status === 0 ? "yes" : "no"}.`,
   `- Native runtime loaded: ${runtimeLoaded ? "yes" : "no"}.`,

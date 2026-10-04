@@ -107,11 +107,11 @@ export async function applyRequestedSkills(prompt, requestedSkills, { resolveSki
       }
     } catch (error) {
       missing.push(name)
-      console.error(`[ho-my-rigel] Native V2 skill resolution failed: skill=${name}; ${error instanceof Error ? error.message : String(error)}`)
+      console.error(`[oh-my-rigel] Native V2 skill resolution failed: skill=${name}; ${error instanceof Error ? error.message : String(error)}`)
     }
   }
   if (missing.length > 0) {
-    console.error(`[ho-my-rigel] Native V2 skill injection incomplete; unresolved skills: ${missing.join(", ")}`)
+    console.error(`[oh-my-rigel] Native V2 skill injection incomplete; unresolved skills: ${missing.join(", ")}`)
   }
   const injection = formatSkillInjection({ injected, missing })
   return injection ? `${prompt}\n\n${injection}` : prompt
@@ -120,7 +120,7 @@ export async function applyRequestedSkills(prompt, requestedSkills, { resolveSki
 function writeStateReceipt(fileName, event) {
   const stateRoot = process.env.XDG_STATE_HOME
   if (!stateRoot) return
-  const directory = path.join(stateRoot, "ho-my-rigel")
+  const directory = path.join(stateRoot, "oh-my-rigel")
   const receipt = path.join(directory, fileName)
   const temporary = `${receipt}.${process.pid}.${randomUUID()}.tmp`
   try {
@@ -129,9 +129,9 @@ function writeStateReceipt(fileName, event) {
     fs.renameSync(temporary, receipt)
   } catch (error) {
     try { fs.rmSync(temporary, { force: true }) } catch (cleanupError) {
-      console.error(`[ho-my-rigel] Could not remove incomplete native V2 receipt: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+      console.error(`[oh-my-rigel] Could not remove incomplete native V2 receipt: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
     }
-    console.error(`[ho-my-rigel] Could not record native V2 receipt ${fileName}: ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[oh-my-rigel] Could not record native V2 receipt ${fileName}: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -186,7 +186,7 @@ async function lookupSessionAgent(call, sessionID) {
   try {
     return readSessionAgent(await call())
   } catch (error) {
-    console.error(`[ho-my-rigel] Native V2 session agent lookup failed: session=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[oh-my-rigel] Native V2 session agent lookup failed: session=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
     return undefined
   }
 }
@@ -240,7 +240,7 @@ export function createNativePermissionWiring({ manifest: agentManifest, resolveA
 }
 
 export default {
-  id: "ho-my-rigel",
+  id: "oh-my-rigel",
   setup: async (context) => {
     const location = context?.location ?? { directory: process.cwd() }
     if (typeof context?.tool?.transform !== "function") {
@@ -319,7 +319,7 @@ export default {
       } catch (error) {
         if (!inventoryFailureLogged) {
           inventoryFailureLogged = true
-          console.error(`[ho-my-rigel] Native V2 model inventory unavailable; model fallback disabled: ${error instanceof Error ? error.message : String(error)}`)
+          console.error(`[oh-my-rigel] Native V2 model inventory unavailable; model fallback disabled: ${error instanceof Error ? error.message : String(error)}`)
         }
         return undefined
       }
@@ -346,7 +346,7 @@ export default {
         const next = state.nextModel
         state.nextModel = undefined
         if (next.id !== model) {
-          console.error(`[ho-my-rigel] Native V2 model fallback (reactive step): session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${next.id}; attempts=${state.attempts}/${chain.length}`)
+          console.error(`[oh-my-rigel] Native V2 model fallback (reactive step): session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${next.id}; attempts=${state.attempts}/${chain.length}`)
         }
         return next
       }
@@ -354,7 +354,7 @@ export default {
       if (!availableModels) return undefined
       const resolved = resolveFallbackModel({ chain, availableModels, currentModel: model, failedModels: state.failedModels, sameProviderAs })
       if (resolved?.id && resolved.id !== model) {
-        console.error(`[ho-my-rigel] Native V2 model fallback: session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${resolved.id}; attempts=${state.attempts}/${chain.length}`)
+        console.error(`[oh-my-rigel] Native V2 model fallback: session=${sessionID}; agent=${agent ?? "unknown"}; from=${model}; to=${resolved.id}; attempts=${state.attempts}/${chain.length}`)
       }
       return resolved
     }
@@ -366,7 +366,7 @@ export default {
       if (typeof state.model === "string" && state.model) state.failedModels.add(state.model)
       state.attempts += 1
       if (state.attempts >= chain.length) {
-        console.error(`[ho-my-rigel] Native V2 model fallback exhausted: session=${sessionID}; attempts=${state.attempts}/${chain.length}; last=${state.model ?? "unknown"}`)
+        console.error(`[oh-my-rigel] Native V2 model fallback exhausted: session=${sessionID}; attempts=${state.attempts}/${chain.length}; last=${state.model ?? "unknown"}`)
         return
       }
       const availableModels = await readAvailableModels()
@@ -379,7 +379,7 @@ export default {
         ? resolveFallbackModel({ chain, availableModels, currentModel: state.model, failedModels: state.failedModels })
         : undefined
       state.nextModel = next
-      console.error(`[ho-my-rigel] Native V2 reactive model fallback: session=${sessionID}; failed=${state.model ?? "unknown"}; attempts=${state.attempts}/${chain.length}; next=${next?.id ?? "none"}`)
+      console.error(`[oh-my-rigel] Native V2 reactive model fallback: session=${sessionID}; failed=${state.model ?? "unknown"}; attempts=${state.attempts}/${chain.length}; next=${next?.id ?? "none"}`)
       // V2 ignores the `http.request` `body.model` rewrite (proven live), so the
       // resolved rung only takes effect through the pre-selection model boundary.
       // Switch the session model to the resolved rung, carrying its own
@@ -403,7 +403,7 @@ export default {
           state.model = next.id
           if (typeof next.providerID === "string" && next.providerID) state.providerID = next.providerID
         } catch (error) {
-          console.error(`[ho-my-rigel] Native V2 switchModel failed: session=${sessionID}; model=${next.id}; ${error instanceof Error ? error.message : String(error)}`)
+          console.error(`[oh-my-rigel] Native V2 switchModel failed: session=${sessionID}; model=${next.id}; ${error instanceof Error ? error.message : String(error)}`)
         }
       }
     }
@@ -488,10 +488,10 @@ export default {
           text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result }),
           resume: true,
         })
-        console.error(`[ho-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
+        console.error(`[oh-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
       } catch (error) {
         backgroundChildren.set(sessionID, child)
-        console.error(`[ho-my-rigel] Native V2 background handoff failed: child=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
+        console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
       }
     }
     // Task 19: V2 names a real compaction across two event vocabularies
@@ -552,7 +552,7 @@ export default {
           }
         } catch (error) {
           if (!abortBackgroundHandoffs.signal.aborted) {
-            console.error(`[ho-my-rigel] Native V2 background event subscription failed: ${error instanceof Error ? error.message : String(error)}`)
+            console.error(`[oh-my-rigel] Native V2 background event subscription failed: ${error instanceof Error ? error.message : String(error)}`)
           }
         }
       })()
@@ -575,7 +575,7 @@ export default {
         description: createTaskPresentation(),
         input: taskInput,
         execute: async (input, toolContext) => {
-          console.error(`[ho-my-rigel] Native V2 task context: name=${taskName}; setup=${Object.keys(context ?? {}).sort().join(",")}; tool=${Object.keys(toolContext ?? {}).sort().join(",")}`)
+          console.error(`[oh-my-rigel] Native V2 task context: name=${taskName}; setup=${Object.keys(context ?? {}).sort().join(",")}; tool=${Object.keys(toolContext ?? {}).sort().join(",")}`)
           if (isCoordinatorAgent(input.subagent_type)) {
             throw new Error(`Cannot delegate to coordinator agent "${String(input.subagent_type).trim()}" via task. Coordinator agents (prometheus) own the orchestration loop and must not be used as subagent targets - doing so creates duplicate coordinators and conflicting team state. Select a worker agent (e.g., sisyphus-junior via category, hephaestus, oracle) instead.`)
           }
@@ -631,7 +631,7 @@ export default {
       })
       if (process.env.RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION === "1") {
         const after = editor.get?.(taskName)
-        console.error(`[ho-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
+        console.error(`[oh-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
       }
       // Task 15: register the session, look_at, and (gate-permitting) monitor
       // families through the F2 aggregator. The aggregator reads the manifest's
@@ -712,7 +712,7 @@ export default {
       getCategorySkillReminder: (sessionID) => (sessionID ? categorySkillReminder.pending(sessionID) : ""),
       onCategorySkillReminderConsumed: (sessionID) => { categorySkillReminder.consume(sessionID) },
     }))
-    console.error(`[ho-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
+    console.error(`[oh-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     // Conditional native tool families (interactive_bash / task_* / goal_*).
     // Gates come from the materialized manifest; a disabled family is never
     // registered.
@@ -735,7 +735,7 @@ export default {
       // process outlives the session.
       if (typeof nativeToolRegistry?.shutdown === "function") {
         try { await nativeToolRegistry.shutdown() } catch (error) {
-          console.error(`[ho-my-rigel] Native V2 monitor shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
+          console.error(`[oh-my-rigel] Native V2 monitor shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
       await conditionalTools?.dispose?.()

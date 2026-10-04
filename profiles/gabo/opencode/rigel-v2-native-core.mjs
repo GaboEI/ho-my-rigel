@@ -1,5 +1,5 @@
 /**
- * Native OpenCode V2 runtime primitives for Ho My Rigel.
+ * Native OpenCode V2 runtime primitives for Oh My Rigel.
  *
  * This module deliberately has no dependency on OmO's V1 plugin contract.
  * It uses V2's location-scoped agent and session APIs directly.
@@ -51,7 +51,7 @@ export function normalizeAgentInventory(response) {
 }
 
 export function callableAgents(response) {
-  // Task 13 (Ho My Rigel Phase 2 migration): the callable inventory is the one
+  // Task 13 (Oh My Rigel Phase 2 migration): the callable inventory is the one
   // place host order enters the roster (prompt injection and delegation both
   // read it), so the canonical Sisyphus -> Hephaestus -> Prometheus -> Atlas
   // head is applied here; remaining agents keep their input order.
@@ -106,7 +106,7 @@ export function resolveNamedAgent(agents, requestedName) {
   const agent = agents.find((candidate) => candidate.name === alias)
     ?? agents.find((candidate) => candidate.name.toLocaleLowerCase() === alias.toLocaleLowerCase())
   if (agent) {
-    console.error(`[ho-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}; id=${agent.id}`)
+    console.error(`[oh-my-rigel] Native V2 agent resolved: requested=${requested}; canonical=${agent.name}; id=${agent.id}`)
     return agent
   }
   const available = agents.map((candidate) => candidate.name).sort()

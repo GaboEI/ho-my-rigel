@@ -1,5 +1,5 @@
 /**
- * Native V2 registration gate for the Hephaestus agent in Ho My Rigel.
+ * Native V2 registration gate for the Hephaestus agent in Oh My Rigel.
  *
  * Plain-JS port of the matching OmO revision:
  *   packages/omo-opencode/src/agents/hephaestus/agent.ts (model support, lines 18-55)
@@ -86,11 +86,11 @@ function connectedProviders(inventory) {
 }
 
 function providerSkippedMessage() {
-  return `[ho-my-rigel] [agent-registration] Agent skipped: required provider not connected (agent=${HEPHAESTUS_AGENT_KEY}; requiredProvider=${HEPHAESTUS_REQUIRED_PROVIDERS.join("|")})`
+  return `[oh-my-rigel] [agent-registration] Agent skipped: required provider not connected (agent=${HEPHAESTUS_AGENT_KEY}; requiredProvider=${HEPHAESTUS_REQUIRED_PROVIDERS.join("|")})`
 }
 
 function modelSkippedMessage(id) {
-  return `[ho-my-rigel] [agent-registration] Agent skipped: unsupported Hephaestus model (agent=${HEPHAESTUS_AGENT_KEY}; model=${id ?? "undefined"})`
+  return `[oh-my-rigel] [agent-registration] Agent skipped: unsupported Hephaestus model (agent=${HEPHAESTUS_AGENT_KEY}; model=${id ?? "undefined"})`
 }
 
 /**

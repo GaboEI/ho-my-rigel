@@ -35,7 +35,7 @@ function fakeContext() {
   }
 }
 
-describe("Ho My Rigel OpenCode V2 bridge", () => {
+describe("Oh My Rigel OpenCode V2 bridge", () => {
   test("converts the V1 Zod field shape into the one JSON Schema V2 accepts", () => {
     expect(legacyArgsToJsonSchema("search", {
       query: z.string().describe("Query to search"),

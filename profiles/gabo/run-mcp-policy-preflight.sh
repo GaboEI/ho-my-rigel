@@ -6,4 +6,4 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 node "$root/profiles/gabo/validate-profile.mjs"
 bash "$root/profiles/gabo/run-v2-isolated.sh"
-echo "Ho My Rigel MCP policy preflight passed"
+echo "Oh My Rigel MCP policy preflight passed"

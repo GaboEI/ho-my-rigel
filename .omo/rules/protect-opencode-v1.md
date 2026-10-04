@@ -1,6 +1,6 @@
 ---
 alwaysApply: true
-description: Absolute isolation boundary protecting the user's production OpenCode V1 from all Ho My Rigel V2 development and experimentation.
+description: Absolute isolation boundary protecting the user's production OpenCode V1 from all Oh My Rigel V2 development and experimentation.
 ---
 
 # OpenCode V1 is untouchable
@@ -9,7 +9,7 @@ This is a mandatory safety boundary, not guidance. It overrides convenience, tes
 
 ## Non-negotiable rule
 
-All Ho My Rigel development, experimentation, probes, QA, migrations, plugin loading, agent tests, server launches, and OpenCode subprocesses MUST run exclusively inside the approved isolated OpenCode V2 environment.
+All Oh My Rigel development, experimentation, probes, QA, migrations, plugin loading, agent tests, server launches, and OpenCode subprocesses MUST run exclusively inside the approved isolated OpenCode V2 environment.
 
 For this project, Docker and every container-based runner are explicitly prohibited. Do not propose Docker, request permission to use Docker, fall back to Docker, or treat a container as the solution to an isolation problem. This prohibition remains in force until Gabo explicitly changes this rule.
 
@@ -37,7 +37,7 @@ The sole authorized path for any live OpenCode V2 execution is the existing dedi
 
 - refresh or install only through `profiles/gabo/apply-v2-runtime-service.sh`;
 - execute only through `opencode-v2-lab.service`;
-- use only its dedicated V2 state under `~/.local/share/ho-my-rigel` and the service's documented isolated environment.
+- use only its dedicated V2 state under `~/.local/share/oh-my-rigel` and the service's documented isolated environment.
 
 There is no second approved live-runtime path. Do not bypass the service guards. Do not replace this path with Docker, `profiles/gabo/run-v2-isolated.sh`, another container-based runner, a direct `opencode run`, `opencode serve`, `opencode --standalone`, a Node contract that spawns OpenCode, or any manually constructed subprocess environment.
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Boots the host's OpenCode V2 binary inside Docker with a disposable home and
-# the local Ho My Rigel source plugin. The container has no mount of the
+# the local Oh My Rigel source plugin. The container has no mount of the
 # caller's OpenCode state, credentials, account pools, or project directory.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-sandbox="$(mktemp -d "${TMPDIR:-/tmp}/ho-my-rigel-v2.XXXXXX")"
-port="${HO_MY_RIGEL_V2_PORT:-4317}"
-password="ho-my-rigel-isolated"
-container_name="ho-my-rigel-v2-$$"
+sandbox="$(mktemp -d "${TMPDIR:-/tmp}/oh-my-rigel-v2.XXXXXX")"
+port="${OH_MY_RIGEL_V2_PORT:-${HO_MY_RIGEL_V2_PORT:-4317}}"
+password="oh-my-rigel-isolated"
+container_name="oh-my-rigel-v2-$$"
 
 cleanup() {
   docker rm -f "$container_name" >/dev/null 2>&1 || true
@@ -102,4 +102,4 @@ if find "$sandbox/xdg/config/opencode" -type f -name '*token*' -o -name '*creden
   exit 1
 fi
 
-echo "Ho My Rigel V2 isolated smoke passed: $version (profile contract and portable Judge source verified)"
+echo "Oh My Rigel V2 isolated smoke passed: $version (profile contract and portable Judge source verified)"

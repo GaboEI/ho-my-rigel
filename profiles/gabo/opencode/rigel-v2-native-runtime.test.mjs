@@ -720,7 +720,7 @@ test("native runtime records a context-cleared receipt on compaction", async () 
     feed.push({ type: "session.compacted", data: { sessionID: "ses_compact" } })
     await consumed
 
-    const receiptPath = join(stateRoot, "ho-my-rigel", "context-cleared-on-compaction.json")
+    const receiptPath = join(stateRoot, "oh-my-rigel", "context-cleared-on-compaction.json")
     expect(existsSync(receiptPath)).toBe(true)
     expect(JSON.parse(readFileSync(receiptPath, "utf8"))).toMatchObject({
       sessionID: "ses_compact",
@@ -748,7 +748,7 @@ test("native runtime records the clear for the streamed compaction event name", 
     const consumed = feed.consumed()
     feed.push({ type: "session.compaction.started", properties: { sessionID: "ses_compact_stream" } })
     await consumed
-    const receipt = JSON.parse(readFileSync(join(stateRoot, "ho-my-rigel", "context-cleared-on-compaction.json"), "utf8"))
+    const receipt = JSON.parse(readFileSync(join(stateRoot, "oh-my-rigel", "context-cleared-on-compaction.json"), "utf8"))
     expect(receipt).toMatchObject({ sessionID: "ses_compact_stream", eventType: "session.compaction.started" })
     await dispose()
   } finally {

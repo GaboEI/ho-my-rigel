@@ -21,4 +21,4 @@ docker run --rm \
   packages/omo-opencode/src/tools/delegate-task/sync-session-lifecycle.test.ts \
   packages/omo-opencode/src/tools/delegate-task/sync-prompt-route.test.ts
 
-echo "Ho My Rigel delegation preflight passed"
+echo "Oh My Rigel delegation preflight passed"

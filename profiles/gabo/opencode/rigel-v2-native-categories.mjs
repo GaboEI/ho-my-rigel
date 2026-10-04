@@ -1,5 +1,5 @@
 /**
- * Native V2 category resolution for Ho My Rigel.
+ * Native V2 category resolution for Oh My Rigel.
  *
  * Category definitions are a frozen data export of the matching OmO revision.
  * This module deliberately does not import the V1 delegate-task runtime: it

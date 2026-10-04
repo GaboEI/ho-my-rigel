@@ -49,7 +49,7 @@ run_docker_step() {
   run_step "$name" "$@"
 }
 
-echo "== Ho My Rigel isolated acceptance suite =="
+echo "== Oh My Rigel isolated acceptance suite =="
 echo "layer 0: isolation proof (protect-opencode-v1)"
 proof_dir="$root/.omo/evidence/$(date +%Y%m%d)-rigel-isolation-proof"
 mkdir -p "$proof_dir"
@@ -92,4 +92,4 @@ if [ "$failed" -gt 0 ]; then
   echo "suite FAILED: $failed step(s)"
   exit 1
 fi
-echo "Ho My Rigel complete isolated acceptance suite passed"
+echo "Oh My Rigel complete isolated acceptance suite passed"

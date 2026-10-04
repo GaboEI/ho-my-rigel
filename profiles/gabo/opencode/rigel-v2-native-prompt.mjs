@@ -219,7 +219,7 @@ export function createNativeRequestHook({
         resolved = await resolveModel({ sessionID, agent: input.agent, model: body.model, sameProviderAs: activeProviderID })
       } catch (error) {
         resolved = undefined
-        console.error(`[ho-my-rigel] Native V2 model resolution failed: ${error instanceof Error ? error.message : String(error)}`)
+        console.error(`[oh-my-rigel] Native V2 model resolution failed: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (resolved && typeof resolved.id === "string" && resolved.id && resolved.id !== body.model) {
         body.model = resolved.id

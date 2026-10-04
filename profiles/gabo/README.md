@@ -1,6 +1,6 @@
 # Gabo profile kit
 
-This kit is a portable configuration template for Ho My Rigel, a community
+This kit is a portable configuration template for Oh My Rigel, a community
 fork of OmO adapted for the **OpenCode V2** runtime. It is inert until a
 future installer copies its files into an **isolated** OpenCode/XDG environment
 and activates `OMO_PROFILE=gabo`. It does not fork, pin, or distribute

@@ -1,6 +1,6 @@
-# Ho My Rigel notices
+# Oh My Rigel notices
 
-Ho My Rigel is a modified derivative of Oh My OpenAgent (OmO), originally
+Oh My Rigel is a modified derivative of Oh My OpenAgent (OmO), originally
 published by `code-yeongyu`.
 
 Copyright notices and third-party notices in the upstream project are retained.

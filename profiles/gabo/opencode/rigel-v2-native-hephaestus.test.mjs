@@ -122,8 +122,8 @@ describe("isHephaestusAgentId", () => {
 })
 
 describe("evaluateHephaestusGate", () => {
-  const requiredProviderMessage = "[ho-my-rigel] [agent-registration] Agent skipped: required provider not connected (agent=hephaestus; requiredProvider=openai|chatgpt-subscription|github-copilot|opencode)"
-  const unsupportedModelMessage = (id) => `[ho-my-rigel] [agent-registration] Agent skipped: unsupported Hephaestus model (agent=hephaestus; model=${id ?? "undefined"})`
+  const requiredProviderMessage = "[oh-my-rigel] [agent-registration] Agent skipped: required provider not connected (agent=hephaestus; requiredProvider=openai|chatgpt-subscription|github-copilot|opencode)"
+  const unsupportedModelMessage = (id) => `[oh-my-rigel] [agent-registration] Agent skipped: unsupported Hephaestus model (agent=hephaestus; model=${id ?? "undefined"})`
 
   test("registers when a required provider is connected and the model is GPT", () => {
     // given an openai inventory row and a GPT model ref

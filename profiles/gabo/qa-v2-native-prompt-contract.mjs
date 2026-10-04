@@ -72,7 +72,7 @@ export default {
   const shape = transcript.match(/RIGEL_V2_PROMPT_SHAPE=([^\n]+)/)?.[1] ?? "not observed"
   const propagated = transcript.includes("RIGEL_V2_PROMPT_HOOK_OK")
   const report = [
-    "# Ho My Rigel — native V2 prompt contract",
+    "# Oh My Rigel — native V2 prompt contract",
     "",
     `- Native probe setup: ${setup ? "yes" : "no"}.`,
     `- Prompt shape: ${shape}.`,

@@ -3,8 +3,8 @@
 First off, thanks for taking the time to contribute! This document provides guidelines and instructions for contributing to oh-my-opencode.
 
 > [!NOTE]
-> **Contributing to Ho My Rigel's OpenCode V2 migration?** Read
-> [HO-MY-RIGEL.md](HO-MY-RIGEL.md) for the V2 goal, installation routes, and preview
+> **Contributing to Oh My Rigel's OpenCode V2 migration?** Read
+> [OH-MY-RIGEL.md](OH-MY-RIGEL.md) for the V2 goal, installation routes, and preview
 > status, then [FORK.md](FORK.md) for the fork boundary. Rigel prioritizes
 > feature-completeness on V2 before adding fork-specific features.
 
@@ -65,7 +65,7 @@ If English isn't your first language, don't worry! We value your contributions r
 
 ## Contributing to the OpenCode V2 Migration
 
-Ho My Rigel is building a developer preview of OmO exclusively for the evolving
+Oh My Rigel is building a developer preview of OmO exclusively for the evolving
 OpenCode V2 plugin API. Update OpenCode to V2 before installing Rigel. Do not
 keep an active OpenCode V1 installation in parallel because shared state can
 contaminate V1. The complete OmO feature set has not yet been demonstrated on
@@ -93,7 +93,7 @@ For migration pull requests, describe:
 3. The observable result and how another contributor can reproduce it.
 4. Any remaining incompatibility or host-version dependency.
 
-Begin with the [agent-first or human V2 installation](HO-MY-RIGEL.md#install-and-run-the-v2-preview), continue with
+Begin with the [agent-first or human V2 installation](OH-MY-RIGEL.md#install-and-run-the-v2-preview), continue with
 [FORK.md](FORK.md), then use the repository-wide setup and workflow below.
 Every environment differs. Verify the OpenCode version and resolved config and
 state paths before running integration QA; stop when isolation is uncertain.

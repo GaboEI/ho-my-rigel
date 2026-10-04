@@ -1,5 +1,5 @@
 /**
- * Canonical agent ordering for Ho My Rigel's native OpenCode V2 runtime.
+ * Canonical agent ordering for Oh My Rigel's native OpenCode V2 runtime.
  *
  * Plain-JS port of the matching OmO revision:
  *   packages/omo-opencode/src/shared/agent-ordering.ts:3-8

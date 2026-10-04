@@ -1,6 +1,6 @@
 ---
 name: rigel-session-start
-description: Mandatory session bootstrap for any work in the Ho My Rigel repository, including requests that mention Ho My Rigel, Rigel, profiles/gabo, OpenCode V2, the V2 laboratory, or /home/gabodev/Projects/ho-my-rigel. Invoke before commands, edits, tests, planning, or resumed work so the agent loads the permanent V1-protection and V2-isolation rules.
+description: Mandatory session bootstrap for any work in the Oh My Rigel repository, including requests that mention Oh My Rigel, Rigel, profiles/gabo, OpenCode V2, the V2 laboratory, or /home/gabodev/Projects/oh-my-rigel. Invoke before commands, edits, tests, planning, or resumed work so the agent loads the permanent V1-protection and V2-isolation rules.
 ---
 
 # Rigel session start
@@ -35,6 +35,6 @@ This skill provides no authorization to repair, restart, inspect through a mutat
 
 ## Continue the task
 
-After loading the rules, continue the user's requested Ho My Rigel work without asking for ritual confirmation. State briefly that `rigel-session-start` was loaded and identify `opencode-v2-lab.service` as the runtime path before the first runtime experiment. Do not ask Gabo to choose Docker or another runner.
+After loading the rules, continue the user's requested Oh My Rigel work without asking for ritual confirmation. State briefly that `rigel-session-start` was loaded and identify `opencode-v2-lab.service` as the runtime path before the first runtime experiment. Do not ask Gabo to choose Docker or another runner.
 
 For OpenCode QA, invoke the repository's `opencode-qa` skill as required by `AGENTS.md`; this bootstrap remains active alongside it.

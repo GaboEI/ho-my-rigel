@@ -153,13 +153,13 @@ export async function registerConditionalNativeTools({
   const hasTerminalFactory = typeof terminalFactory === "function"
   const resolvedTmuxPath = tmuxPath ?? (resolved.interactive_bash === true && !hasTerminalFactory ? detectTmuxAvailability() : undefined)
   if (resolved.interactive_bash === true && !hasTerminalFactory && !resolvedTmuxPath) {
-    log("[ho-my-rigel] Native V2 interactive_bash requested but tmux is not available on PATH; family stays unregistered")
+    log("[oh-my-rigel] Native V2 interactive_bash requested but tmux is not available on PATH; family stays unregistered")
   }
 
   const unavailable = []
   const onUnavailable = (family, reason) => {
     unavailable.push({ family, reason })
-    log(`[ho-my-rigel] Native V2 ${family} gate is enabled but ${reason}; family stays unregistered`)
+    log(`[oh-my-rigel] Native V2 ${family} gate is enabled but ${reason}; family stays unregistered`)
   }
 
   const pty = context?.pty
@@ -222,7 +222,7 @@ export async function registerConditionalNativeTools({
           }
         } catch (error) {
           if (!abort.signal.aborted) {
-            log(`[ho-my-rigel] Native V2 goal continuation subscription failed: ${error instanceof Error ? error.message : String(error)}`)
+            log(`[oh-my-rigel] Native V2 goal continuation subscription failed: ${error instanceof Error ? error.message : String(error)}`)
           }
         }
       })()
@@ -230,7 +230,7 @@ export async function registerConditionalNativeTools({
     }
   }
 
-  log(`[ho-my-rigel] Native V2 conditional tools: gates=${JSON.stringify(resolved)}; registered=${names.join(",") || "none"}; tmux=${resolvedTmuxPath ?? "none"}${unavailable.length ? `; unavailable=${unavailable.map((entry) => entry.family).join(",")}` : ""}`)
+  log(`[oh-my-rigel] Native V2 conditional tools: gates=${JSON.stringify(resolved)}; registered=${names.join(",") || "none"}; tmux=${resolvedTmuxPath ?? "none"}${unavailable.length ? `; unavailable=${unavailable.map((entry) => entry.family).join(",")}` : ""}`)
 
   return {
     gates: resolved,

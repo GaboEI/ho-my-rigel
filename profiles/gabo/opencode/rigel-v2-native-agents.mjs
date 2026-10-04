@@ -182,7 +182,7 @@ export function resolveProactiveAgentModels(agents, listModels) {
  * Manifest insertion order is not canonical. Reorder the entry list so
  * canonical core agents register first in Sisyphus -> Hephaestus -> Prometheus
  * -> Atlas order; every other entry keeps its manifest insertion order (Task
- * 13, Ho My Rigel Phase 2 migration). The canonical keys stay owned by
+ * 13, Oh My Rigel Phase 2 migration). The canonical keys stay owned by
  * `rigel-v2-native-agent-order.mjs`; this only maps entries onto it.
  */
 function canonicalAgentEntries(agents) {
@@ -209,7 +209,7 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels, 
     try {
       inventory = await listModels()
     } catch (error) {
-      console.error(`[ho-my-rigel] Native V2 agent inventory unavailable; using manifest models: ${error instanceof Error ? error.message : String(error)}`)
+      console.error(`[oh-my-rigel] Native V2 agent inventory unavailable; using manifest models: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
   const proactiveModels = resolveProactiveAgentModels(agents, Array.isArray(inventory) ? inventory : undefined)

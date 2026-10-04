@@ -80,14 +80,14 @@ try {
   ].join("\n")
   const transcriptName = delegation ? "runtime-delegation.txt" : "runtime-load.txt"
   writeEvidence(transcriptName, transcript)
-  const loaded = transcript.includes("[ho-my-rigel] OpenCode V2 bridge active:")
+  const loaded = transcript.includes("[oh-my-rigel] OpenCode V2 bridge active:")
   const registered = /OpenCode V2 bridge active: (?:1[0-9]|[2-9][0-9]) tools/.test(transcript)
   const forbidden = /Cannot find module|ERR_MODULE_NOT_FOUND|unknown plugin API|failed to load plugin|disabled plugin after transform failure/i.test(transcript)
   const replied = transcript.includes(delegation ? "RIGEL_V2_TASK_OK" : "RIGEL_V2_QA_OK")
   const usedTask = !delegation || /"tool":"task"|tool=task|name=task/.test(transcript)
   const resolvedTask = !delegation || (replied && usedTask && !/Unknown agent:\s*"explore"/i.test(transcript))
   const report = [
-    `# Ho My Rigel — QA de bridge V2${delegation ? " (delegación)" : ""}`,
+    `# Oh My Rigel — QA de bridge V2${delegation ? " (delegación)" : ""}`,
     "",
     "- Superficie: proceso real `opencode run --standalone` con HOME/XDG temporal.",
     `- Plugin cargado: ${loaded ? "sí" : "no"}.`,

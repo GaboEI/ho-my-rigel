@@ -14,7 +14,7 @@ fi
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 user_home=/home/gabodev
-unit_dropin=/etc/systemd/system/opencode-lan.service.d/ho-my-rigel.conf
+unit_dropin=/etc/systemd/system/opencode-lan.service.d/oh-my-rigel.conf
 
 systemctl stop opencode-lan.service
 runuser -u gabodev -- env HOME="$user_home" node "$root/profiles/gabo/rollback-live-trial.mjs"

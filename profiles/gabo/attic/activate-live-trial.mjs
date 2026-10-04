@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Activates Ho My Rigel for one real-machine trial.
+ * Activates Oh My Rigel for one real-machine trial.
  *
  * This program intentionally refuses to run while OpenCode is live. It never
  * installs, upgrades, or rewrites the two authentication integrations or the
@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url"
 
 const home = process.env.HOME || "/home/gabodev"
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const stateRoot = path.join(home, ".local/share/ho-my-rigel")
+const stateRoot = path.join(home, ".local/share/oh-my-rigel")
 const snapshot = path.join(stateRoot, "snapshots/20261001-pre-rigel")
 const configDir = path.join(home, ".config/opencode")
 const configFile = path.join(configDir, "opencode.json")
@@ -99,8 +99,8 @@ try {
   if (!equal(frozenFingerprint, protectedFingerprint(readJson(configFile)))) fail("la escritura alteró un componente protegido; ejecuta rigel-rollback.")
 
   fs.mkdirSync(path.dirname(wrapper), { recursive: true, mode: 0o700 })
-  fs.writeFileSync(wrapper, `#!/usr/bin/env sh\n# Ho My Rigel trial wrapper; remove via rigel-rollback.\nexport OMO_PROFILE=gabo\nexec ${JSON.stringify(path.join(home, ".opencode/bin/opencode"))} "$@"\n`, { mode: 0o700 })
-  fs.writeFileSync(rollbackWrapper, `#!/usr/bin/env sh\n# Ho My Rigel trial rollback wrapper.\nexec node ${JSON.stringify(path.join(sourceRoot, "profiles/gabo/rollback-live-trial.mjs"))}\n`, { mode: 0o700 })
+  fs.writeFileSync(wrapper, `#!/usr/bin/env sh\n# Oh My Rigel trial wrapper; remove via rigel-rollback.\nexport OMO_PROFILE=gabo\nexec ${JSON.stringify(path.join(home, ".opencode/bin/opencode"))} "$@"\n`, { mode: 0o700 })
+  fs.writeFileSync(rollbackWrapper, `#!/usr/bin/env sh\n# Oh My Rigel trial rollback wrapper.\nexec node ${JSON.stringify(path.join(sourceRoot, "profiles/gabo/rollback-live-trial.mjs"))}\n`, { mode: 0o700 })
   fs.writeFileSync(runtimeState, JSON.stringify({
     activatedAt: new Date().toISOString(), snapshot, pluginEntry, distEntry, profile: "gabo",
     protectedFingerprint: frozenFingerprint, protectedComponents: ["oc-codex-multi-auth", "obsidian"],

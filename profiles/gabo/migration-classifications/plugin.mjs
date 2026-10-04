@@ -8,7 +8,7 @@
  * `profiles/gabo/generate-v2-migration-inventory.mjs` consume este objeto
  * como la sección `plugin` del ledger.
  *
- * Frontera V2: `HO-MY-RIGEL.md` (líneas 56-80) y `AGENTS.rigel.md` declaran
+ * Frontera V2: `OH-MY-RIGEL.md` (líneas 56-80) y `AGENTS.rigel.md` declaran
  * que V2 no tiene mapeo verificado para `chat.headers`, `chat.params`,
  * `command.execute.before`, `config`, `event`,
  * `experimental.chat.messages.transform`,

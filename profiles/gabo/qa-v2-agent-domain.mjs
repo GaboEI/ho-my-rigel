@@ -82,7 +82,7 @@ export default {
   })
   const transcript = `exit=${result.status}; signal=${result.signal}\n${result.stdout}\n${result.stderr}`
   write("transcript.txt", transcript)
-  const bridgeAbsent = !transcript.includes("[ho-my-rigel] OpenCode V2 bridge active:")
+  const bridgeAbsent = !transcript.includes("[oh-my-rigel] OpenCode V2 bridge active:")
   const marker = transcript.match(/\[rigel-agent-domain-probe\] (.+)/)
   const editorMarker = transcript.match(/\[rigel-agent-domain-editor\] (.+)/)
   const observation = marker ? JSON.parse(marker[1]) : null

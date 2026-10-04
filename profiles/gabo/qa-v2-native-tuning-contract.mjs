@@ -15,7 +15,11 @@ const service = process.env.RIGEL_V2_SERVICE ?? "opencode-v2-lab.service"
 const labRoot = process.env.RIGEL_V2_LAB_ROOT ?? path.join(os.homedir(), ".local/share/opencode-v2-lab")
 const secretFile = path.join(labRoot, "secret.env")
 const evidenceDir = path.join(root, ".omo/evidence/20261003-task-9-tuning")
-const tuningReceiptFile = path.join(labRoot, "state/ho-my-rigel/agent-tuning-applied.json")
+// Canonical tuning receipt path; the legacy `ho-my-rigel` location is only a
+// read fallback for a laboratory that has not been migrated yet.
+const canonicalTuningReceiptFile = path.join(labRoot, "state/oh-my-rigel/agent-tuning-applied.json")
+const legacyTuningReceiptFile = path.join(labRoot, "state/ho-my-rigel/agent-tuning-applied.json")
+const tuningReceiptFile = fs.existsSync(canonicalTuningReceiptFile) ? canonicalTuningReceiptFile : legacyTuningReceiptFile
 const serverURL = process.env.RIGEL_V2_SERVER_URL ?? "http://127.0.0.1:4097"
 const uid = typeof process.getuid === "function" ? process.getuid() : undefined
 const serviceEnv = {

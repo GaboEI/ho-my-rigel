@@ -48,9 +48,9 @@
 
 OmO is one `omo` command that turns your tokens into finished work: research across ten thousand sources, a deck people actually get, backends, frontends, code. It runs on senpi, our fork of [pi](https://github.com/badlogic/pi-mono), with everything below built in.
 
-## Ho My Rigel: bringing OmO to OpenCode V2
+## Oh My Rigel: bringing OmO to OpenCode V2
 
-This repository is the **Ho My Rigel** community fork. It targets OpenCode V2
+This repository is the **Oh My Rigel** community fork. It targets OpenCode V2
 exclusively. Its goal is to bring the full OmO feature set to the V2 plugin
 runtime without dropping agents, delegation, skills, permissions, tools,
 context handling, or continuity across long-running work.
@@ -67,17 +67,17 @@ come after a compatible base has been demonstrated.
 > OpenCode V1 installation: parallel state can contaminate V1. OpenCode V2 and
 > its plugin API are also still evolving.
 
-Want to help? Start with the [V2 preview status and compatibility goals](HO-MY-RIGEL.md),
-follow the [clean V2 installation routes](HO-MY-RIGEL.md#install-and-run-the-v2-preview),
+Want to help? Start with the [V2 preview status and compatibility goals](OH-MY-RIGEL.md),
+follow the [clean V2 installation routes](OH-MY-RIGEL.md#install-and-run-the-v2-preview),
 then read the [fork guide](FORK.md) and the [contribution guide](CONTRIBUTING.md).
 Useful contributions include porting an OmO surface, adding V2 behavior tests,
 running focused QA, improving public documentation, and reviewing integrations.
 
 ## Install
 
-The commands below install upstream OmO. They do **not** install Ho My Rigel.
+The commands below install upstream OmO. They do **not** install Oh My Rigel.
 For Rigel, first update OpenCode to V2, then follow the
-[agent-first or human source installation](HO-MY-RIGEL.md#install-and-run-the-v2-preview).
+[agent-first or human source installation](OH-MY-RIGEL.md#install-and-run-the-v2-preview).
 
 ```bash
 curl -fsSL https://get.omo.dev/install.sh | bash
@@ -114,8 +114,8 @@ Opinionated defaults, adjustable if you insist. Your settings live in `~/.omo/om
 
 ## Docs
 
-- [Ho My Rigel V2 preview](HO-MY-RIGEL.md)
-- [Install and run the Rigel V2 preview](HO-MY-RIGEL.md#install-and-run-the-v2-preview)
+- [Oh My Rigel V2 preview](OH-MY-RIGEL.md)
+- [Install and run the Rigel V2 preview](OH-MY-RIGEL.md#install-and-run-the-v2-preview)
 - [Fork guide](FORK.md)
 - [Contributing](CONTRIBUTING.md)
 - [omo.dev/docs](https://omo.dev/docs)

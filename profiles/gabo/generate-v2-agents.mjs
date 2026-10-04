@@ -48,7 +48,7 @@ try {
   const judge = judgePath ? JSON.parse(fs.readFileSync(judgePath, "utf8")) : null
   if (selection?.independentJudge?.id && !judge) throw new Error("Rigel Judge definition is required")
   if (judge) selected[selection?.independentJudge?.id ?? "judge"] = judge
-  // Task 13 (Ho My Rigel Phase 2 migration): manifest order must be canonical
+  // Task 13 (Oh My Rigel Phase 2 migration): manifest order must be canonical
   // at the source. Core agents come first in Sisyphus -> Hephaestus ->
   // Prometheus -> Atlas order; every other key keeps its insertion order, so
   // the judge stays in the remainder tail. The canonical keys stay owned by
@@ -82,7 +82,7 @@ try {
     defaultAgent: config.default_agent,
     agents: orderedSelected,
     metadata: {
-      generatedBy: "Ho My Rigel V2 native runtime",
+      generatedBy: "Oh My Rigel V2 native runtime",
       profile: process.env.OMO_PROFILE || null,
       global: {
         tools,

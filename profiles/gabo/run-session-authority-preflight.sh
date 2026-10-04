@@ -17,4 +17,4 @@ docker run --rm \
   packages/omo-opencode/src/tools/delegate-task/background-continuation.test.ts \
   packages/omo-opencode/src/tools/delegate-task/sync-continuation.test.ts
 
-echo "Ho My Rigel session-authority preflight passed"
+echo "Oh My Rigel session-authority preflight passed"

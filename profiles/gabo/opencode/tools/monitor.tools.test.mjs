@@ -216,8 +216,8 @@ test("monitor registry scans storage with the object form and paginates pages", 
 
 test("monitor registry tolerates a scan that returns a bare array", async () => {
   const map = new Map([
-    ["ho-my-rigel.monitor.mon_1", { id: "mon_1", parentSessionId: "ses_1", status: "running" }],
-    ["ho-my-rigel.monitor.mon_2", { id: "mon_2", parentSessionId: "ses_2", status: "running" }],
+    ["oh-my-rigel.monitor.mon_1", { id: "mon_1", parentSessionId: "ses_1", status: "running" }],
+    ["oh-my-rigel.monitor.mon_2", { id: "mon_2", parentSessionId: "ses_2", status: "running" }],
   ])
   const storage = {
     async get(key) { return map.get(key) },

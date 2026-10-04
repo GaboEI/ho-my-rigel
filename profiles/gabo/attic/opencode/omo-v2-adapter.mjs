@@ -10,7 +10,7 @@ import { createRigelV2Plugin } from "./omo-v2-adapter-core.mjs"
 const { tool } = await import(new URL("../node_modules/@opencode-ai/plugin/dist/index.js", "__OMO_DIST_ENTRY__"))
 
 export default createRigelV2Plugin({
-  id: "ho-my-rigel",
+  id: "oh-my-rigel",
   loadLegacyHooks: async ({ directory, client, serverUrl, $ }) => legacyModule.server({ directory, client, serverUrl, $ }, {}),
   // The V1 tool factory owns the schemas. Its JSON-Schema helper produces a
   // root document; passing individual raw fields would silently degrade in V2.

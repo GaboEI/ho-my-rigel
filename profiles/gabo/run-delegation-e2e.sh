@@ -7,6 +7,13 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 binary="${RIGEL_V2_BINARY:-$HOME/.opencode/bin/opencode}"
 
+# Legacy compatibility: the historical opt-in flag name is accepted as an
+# alias. `OH_MY_RIGEL_USE_OPENGO` is canonical; `HO_MY_RIGEL_USE_OPENGO`
+# remains valid during the identity transition.
+if [[ -z "${OH_MY_RIGEL_USE_OPENGO:-}" && -n "${HO_MY_RIGEL_USE_OPENGO:-}" ]]; then
+  export OH_MY_RIGEL_USE_OPENGO="$HO_MY_RIGEL_USE_OPENGO"
+fi
+
 if [ ! -x "$binary" ]; then
   echo "OpenCode V2 is required at RIGEL_V2_BINARY (default: $binary)" >&2
   exit 2

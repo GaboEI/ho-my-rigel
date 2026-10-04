@@ -5,7 +5,7 @@ import path from "node:path"
 import childProcess from "node:child_process"
 
 const home = process.env.HOME || "/home/gabodev"
-const stateRoot = path.join(home, ".local/share/ho-my-rigel")
+const stateRoot = path.join(home, ".local/share/oh-my-rigel")
 const snapshot = path.join(stateRoot, "snapshots/20261001-pre-rigel")
 const runtimeState = path.join(stateRoot, "active-trial.json")
 const configDir = path.join(home, ".config/opencode")
@@ -35,11 +35,11 @@ fs.cpSync(path.join(snapshot, "config-opencode"), configDir, { recursive: true, 
 fs.cpSync(path.join(snapshot, "data-opencode"), dataDir, { recursive: true, preserveTimestamps: true })
 if (fs.existsSync(wrapper)) {
   const body = fs.readFileSync(wrapper, "utf8")
-  if (body.includes("Ho My Rigel trial wrapper")) fs.unlinkSync(wrapper)
+  if (body.includes("Oh My Rigel trial wrapper")) fs.unlinkSync(wrapper)
 }
 if (fs.existsSync(rollbackWrapper)) {
   const body = fs.readFileSync(rollbackWrapper, "utf8")
-  if (body.includes("Ho My Rigel trial rollback wrapper")) fs.unlinkSync(rollbackWrapper)
+  if (body.includes("Oh My Rigel trial rollback wrapper")) fs.unlinkSync(rollbackWrapper)
 }
 fs.unlinkSync(runtimeState)
 console.log(`Pre-Rigel environment restored. Trial files preserved in: ${archive}`)

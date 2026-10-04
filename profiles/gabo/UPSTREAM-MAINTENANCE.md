@@ -1,6 +1,6 @@
-# Ho My Rigel upstream maintenance
+# Oh My Rigel upstream maintenance
 
-Ho My Rigel is a fork of OmO, not of OpenCode. OpenCode V2 remains independently updatable. Upstream changes are reviewed in a separate Git worktree before they can affect the maintained Rigel branch.
+Oh My Rigel is a fork of OmO, not of OpenCode. OpenCode V2 remains independently updatable. Upstream changes are reviewed in a separate Git worktree before they can affect the maintained Rigel branch.
 
 ## One-time remote setup
 
@@ -29,8 +29,11 @@ bash profiles/gabo/run-all-isolated.sh
 For an additional real-model delegation run, explicitly opt into the locally running OpenGo provider:
 
 ```bash
-HO_MY_RIGEL_USE_OPENGO=1 bash profiles/gabo/run-delegation-e2e.sh
+OH_MY_RIGEL_USE_OPENGO=1 bash profiles/gabo/run-delegation-e2e.sh
 ```
+
+The legacy `HO_MY_RIGEL_USE_OPENGO` name is still accepted as an alias during the
+identity transition; `OH_MY_RIGEL_USE_OPENGO` is canonical.
 
 This command neither mounts the active OpenCode configuration nor copies credentials. It only uses the locally running provider selected by the operator.
 

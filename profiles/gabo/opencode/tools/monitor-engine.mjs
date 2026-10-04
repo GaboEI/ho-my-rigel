@@ -39,7 +39,7 @@ export const DEFAULT_MONITOR_CONFIG = Object.freeze({
   pattern_max_length: 512,
 })
 
-const STORAGE_PREFIX = "ho-my-rigel.monitor."
+const STORAGE_PREFIX = "oh-my-rigel.monitor."
 const ANSI_COLOR_PATTERN = /\x1b\[[0-9;]*m/g
 
 function stripAnsi(text) {
@@ -305,7 +305,7 @@ export function createMonitorRegistry({ storage, terminalFactory, event, session
     try {
       await deliverMonitorBatch({ sessions, record, batch, counters })
     } catch (error) {
-      console.error(`[ho-my-rigel] Native V2 monitor delivery failed: monitor=${monitorId}; ${error instanceof Error ? error.message : String(error)}`)
+      console.error(`[oh-my-rigel] Native V2 monitor delivery failed: monitor=${monitorId}; ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

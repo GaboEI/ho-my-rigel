@@ -1,5 +1,5 @@
 /**
- * Native OpenCode V2 tool aggregator for Ho My Rigel.
+ * Native OpenCode V2 tool aggregator for Oh My Rigel.
  *
  * F2 (`task-14-17-fase3-herramientas.md`) owns this module: it scans
  * `profiles/gabo/opencode/tools/*.tools.mjs` in sorted order, imports each

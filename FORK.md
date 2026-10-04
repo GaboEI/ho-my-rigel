@@ -1,6 +1,6 @@
-# Ho My Rigel fork guide
+# Oh My Rigel fork guide
 
-Ho My Rigel is a community fork of
+Oh My Rigel is a community fork of
 [Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent). It ports the
 OmO OpenCode integration to the OpenCode V2 plugin runtime while keeping
 OpenCode itself independent and upgradeable.
@@ -28,7 +28,7 @@ for agents, orchestration, delegation, permissions, model routing, and context
 integration, with additional OmO surfaces still being ported or verified.
 
 The upstream OmO installation commands install upstream OmO, not Rigel. Use the
-[clean V2 source installation](HO-MY-RIGEL.md#install-and-run-the-v2-preview)
+[clean V2 source installation](OH-MY-RIGEL.md#install-and-run-the-v2-preview)
 for this preview. Do not interpret the preview as feature-complete or ready for
 production use.
 
@@ -38,11 +38,11 @@ behavior when reporting compatibility results.
 
 ## Evaluating or contributing from source
 
-Start with the [clean V2 installation routes](HO-MY-RIGEL.md#install-and-run-the-v2-preview)
+Start with the [clean V2 installation routes](OH-MY-RIGEL.md#install-and-run-the-v2-preview)
 and a narrow contribution target. Before changing
 anything:
 
-1. Read [HO-MY-RIGEL.md](HO-MY-RIGEL.md) for the current public status and
+1. Read [OH-MY-RIGEL.md](OH-MY-RIGEL.md) for the current public status and
    compatibility principles.
 2. Read [CONTRIBUTING.md](CONTRIBUTING.md) for repository setup, conventions,
    tests, and pull request expectations.

@@ -1,9 +1,9 @@
-# MIT License for Ho My Rigel additions
+# MIT License for Oh My Rigel additions
 
-Copyright (c) 2026 GaboEI and Ho My Rigel contributors
+Copyright (c) 2026 GaboEI and Oh My Rigel contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of the original Ho My Rigel additions covered by this file (the "Rigel
+of the original Oh My Rigel additions covered by this file (the "Rigel
 Additions"), to deal in the Rigel Additions without restriction, including
 without limitation the rights to use, copy, modify, merge, publish,
 distribute, sublicense, and/or sell copies of the Rigel Additions, and to

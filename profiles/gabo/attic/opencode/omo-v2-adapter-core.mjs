@@ -23,7 +23,7 @@ const supportedLegacyHooks = new Set([
   "experimental.chat.system.transform",
 ])
 
-export function createRigelV2Plugin({ id = "ho-my-rigel", loadLegacyHooks, serializeLegacyArgs }) {
+export function createRigelV2Plugin({ id = "oh-my-rigel", loadLegacyHooks, serializeLegacyArgs }) {
   if (typeof loadLegacyHooks !== "function") throw new TypeError("loadLegacyHooks debe ser una función")
 
   return {
@@ -180,7 +180,7 @@ function adaptLegacyClient(context, directory) {
       if (hasCallableAgents(v2Result)) return logAgentInventory("client.agent.list", v2Result)
       // A malformed or unavailable answer is not an inventory. Preserve the
       // V1 return shape but never substitute a static file as false truth.
-      console.error("[ho-my-rigel] V2 agent inventory unavailable from context.agent.list")
+      console.error("[oh-my-rigel] V2 agent inventory unavailable from context.agent.list")
       return { data: [] }
     },
   }
@@ -270,7 +270,7 @@ function hasCallableAgents(agents) {
 
 function logAgentInventory(source, agents) {
   const callable = agents.filter((agent) => (agent.mode === "subagent" || agent.mode === "all") && !agent.hidden).length
-  console.error(`[ho-my-rigel] V2 agent inventory: ${source}, ${callable} callable agents`)
+  console.error(`[oh-my-rigel] V2 agent inventory: ${source}, ${callable} callable agents`)
   return { data: agents }
 }
 
@@ -354,7 +354,7 @@ async function applyChatMessage({ legacy, input, body, messages }) {
     body.model = override.modelID
     changed = true
   } else if (hasUnsupportedChatMessageMutation(output.message, input.model)) {
-    console.error("[ho-my-rigel] V2 chat.message ignored an agent, variant, or cross-provider model override: it occurs after V2 selected the provider route.")
+    console.error("[oh-my-rigel] V2 chat.message ignored an agent, variant, or cross-provider model override: it occurs after V2 selected the provider route.")
   }
   return changed
 }

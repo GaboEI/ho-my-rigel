@@ -1,5 +1,5 @@
 /**
- * Canonical OpenCode V2 model fallback chains for Ho My Rigel.
+ * Canonical OpenCode V2 model fallback chains for Oh My Rigel.
  *
  * Data-only port of the matching OmO revision:
  *   packages/model-core/src/agent-model-requirements.ts   (11 agents)
