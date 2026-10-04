@@ -18,6 +18,30 @@ const ALLOWED = new Set([
   "Excluido (unwired upstream)",
 ])
 
+// The bounded migration-status vocabulary the generator enforces on authored
+// fragments. Every rendered Estado column must be one of these values.
+const ALLOWED_STATUSES = new Set([
+  "Migrado",
+  "Migrado parcialmente",
+  "Incompatible (con evidencia)",
+  "Pendiente de ejecución",
+  "unwired upstream",
+])
+
+// Authored statuses that must reach the ledger for the audited surfaces. The
+// two `monitor` rows (tools and features) both carry the same authored status,
+// so the duplicate entry requires both rows to render it.
+const EXPECTED_STATUS_ROWS = [
+  ["goal", "Migrado parcialmente"],
+  ["interactive-bash-session", "Migrado parcialmente"],
+  ["monitor", "Migrado parcialmente"],
+  ["monitor", "Migrado parcialmente"],
+  ["session-manager", "Migrado"],
+  ["task", "Migrado parcialmente"],
+  ["opencode-skill-loader", "Migrado"],
+  ["Goal", "Migrado parcialmente"],
+]
+
 // Row shape: | `name` | classification | status | rationale | future evidence |
 // The rationale is greedy so a stray " | " inside it does not split the row.
 const ROW = /^\| `([^`]+)` \| ([^|]+?) \| ([^|]+?) \| (.+) \| (.+) \|$/
@@ -71,6 +95,28 @@ describe("migration inventory ledger", () => {
         .filter((row) => !ALLOWED.has(row.classification))
         .map((row) => `${row.name}: ${row.classification}`)
       expect(invalid).toEqual([])
+    })
+
+    test("#then every rendered Estado is in the status vocabulary", () => {
+      const invalid = rows
+        .filter((row) => !ALLOWED_STATUSES.has(row.status))
+        .map((row) => `${row.name}: ${row.status}`)
+      expect(invalid).toEqual([])
+    })
+
+    test("#then the audited surfaces render their authored status", () => {
+      const required = new Map()
+      for (const [name, status] of EXPECTED_STATUS_ROWS) {
+        const key = `${name}\u0000${status}`
+        required.set(key, (required.get(key) ?? 0) + 1)
+      }
+      const unmet = []
+      for (const [key, count] of required) {
+        const [name, status] = key.split("\u0000")
+        const actual = rows.filter((row) => row.name === name && row.status === status).length
+        if (actual < count) unmet.push(`${name}: ${status} (${actual}/${count})`)
+      }
+      expect(unmet).toEqual([])
     })
 
     test("#then every row carries a rationale and a future-evidence entry", () => {

@@ -91,6 +91,7 @@ export default {
   },
   monitor: {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
       "El backend de `monitor_start/stop/list/output` de `features/monitor/` (procesos vigilados, anillo de salida, filtrado e inyección por lotes) se porta a V2 condicionado a la clave `monitor.enabled`, apagada por defecto.",
     futureEvidence: "gate:monitor.enabled",
@@ -109,6 +110,7 @@ export default {
   },
   "opencode-skill-loader": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El descubrimiento de skills de cuatro ámbitos con prioridad numérica de `features/opencode-skill-loader/` sobre `packages/skills-loader-core/` se migra para alimentar las herramientas `skill` y `skill_mcp` nativas.",
     futureEvidence: "task:14",

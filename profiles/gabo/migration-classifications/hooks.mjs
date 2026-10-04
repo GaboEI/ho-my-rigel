@@ -65,6 +65,7 @@ export default {
   },
   goal: {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
       "El objetivo persistente V1 en `hooks/goal/index.ts` gobierna la continuidad por idle y el uso por sesión; se migra al runtime nativo V2 con estado por sessionID, suscripción al evento de idle y las herramientas create_goal, update_goal y get_goal bajo el gate goal.enabled.",
     futureEvidence: "task:16",
@@ -77,6 +78,7 @@ export default {
   },
   "interactive-bash-session": {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
       "La sesión V1 en `hooks/interactive-bash-session/hook.ts` gestiona el ciclo de vida tmux de interactive_bash; se migra al runtime nativo V2 cuando tmux está disponible, replicando el tracker y el estado por sesión.",
     futureEvidence: "task:16",

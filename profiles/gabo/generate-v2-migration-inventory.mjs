@@ -39,6 +39,18 @@ const ALLOWED_CLASSIFICATIONS = [
   "Excluido (unwired upstream)",
 ]
 
+// The migration-status vocabulary for an authored fragment entry. A row that
+// omits `status` renders as "Pendiente de ejecución"; an authored status must be
+// one of these exact values, so a fragment can never invent a status the test
+// vocabulary does not know.
+const ALLOWED_STATUSES = [
+  "Migrado",
+  "Migrado parcialmente",
+  "Incompatible (con evidencia)",
+  "Pendiente de ejecución",
+  "unwired upstream",
+]
+
 // ---------------------------------------------------------------------------
 // Classification data (source-controlled fragments)
 // ---------------------------------------------------------------------------
@@ -59,6 +71,9 @@ async function loadClassifications(section) {
     }
     if (!entry.rationale || !entry.futureEvidence) {
       throw new Error(`${section}:${row} needs a non-empty rationale and futureEvidence`)
+    }
+    if (entry.status !== undefined && !ALLOWED_STATUSES.includes(entry.status)) {
+      throw new Error(`${section}:${row} has invalid status "${entry.status}"`)
     }
   }
   return map
@@ -234,7 +249,7 @@ function renderRow(item, classMap, overrides = {}, unwired = new Set()) {
   }
   const authored = classMap[item]
   if (authored) {
-    return `| \`${item}\` | ${authored.classification} | Pendiente de ejecución | ${authored.rationale} | ${authored.futureEvidence} |`
+    return `| \`${item}\` | ${authored.classification} | ${authored.status ?? "Pendiente de ejecución"} | ${authored.rationale} | ${authored.futureEvidence} |`
   }
   const override = overrides[item]
   if (override) {

@@ -28,6 +28,7 @@ export default {
   },
   Goal: {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
       "El modo Goal (sección de goal del plan, gate `goal.enabled`) se migra con `create_goal`, `update_goal` y `get_goal` portados a la superficie nativa de V2 como indica la tarea 16.",
     futureEvidence: "task:16",

@@ -57,12 +57,14 @@ export default {
   },
   monitor: {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
       "La familia `monitor_start/stop/list/output` de `tools/monitor/create-monitor-tools.ts` se porta a V2, condicionada a la clave de configuración `monitor.enabled` (apagada por defecto).",
     futureEvidence: "gate:monitor.enabled",
   },
   "session-manager": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "Las herramientas de sesión `session_list/read/search/info` de `tools/session-manager/tools.ts` se portan a V2 envolviendo el SDK nativo con la semántica V1 de dominio, paginación y formatos.",
     futureEvidence: "task:15",
@@ -87,6 +89,7 @@ export default {
   },
   task: {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
       "La familia `task_create/get/list/update` de `tools/task/` se adapta al motor de tareas nativo de V2, con los gates de configuración respetados en runtime.",
     futureEvidence: "task:16",

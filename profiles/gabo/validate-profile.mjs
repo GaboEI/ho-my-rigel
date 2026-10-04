@@ -149,4 +149,42 @@ const profileSerialized = JSON.stringify({ omo, opencode })
 if (/WatchdogVPN|\/home\/gabodev|TAVILY_API_KEY|OPENAI_API_KEY|CODEX_AUTH/i.test(profileSerialized)) fail("profile contains a project rule, personal path, or secret marker")
 if (!manifest.nonGoals?.includes("copy WatchdogVPN skills or commands")) fail("WatchdogVPN exclusion must remain explicit")
 
+// Native V2 origin invariant: the runtime must derive the server origin from
+// the V2 setup context, an explicit environment origin, or this process's own
+// serve argv. A hardcoded loopback base URL or the literal lab port 4097 is a
+// regression. Port 4096 is a legitimate V2 default and is deliberately allowed:
+// identity is proven against the server (GET /api/info), never by refusing a
+// port number.
+const hardcodedOrigin = /https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+/
+const isDocumentationUrlExample = (line, matchIndex) => {
+  const marker = line.indexOf("description:")
+  if (marker === -1 || matchIndex < marker) return false
+  // Inside the quoted description value when an odd number of quotes precedes the match.
+  let quotes = 0
+  for (let i = marker; i < matchIndex; i++) if (line[i] === '"') quotes++
+  return quotes % 2 === 1
+}
+const scanForHardcodedOrigin = (relativePath) => {
+  const lines = readFileSync(join(root, relativePath), "utf8").split("\n")
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
+    const match = hardcodedOrigin.exec(line)
+    if (match && !isDocumentationUrlExample(line, match.index)) {
+      fail(`${relativePath} must derive its origin from process.argv, not hardcode a loopback base URL: "${match[0]}" at line ${index + 1}`)
+    }
+    if (line.includes("4097")) {
+      fail(`${relativePath} must not hardcode the V2 lab port 4097 at line ${index + 1}: "${line.trim()}"`)
+    }
+  }
+}
+for (const relativeDir of ["opencode", "opencode/tools"]) {
+  const scanDir = join(root, relativeDir)
+  if (!existsSync(scanDir)) continue
+  const entries = readdirSync(scanDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".mjs") || entry.name.endsWith(".test.mjs")) continue
+    scanForHardcodedOrigin(`${relativeDir}/${entry.name}`)
+  }
+}
+
 console.log("gabo profile validation passed")
