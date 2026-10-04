@@ -111,8 +111,9 @@ export function createMonitorTools({ registry, pluginConfig }) {
           maxRuntimeMs: monitorConfig.max_runtime_ms,
           note: effectiveMode.note,
         })
-      } catch {
-        return `[ERROR] monitor_start failed for label: ${args.label ?? "(manager-assigned label)"}`
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        return `[ERROR] monitor_start failed for label: ${args.label ?? "(manager-assigned label)"}: ${detail}`
       }
     },
   }

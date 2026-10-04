@@ -10,29 +10,65 @@ import {
 import { MonitorBatcher, formatMonitorBatch } from "./monitor-delivery.mjs"
 
 // A fake V2 storage domain: an in-memory key/value map with the real
-// get/set/remove/scan contract the registry consumes.
-function fakeStorage() {
+// get/set/remove/scan contract the registry consumes. `scan` takes the
+// canonical `{ prefix, limit, after }` object form and returns paginated
+// `{ entries, next }` pages; it throws if a caller passes a bare string.
+function fakeStorage({ pageSize = 100 } = {}) {
   const map = new Map()
+  const scanCalls = []
   return {
     map,
+    scanCalls,
     async get(key) { return map.get(key) },
     async set(key, value) { map.set(key, value) },
     async remove(key) { map.delete(key) },
-    async scan(prefix) {
-      return [...map.entries()].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }))
+    async scan(opts = {}) {
+      scanCalls.push(opts)
+      if (typeof opts !== "object" || opts === null || Array.isArray(opts) || typeof opts.prefix !== "string") {
+        throw new TypeError("monitor storage.scan must receive an object with a string prefix")
+      }
+      const limit = Math.min(opts.limit ?? pageSize, pageSize)
+      const keys = [...map.keys()].filter((key) => key.startsWith(opts.prefix)).sort()
+      const start = opts.after ? keys.indexOf(opts.after) + 1 : 0
+      const slice = keys.slice(start, start + limit)
+      const nextIndex = start + slice.length
+      return {
+        entries: slice.map((key) => ({ key, value: map.get(key) })),
+        ...(nextIndex < keys.length ? { next: keys[nextIndex - 1] } : {}),
+      }
     },
   }
 }
 
-// A fake V2 pty domain: create returns an id; snapshot returns canned text.
-function fakePty({ snapshotText = "" } = {}) {
-  const calls = { create: [], remove: [], snapshot: [] }
+// A fake persistent-terminal port with the terminal-driver contract:
+// start -> { ok, ptyID, info }, snapshot -> { ok, text, info },
+// remove -> { ok }. The snapshot text/info is mutable so a test can simulate a
+// live process growing its output or exiting between reads. `factory` is the
+// session-scoped `terminalFactory(sessionID) -> port`.
+function fakeTerminal({ snapshotText = "", info } = {}) {
+  const calls = { start: [], remove: [], snapshot: [], factory: [] }
+  const state = { text: snapshotText, info }
   let counter = 0
+  const port = {
+    async start(input) {
+      calls.start.push(input)
+      counter += 1
+      return { ok: true, ptyID: `pty_${counter}`, info: { id: `pty_${counter}` } }
+    },
+    async snapshot(input) {
+      calls.snapshot.push(input)
+      return { ok: true, text: state.text, info: state.info }
+    },
+    async remove(input) {
+      calls.remove.push(input)
+      return { ok: true }
+    },
+  }
   return {
     calls,
-    async create(input) { calls.create.push(input); counter += 1; return { data: { id: `pty_${counter}` } } },
-    async remove(input) { calls.remove.push(input) },
-    async snapshot(input) { calls.snapshot.push(input); return { data: { text: snapshotText } } },
+    state,
+    port,
+    factory(sessionID) { calls.factory.push(sessionID); return port },
   }
 }
 
@@ -42,8 +78,8 @@ function fakeSessions() {
   return { prompts, async prompt(input) { prompts.push(input); return { data: {} } } }
 }
 
-function registryFor({ storage = fakeStorage(), pty = fakePty(), sessions = fakeSessions(), config = {} } = {}) {
-  return createMonitorRegistry({ storage, pty, event: undefined, sessions, config })
+function registryFor({ storage = fakeStorage(), terminal = fakeTerminal(), sessions = fakeSessions(), config = {} } = {}) {
+  return createMonitorRegistry({ storage, terminalFactory: terminal.factory, event: undefined, sessions, config })
 }
 
 test("monitor filter accepts a plain pattern and rejects a ReDoS pattern", () => {
@@ -101,17 +137,20 @@ test("monitor live_safe coerces to idle when live mode is disabled", () => {
   expect(getEffectiveMode(undefined, false)).toEqual({ mode: "idle" })
 })
 
-test("monitor_start spawns a pty, persists a record, and returns the V1 block", async () => {
+test("monitor_start starts a persistent terminal, persists a record, and returns the V1 block", async () => {
   const storage = fakeStorage()
-  const pty = fakePty()
-  const registry = registryFor({ storage, pty, config: { enabled: true, allowed_commands: ["tail"] } })
+  const terminal = fakeTerminal()
+  const registry = registryFor({ storage, terminal, config: { enabled: true, allowed_commands: ["tail"] } })
   const { monitor_start } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } } })
   const output = await monitor_start.execute({ command: "tail -f log", label: "logs" }, { sessionID: "ses_1" })
   expect(output).toContain("Monitor started successfully.")
   expect(output).toContain("monitor_id: mon_pty_1")
   expect(output).toContain("label: logs")
-  expect(pty.calls.create[0].command).toBe("tail -f log")
+  expect(terminal.calls.start[0].command).toBe(process.env.SHELL || "/bin/sh")
+  expect(terminal.calls.start[0].args).toEqual(["-c", "tail -f log"])
+  expect(terminal.calls.factory).toEqual(["ses_1"])
   expect(storage.map.size).toBe(1)
+  expect((await registry.get("mon_pty_1")).ptyID).toBe("pty_1")
 })
 
 test("monitor_start denies a command outside the allowlist", async () => {
@@ -137,14 +176,14 @@ test("monitor_start enforces the per-session capacity", async () => {
 })
 
 test("monitor_stop returns stopped, then already-stopped, and denies another session", async () => {
-  const pty = fakePty()
-  const registry = registryFor({ pty, config: { enabled: true, allowed_commands: ["tail"] } })
+  const terminal = fakeTerminal()
+  const registry = registryFor({ terminal, config: { enabled: true, allowed_commands: ["tail"] } })
   const { monitor_start, monitor_stop } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } } })
   await monitor_start.execute({ command: "tail -f log" }, { sessionID: "ses_1" })
   expect(JSON.parse(await monitor_stop.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_1" }))).toEqual({ status: "stopped", monitor_id: "mon_pty_1" })
   expect(JSON.parse(await monitor_stop.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_1" }))).toEqual({ status: "already-stopped", monitor_id: "mon_pty_1" })
   expect(JSON.parse(await monitor_stop.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_2" }))).toEqual({ status: "denied", monitor_id: "mon_pty_1" })
-  expect(pty.calls.remove[0]).toEqual({ ptyID: "pty_1" })
+  expect(terminal.calls.remove[0]).toEqual({ ptyID: "pty_1" })
 })
 
 test("monitor_list hides exited monitors unless include_exited is set", async () => {
@@ -160,6 +199,40 @@ test("monitor_list hides exited monitors unless include_exited is set", async ()
   expect(JSON.parse(await monitor_list.execute({ include_exited: true }, { sessionID: "ses_1" })).monitors.length).toBe(1)
 })
 
+test("monitor registry scans storage with the object form and paginates pages", async () => {
+  const storage = fakeStorage({ pageSize: 1 })
+  const registry = registryFor({ storage, config: { enabled: true, allowed_commands: ["tail"] } })
+  await registry.start({ command: "tail -f a", mode: "idle", parentSessionId: "ses_1" })
+  await registry.start({ command: "tail -f b", mode: "idle", parentSessionId: "ses_1" })
+  storage.scanCalls.length = 0
+  const records = await registry.list("ses_1")
+  expect(records.map((record) => record.id).sort()).toEqual(["mon_pty_1", "mon_pty_2"])
+  expect(storage.scanCalls.length).toBeGreaterThanOrEqual(2)
+  for (const call of storage.scanCalls) {
+    expect(typeof call).toBe("object")
+    expect(typeof call.prefix).toBe("string")
+  }
+})
+
+test("monitor registry tolerates a scan that returns a bare array", async () => {
+  const map = new Map([
+    ["ho-my-rigel.monitor.mon_1", { id: "mon_1", parentSessionId: "ses_1", status: "running" }],
+    ["ho-my-rigel.monitor.mon_2", { id: "mon_2", parentSessionId: "ses_2", status: "running" }],
+  ])
+  const storage = {
+    async get(key) { return map.get(key) },
+    async set(key, value) { map.set(key, value) },
+    async scan(opts) {
+      if (typeof opts !== "object" || opts === null || typeof opts.prefix !== "string") {
+        throw new TypeError("monitor storage.scan must receive an object with a string prefix")
+      }
+      return [...map.entries()].filter(([key]) => key.startsWith(opts.prefix)).map(([key, value]) => ({ key, value }))
+    },
+  }
+  const registry = registryFor({ storage, config: { enabled: true, allowed_commands: ["tail"] } })
+  expect((await registry.list("ses_1")).map((record) => record.id)).toEqual(["mon_1"])
+})
+
 test("monitor_output returns not_found for an unknown or unauthorized monitor", async () => {
   const registry = registryFor({ config: { enabled: true, allowed_commands: ["tail"] } })
   const { monitor_start, monitor_output } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } } })
@@ -168,9 +241,9 @@ test("monitor_output returns not_found for an unknown or unauthorized monitor", 
   expect(JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_2" })).error).toBe("not_found")
 })
 
-test("monitor_output reads live pty output, filters it, and reports counters", async () => {
-  const pty = fakePty({ snapshotText: "INFO ok\nERROR boom\nINFO ok" })
-  const registry = registryFor({ pty, config: { enabled: true, allowed_commands: ["tail"] } })
+test("monitor_output reads the live terminal snapshot, filters it, and reports counters", async () => {
+  const terminal = fakeTerminal({ snapshotText: "INFO ok\nERROR boom\nINFO ok" })
+  const registry = registryFor({ terminal, config: { enabled: true, allowed_commands: ["tail"] } })
   const { monitor_start, monitor_output } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } } })
   await monitor_start.execute({ command: "tail -f log", match_pattern: "ERROR" }, { sessionID: "ses_1" })
   const output = JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_1" }))
@@ -179,24 +252,43 @@ test("monitor_output reads live pty output, filters it, and reports counters", a
   expect(output.counters.unmatchedLines).toBe(2)
   const matched = JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1", stream: "matched" }, { sessionID: "ses_1" }))
   expect(matched.lines.map((line) => line.text)).toEqual(["ERROR boom"])
+  const unmatched = JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1", stream: "unmatched" }, { sessionID: "ses_1" }))
+  expect(unmatched.lines.map((line) => line.text)).toEqual(["INFO ok", "INFO ok"])
+  const all = JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1", stream: "all" }, { sessionID: "ses_1" }))
+  expect(all.lines.map((line) => line.seq)).toEqual([1, 2, 3])
 })
 
-test("monitor registry transitions a record to exited on a pty.exited event", async () => {
-  const registry = registryFor({ config: { enabled: true, allowed_commands: ["tail"] } })
-  await registry.start({ command: "tail -f log", mode: "idle", parentSessionId: "ses_1" })
-  await registry.handleEvent({ type: "pty.exited", data: { info: { id: "pty_1", exitCode: 0 } } })
+test("monitor_output derives the exited transition from the terminal snapshot and flushes the terminal batch", async () => {
+  const terminal = fakeTerminal({ snapshotText: "ERROR boom" })
+  const sessions = fakeSessions()
+  const registry = registryFor({ terminal, sessions, config: { enabled: true, allowed_commands: ["tail"] } })
+  const { monitor_start, monitor_output } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } } })
+  await monitor_start.execute({ command: "tail -f log", match_pattern: "ERROR" }, { sessionID: "ses_1" })
+  // The process exits before the read: the snapshot arrives with exited status.
+  // The retained line is flushed as the terminal batch (stillRunning=false).
+  terminal.state.info = { status: "exited", exitCode: 7 }
+  const output = JSON.parse(await monitor_output.execute({ monitor_id: "mon_pty_1" }, { sessionID: "ses_1" }))
+  expect(output.counters.matchedLines).toBe(1)
   const record = await registry.get("mon_pty_1")
   expect(record.status).toBe("exited")
-  expect(record.exitCode).toBe(0)
+  expect(record.exitCode).toBe(7)
+  expect(sessions.prompts.length).toBe(1)
+  expect(sessions.prompts[0].text).toContain("Status: exited")
+  expect(sessions.prompts[0].text).toContain("code=7")
+})
+
+test("monitor_start throws a clear error when no terminal factory is provided", async () => {
+  const registry = createMonitorRegistry({ storage: fakeStorage(), event: undefined, sessions: fakeSessions(), config: {} })
+  await expect(registry.start({ command: "tail -f log", mode: "idle", parentSessionId: "ses_1" })).rejects.toThrow(/persistent-terminal/)
 })
 
 test("monitor registry shutdown stops every running monitor", async () => {
-  const pty = fakePty()
-  const registry = registryFor({ pty, config: { enabled: true, allowed_commands: ["tail"] } })
+  const terminal = fakeTerminal()
+  const registry = registryFor({ terminal, config: { enabled: true, allowed_commands: ["tail"] } })
   await registry.start({ command: "tail -f a", mode: "idle", parentSessionId: "ses_1" })
   await registry.start({ command: "tail -f b", mode: "idle", parentSessionId: "ses_1" })
   await registry.shutdown()
-  expect(pty.calls.remove.length).toBe(2)
+  expect(terminal.calls.remove.length).toBe(2)
 })
 
 // Task 15 re-open: V1-equivalent delivery. V1 injected batched monitor output
@@ -220,9 +312,9 @@ test("monitor batcher flushes on the line cap and emits the V1 envelope", () => 
 })
 
 test("monitor output is delivered to the parent session automatically", async () => {
-  const pty = fakePty({ snapshotText: "ERROR boom" })
+  const terminal = fakeTerminal({ snapshotText: "ERROR boom" })
   const sessions = fakeSessions()
-  const registry = registryFor({ pty, sessions, config: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } })
+  const registry = registryFor({ terminal, sessions, config: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } })
   const { monitor_start, monitor_output } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } } })
   await monitor_start.execute({ command: "tail -f log", match_pattern: "ERROR" }, { sessionID: "ses_1" })
   // A read ingests the live snapshot, which feeds the batcher and delivers.
@@ -234,8 +326,8 @@ test("monitor output is delivered to the parent session automatically", async ()
 })
 
 test("monitor delivery is skipped when the session domain cannot prompt", async () => {
-  const pty = fakePty({ snapshotText: "line" })
-  const registry = registryFor({ pty, sessions: {}, config: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } })
+  const terminal = fakeTerminal({ snapshotText: "line" })
+  const registry = registryFor({ terminal, sessions: {}, config: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } })
   const { monitor_start, monitor_output } = createMonitorTools({ registry, pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"], batch_max_lines: 1 } } })
   await monitor_start.execute({ command: "tail -f log" }, { sessionID: "ses_1" })
   // A missing prompt must not throw out of the tool; the read still returns.
@@ -244,10 +336,27 @@ test("monitor delivery is skipped when the session domain cannot prompt", async 
 })
 
 test("monitor registry stops a session's monitors on session.deleted", async () => {
-  const pty = fakePty()
-  const registry = registryFor({ pty, config: { enabled: true, allowed_commands: ["tail"] } })
+  const terminal = fakeTerminal()
+  const registry = registryFor({ terminal, config: { enabled: true, allowed_commands: ["tail"] } })
   await registry.start({ command: "tail -f a", mode: "idle", parentSessionId: "ses_1" })
   await registry.handleEvent({ type: "session.deleted", data: { sessionID: "ses_1" } })
-  expect(pty.calls.remove.length).toBe(1)
+  expect(terminal.calls.remove.length).toBe(1)
   expect((await registry.get("mon_pty_1")).status).toBe("stopped")
+})
+
+test("monitor registry applies default limits when the config omits monitor keys", async () => {
+  const registry = createMonitorRegistry({ storage: fakeStorage(), terminalFactory: fakeTerminal().factory, event: undefined, sessions: fakeSessions(), config: {} })
+  await registry.start({ command: "tail -f a", mode: "idle", parentSessionId: "ses_1" })
+  await registry.start({ command: "tail -f b", mode: "idle", parentSessionId: "ses_1" })
+  await registry.start({ command: "tail -f c", mode: "idle", parentSessionId: "ses_1" })
+  await expect(registry.start({ command: "tail -f d", mode: "idle", parentSessionId: "ses_1" })).rejects.toThrow(/capacity reached/)
+})
+
+test("monitor batcher marks a terminal flush as not running", () => {
+  const batches = []
+  const batcher = new MonitorBatcher({ batchMaxLines: 10, batchMaxBytes: 1_000_000, flushIntervalMs: 0 })
+  batcher.onBatch((batch) => batches.push(batch))
+  batcher.push({ stream: "stdout", seq: 1, text: "a" })
+  batcher.flushNow({ allowEmpty: false, stillRunning: false })
+  expect(batches.at(-1).stillRunning).toBe(false)
 })

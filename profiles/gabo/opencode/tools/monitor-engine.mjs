@@ -2,14 +2,18 @@
  * Native OpenCode V2 monitor engine.
  *
  * Ports the observable semantics of `packages/omo-opencode/src/features/monitor/`
- * onto V2 primitives. It is NOT a no-op: a monitor is a real V2 PTY process
- * whose output is decoded, filtered, ring-buffered, and persisted through the
- * V2 storage domain, with lifecycle observed through the V2 event stream.
+ * onto V2 primitives. It is NOT a no-op: a monitor is a real V2 persistent
+ * terminal process whose output is decoded, filtered, ring-buffered, and
+ * persisted through the V2 storage domain, with lifecycle observed through the
+ * V2 event stream.
  *
- * V2 primitive mapping:
- *   - process spawn/stop  -> `context.pty.create` / `context.pty.remove`
- *   - output read         -> `context.pty.snapshot({ ptyID })`
- *   - lifecycle events    -> `context.event.subscribe` (`pty.exited`)
+ * V2 primitive mapping (the setup context has no pty domain; a monitor runs on
+ * the persistent-terminal port created over the server HTTP API):
+ *   - process spawn/stop  -> `terminalFactory(sessionID).start` / `.remove`
+ *   - output read         -> `terminalFactory(sessionID).snapshot({ ptyID })`
+ *   - lifecycle events    -> `context.event.subscribe` (`session.deleted` teardown)
+ *   - exit transition     -> `terminalFactory(sessionID).snapshot` status poll
+ *                            (the persistent-pty domain emits no `pty.exited`)
  *   - durable records     -> `context.storage.get/set/remove/scan`
  *   - output delivery     -> `context.session.prompt` (batched, V1 envelope)
  *
@@ -211,29 +215,31 @@ function storageKey(monitorId) {
   return `${STORAGE_PREFIX}${monitorId}`
 }
 
-function ptyIdOf(response) {
-  const data = response?.data ?? response
-  return data?.id ?? data?.ptyID ?? data?.pty?.id
-}
-
-function snapshotText(response) {
-  const data = response?.data ?? response
-  if (typeof data?.text === "string") return data.text
-  if (Array.isArray(data?.lines)) return data.lines.join("\n")
-  return ""
-}
-
 /**
  * The monitor registry. Records live in the V2 storage domain so they survive
  * across tool calls within the session; the ring buffer is in-memory per
- * process (V1 kept it in memory too). `pty` and `storage` are the V2 domains.
+ * process (V1 kept it in memory too). `terminalFactory(sessionID)` returns the
+ * persistent-terminal port for that session; `storage` is the V2 domain.
  */
-export function createMonitorRegistry({ storage, pty, event, sessions, config }) {
+export function createMonitorRegistry({ storage, terminalFactory, event, sessions, config: rawConfig }) {
+  // The caller may pass the raw profile monitor block (or none at all); apply
+  // the module defaults here so capacity, ring sizing and batching never run
+  // with `undefined` limits when the profile omits a key.
+  const config = { ...DEFAULT_MONITOR_CONFIG, ...(isPlainObject(rawConfig) ? rawConfig : {}) }
   const buffers = new Map()
   const stoppedIds = new Set()
   // Last snapshot text ingested per monitor, so a repeated `monitor_output`
   // read does not re-ingest the whole PTY buffer and duplicate lines.
   const ingestedText = new Map()
+
+  // Resolve the persistent-terminal port for a session. A factory that returns
+  // nothing is reported as absent so `start` can fail with a clear message and
+  // stop/read paths degrade without throwing.
+  const terminalFor = (sessionID) => {
+    if (typeof terminalFactory !== "function") return undefined
+    const terminal = terminalFactory(sessionID)
+    return terminal && typeof terminal === "object" ? terminal : undefined
+  }
 
   const readRecord = async (monitorId) => {
     if (typeof storage?.get !== "function") return undefined
@@ -248,15 +254,22 @@ export function createMonitorRegistry({ storage, pty, event, sessions, config })
 
   const listRecords = async (sessionID) => {
     if (typeof storage?.scan !== "function") return []
-    const entries = await storage.scan(STORAGE_PREFIX)
     const records = []
-    const values = Array.isArray(entries) ? entries : Object.values(entries ?? {})
-    for (const entry of values) {
-      const record = isPlainObject(entry?.value) ? entry.value : isPlainObject(entry) ? entry : undefined
-      if (!record || typeof record.id !== "string") continue
-      if (sessionID && record.parentSessionId !== sessionID) continue
-      records.push(record)
-    }
+    let after
+    do {
+      // Canonical V2 storage.scan contract: an options object carrying `prefix`.
+      // Paginated pages expose `{ entries, next }`; a bare array is tolerated for
+      // simple in-memory drivers, matching the task store.
+      const page = await storage.scan({ prefix: STORAGE_PREFIX, limit: 100, ...(after ? { after } : {}) })
+      const values = Array.isArray(page) ? page : (page?.entries ?? [])
+      for (const entry of values) {
+        const record = isPlainObject(entry?.value) ? entry.value : isPlainObject(entry) ? entry : undefined
+        if (!record || typeof record.id !== "string") continue
+        if (sessionID && record.parentSessionId !== sessionID) continue
+        records.push(record)
+      }
+      after = Array.isArray(page) ? undefined : page?.next
+    } while (after)
     return records
   }
 
@@ -337,18 +350,21 @@ export function createMonitorRegistry({ storage, pty, event, sessions, config })
     const record = await readRecord(monitorId)
     if (!record) return
     clearRuntimeTimer(monitorId)
-    if (record.ptyID && typeof pty?.remove === "function") {
-      try { await pty.remove({ ptyID: record.ptyID }) } catch { /* already gone */ }
+    if (record.ptyID) {
+      const terminal = terminalFor(record.parentSessionId)
+      if (terminal && typeof terminal.remove === "function") {
+        try { await terminal.remove({ ptyID: record.ptyID }) } catch { /* already gone */ }
+      }
     }
     stoppedIds.add(monitorId)
     const batcher = batchers.get(monitorId)
     if (batcher) {
       // Flush any retained matched lines as a terminal batch before teardown.
-      batcher.flushNow({ allowEmpty: false })
+      batcher.flushNow({ allowEmpty: false, stillRunning: false })
       batcher.destroy()
       batchers.delete(monitorId)
     }
-    await writeRecord({ ...record, status: reason === "max_runtime" ? "stopped" : "stopped" })
+    await writeRecord({ ...record, status: "stopped", stoppedReason: reason ?? "stopped" })
   }
 
   return {
@@ -358,9 +374,20 @@ export function createMonitorRegistry({ storage, pty, event, sessions, config })
       if (active.length >= config.max_monitors_per_session) {
         throw new Error(`monitor capacity reached: ${active.length}/${config.max_monitors_per_session}`)
       }
-      const created = await pty.create({ command, title: label ?? command, cwd: undefined })
-      const ptyID = ptyIdOf(created)
-      if (!ptyID) throw new Error("OpenCode V2 pty.create did not return a pty id")
+      const terminal = terminalFor(parentSessionId)
+      if (!terminal || typeof terminal.start !== "function") {
+        throw new Error("monitor start requires a persistent-terminal port, but the terminal factory provided none")
+      }
+      // The persistent-terminal endpoint execs `command` as a single program
+      // (no shell parsing), so a monitor's shell command is run through a shell
+      // exactly as V1 spawned it.
+      const shell = process.env.SHELL || "/bin/sh"
+      const created = await terminal.start({ command: shell, args: ["-c", command], title: label ?? command, env: {} })
+      const ptyID = created?.ptyID
+      if (!created?.ok || typeof ptyID !== "string" || ptyID.length === 0) {
+        const reason = created?.error?.message ?? "persistent terminal start returned no pty id"
+        throw new Error(`monitor start failed: ${reason}`)
+      }
       const id = `mon_${ptyID}`
       const record = {
         id,
@@ -398,24 +425,50 @@ export function createMonitorRegistry({ storage, pty, event, sessions, config })
       const record = await readRecord(monitorId)
       if (!record) return { lines: [], counters: createEmptyCounters() }
       const buffer = bufferFor(monitorId)
-      // Refresh from the live PTY snapshot so output is real, not a no-op.
-      if (record.status === "running" && record.ptyID && typeof pty?.snapshot === "function") {
-        try {
-          const snapshot = await pty.snapshot({ ptyID: record.ptyID })
-          const text = snapshotText(snapshot)
-          const previous = ingestedText.get(monitorId) ?? ""
-          if (text && text !== previous) {
-            // Ingest only the new suffix when the snapshot grew; a shrunk or
-            // reset snapshot is ingested whole.
-            const delta = text.startsWith(previous) ? text.slice(previous.length) : text
-            const filterResult = createMonitorFilter(record.matchPattern, { patternMaxLength: config.pattern_max_length })
-            ingest(monitorId, delta, filterResult.filter)
-            ingestedText.set(monitorId, text)
-          }
-        } catch { /* pty may have exited */ }
+      let currentRecord = record
+      // Refresh from the live persistent-terminal snapshot so output is real,
+      // not a no-op.
+      if (record.status === "running" && record.ptyID) {
+        const terminal = terminalFor(record.parentSessionId)
+        if (terminal && typeof terminal.snapshot === "function") {
+          try {
+            const snapshot = await terminal.snapshot({ ptyID: record.ptyID })
+            if (snapshot?.ok) {
+              const text = typeof snapshot.text === "string" ? snapshot.text : ""
+              const exited = snapshot.info?.status === "exited"
+              // Persist the exit transition before ingesting, so a batch flushed
+              // during ingest is delivered with the terminal status.
+              if (exited) {
+                clearRuntimeTimer(monitorId)
+                const exitCode = snapshot.info?.exitCode
+                currentRecord = { ...record, status: "exited", ...(typeof exitCode === "number" ? { exitCode } : {}) }
+                await writeRecord(currentRecord)
+              }
+              const previous = ingestedText.get(monitorId) ?? ""
+              if (text && text !== previous) {
+                // Ingest only the new suffix when the snapshot grew; a shrunk or
+                // reset snapshot is ingested whole.
+                const delta = text.startsWith(previous) ? text.slice(previous.length) : text
+                const filterResult = createMonitorFilter(record.matchPattern, { patternMaxLength: config.pattern_max_length })
+                ingest(monitorId, delta, filterResult.filter)
+                ingestedText.set(monitorId, text)
+              }
+              if (exited) {
+                // Flush any retained matched lines as a terminal batch so the
+                // parent sees the final output.
+                const batcher = batchers.get(monitorId)
+                if (batcher) {
+                  batcher.flushNow({ allowEmpty: false, stillRunning: false })
+                  batcher.destroy()
+                  batchers.delete(monitorId)
+                }
+              }
+            }
+          } catch { /* terminal may have gone away */ }
+        }
       }
       const result = buffer.query({ stream: opts.stream ?? "all", since_sequence: opts.since_sequence, limit: opts.limit })
-      await writeRecord({ ...record, counters: result.counters })
+      await writeRecord({ ...currentRecord, counters: result.counters })
       return result
     },
 
@@ -427,26 +480,13 @@ export function createMonitorRegistry({ storage, pty, event, sessions, config })
     },
 
     async handleEvent(event) {
-      // V1 stopped a session's monitors on session teardown.
+      // V1 stopped a session's monitors on session teardown. The persistent-pty
+      // domain emits no `pty.exited` (proven live 2026-10-04 through the lab
+      // event stream), so the exit transition is owned solely by the snapshot
+      // read in `getOutput`; there is no event-driven exit path to maintain here.
       if (event?.type === "session.deleted") {
         const sessionID = event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
         if (typeof sessionID === "string") await this.stopSessionMonitors(sessionID)
-        return
-      }
-      const ptyID = event?.data?.info?.id ?? event?.data?.ptyID ?? event?.properties?.ptyID
-      if (event?.type !== "pty.exited" || typeof ptyID !== "string") return
-      const records = await listRecords(undefined)
-      const record = records.find((candidate) => candidate.ptyID === ptyID)
-      if (!record) return
-      clearRuntimeTimer(record.id)
-      const exitCode = event?.data?.info?.exitCode ?? event?.data?.exitCode
-      await writeRecord({ ...record, status: "exited", ...(typeof exitCode === "number" ? { exitCode } : {}) })
-      // Flush the terminal batch so the parent sees the final output.
-      const batcher = batchers.get(record.id)
-      if (batcher) {
-        batcher.flushNow({ allowEmpty: false })
-        batcher.destroy()
-        batchers.delete(record.id)
       }
     },
 

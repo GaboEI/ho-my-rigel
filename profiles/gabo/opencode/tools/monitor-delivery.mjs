@@ -88,7 +88,7 @@ export class MonitorBatcher {
     this.firstPendingAt = undefined
     this.clearTimer()
     this.batchSeq += 1
-    this.batchCallback({ monitorId: "", batchSeq: this.batchSeq, lines, stillRunning: true })
+    this.batchCallback({ monitorId: "", batchSeq: this.batchSeq, lines, stillRunning: options?.stillRunning ?? true })
   }
 
   onBatch(cb) {
