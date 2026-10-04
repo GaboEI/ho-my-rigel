@@ -35,26 +35,13 @@ import {
   createV2GoalStore,
   GOAL_TOOL_NAMES,
 } from "./tools/goal.tools.mjs"
+import { readNativeGates } from "./rigel-v2-native-config.mjs"
+import { normalizeToolDefinition } from "./rigel-v2-native-core.mjs"
 
-export const NATIVE_GATE_KEYS = ["interactive_bash", "task_system", "goal", "monitor"]
-
-/**
- * CONFIG ADAPTER SEAM (Fase 3 F1).
- *
- * The pending `rigel-v2-native-config.mjs` owns JSONC parsing and materializes
- * the resolved gates into `manifest.metadata.global.gates` via
- * `generate-v2-agents.mjs`. Its exported `readNativeGates(manifest)` reads this
- * exact plain-object shape with defaults false. This reader mirrors those
- * semantics so the tool families are usable before F1 lands; when F1 lands the
- * imported reader replaces this call site without changing any behavior here.
- */
-export function readMaterializedGates(manifest) {
-  const raw = manifest?.metadata?.global?.gates
-  const source = raw && typeof raw === "object" ? raw : {}
-  const gates = {}
-  for (const key of NATIVE_GATE_KEYS) gates[key] = source[key] === true
-  return gates
-}
+// F1 landed: the config adapter (`rigel-v2-native-config.mjs`) owns JSONC parsing
+// and `generate-v2-agents.mjs` materializes the resolved gates into
+// `manifest.metadata.global.gates`. This module reads them with the single
+// shared reader; there is no local duplicate.
 
 function emptyResult() {
   return { definitions: {}, names: [] }
@@ -72,6 +59,7 @@ export function buildConditionalToolDefinitions({
   gates = {},
   tmuxPath,
   ptyRunner,
+  terminalFactory,
   taskStore,
   taskLock,
   goalStore,
@@ -83,7 +71,13 @@ export function buildConditionalToolDefinitions({
   const names = []
 
   if (gates.interactive_bash === true) {
-    if (typeof tmuxPath !== "string" || !tmuxPath) {
+    // A persistent-terminal factory is the no-tmux backend; a resolved tmux path
+    // plus a PTY runner is the V1 backend. Only when NEITHER exists is the
+    // family unavailable.
+    if (typeof terminalFactory === "function") {
+      definitions[INTERACTIVE_BASH_TOOL_NAME] = createInteractiveBashTool({ terminalFactory, getSessionID })
+      names.push(INTERACTIVE_BASH_TOOL_NAME)
+    } else if (typeof tmuxPath !== "string" || !tmuxPath) {
       onUnavailable("interactive_bash", "tmux is not available on PATH")
     } else if (!ptyRunner) {
       onUnavailable("interactive_bash", "V2 pty runner is unavailable")
@@ -141,20 +135,24 @@ export async function registerConditionalNativeTools({
   directory,
   tmuxPath,
   ptyRunner,
+  terminalFactory,
   taskStore,
   taskLock,
   goalStore,
   syncTodos,
   getSessionID,
+  onRegistered,
   log = console.error,
 } = {}) {
-  const manifestGates = readMaterializedGates(manifest)
+  const manifestGates = readNativeGates(manifest)
   const resolved = { ...manifestGates, ...(gates ?? {}) }
-  // interactive_bash availability comes from the host, not a config key: an
-  // enabled family with no tmux must stay absent, never register a broken tool.
-  // The PATH probe only runs when the family is actually requested.
-  const resolvedTmuxPath = tmuxPath ?? (resolved.interactive_bash === true ? detectTmuxAvailability() : undefined)
-  if (resolved.interactive_bash === true && !resolvedTmuxPath) {
+  // interactive_bash availability comes from the host, not a config key. A
+  // persistent-terminal factory is a complete backend on its own (no tmux
+  // required); only when it is absent does PATH detection decide. The probe
+  // runs only when the family is actually requested.
+  const hasTerminalFactory = typeof terminalFactory === "function"
+  const resolvedTmuxPath = tmuxPath ?? (resolved.interactive_bash === true && !hasTerminalFactory ? detectTmuxAvailability() : undefined)
+  if (resolved.interactive_bash === true && !hasTerminalFactory && !resolvedTmuxPath) {
     log("[ho-my-rigel] Native V2 interactive_bash requested but tmux is not available on PATH; family stays unregistered")
   }
 
@@ -172,7 +170,9 @@ export async function registerConditionalNativeTools({
     ? createPtyCommandRunner({ pty, location, baseUrl })
     : undefined)
   const storage = context?.storage
-  const listId = resolveTaskListId({ config: {} })
+  // The task list id must follow the active project directory, not the service
+  // process cwd. `directory` is the V2 setup location passed by the runtime.
+  const listId = resolveTaskListId({ cwd: directory })
   const store = taskStore ?? (storage && typeof storage.get === "function"
     ? createV2TaskStore({ storage, listId })
     : undefined)
@@ -184,6 +184,7 @@ export async function registerConditionalNativeTools({
     gates: resolved,
     tmuxPath: resolvedTmuxPath,
     ptyRunner: runner,
+    terminalFactory,
     taskStore: store,
     taskLock: taskLock ?? createTaskLock(),
     goalStore: resolvedGoalStore,
@@ -192,10 +193,14 @@ export async function registerConditionalNativeTools({
     onUnavailable,
   })
 
+  // Observability seam for live QA: report the resolved gates and the families
+  // that actually registered, so a run can prove gates on/off without a model.
+  onRegistered?.({ gates: resolved, registered: names, unavailable, tmux: resolvedTmuxPath ?? null })
+
   let registration
   if (names.length > 0 && typeof context?.tool?.transform === "function") {
     registration = await context.tool.transform((editor) => {
-      for (const name of names) editor.add(definitions[name])
+      for (const name of names) editor.add(normalizeToolDefinition(definitions[name]))
     })
   }
 

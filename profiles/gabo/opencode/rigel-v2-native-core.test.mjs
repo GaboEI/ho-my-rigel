@@ -8,6 +8,8 @@ import {
   taskResult,
   isCoordinatorAgent,
   isDemotedPlanAgent,
+  normalizeV2ToolResult,
+  normalizeToolDefinition,
 } from "./rigel-v2-native-core.mjs"
 
 describe("Rigel native OpenCode V2 delegation", () => {
@@ -148,5 +150,37 @@ describe("Rigel native OpenCode V2 delegation", () => {
       "Explore",
       "oracle",
     ])
+  })
+})
+
+describe("Rigel native V2 tool result normalization", () => {
+  test("wraps a V1-style string result as a content object", () => {
+    expect(normalizeV2ToolResult("Session not found: ses_x")).toEqual({ content: "Session not found: ses_x" })
+  })
+
+  test("passes a content result through and preserves metadata", () => {
+    const result = { content: "child done", metadata: { sessionID: "ses_child" } }
+    expect(normalizeV2ToolResult(result)).toBe(result)
+  })
+
+  test("folds an output-only object into content and keeps metadata", () => {
+    expect(normalizeV2ToolResult({ output: "ok", metadata: { a: 1 } })).toEqual({ content: "ok", metadata: { a: 1 } })
+  })
+
+  test("serializes a non-string object and stringifies a non-object primitive", () => {
+    expect(normalizeV2ToolResult({ lines: [] })).toEqual({ content: '{"lines":[]}' })
+    expect(normalizeV2ToolResult(undefined)).toEqual({ content: "undefined" })
+  })
+
+  test("wraps a tool definition's execute into the schema-less content shape", async () => {
+    const definition = { description: "x", input: { type: "object" }, execute: async () => "table" }
+    const wrapped = normalizeToolDefinition(definition)
+    expect(wrapped.description).toBe("x")
+    expect(await wrapped.execute({}, {})).toEqual({ content: "table" })
+  })
+
+  test("leaves a definition without execute untouched", () => {
+    const definition = { description: "x" }
+    expect(normalizeToolDefinition(definition)).toBe(definition)
   })
 })

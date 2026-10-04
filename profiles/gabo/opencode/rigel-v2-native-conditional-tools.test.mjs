@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   buildConditionalToolDefinitions,
-  readMaterializedGates,
   registerConditionalNativeTools,
 } from "./rigel-v2-native-conditional-tools.mjs"
+import { readNativeGates } from "./rigel-v2-native-config.mjs"
 import { TASK_TOOL_NAMES } from "./tools/task.tools.mjs"
 import { GOAL_TOOL_NAMES } from "./tools/goal.tools.mjs"
 
@@ -57,9 +57,9 @@ const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, mon
 
 describe("gate reader", () => {
   test("defaults every gate to false and only accepts explicit true", () => {
-    expect(readMaterializedGates(undefined)).toEqual(GATE_OFF)
-    expect(readMaterializedGates({ metadata: { global: { gates: { task_system: "yes", goal: 1 } } } })).toEqual(GATE_OFF)
-    expect(readMaterializedGates({ metadata: { global: { gates: { task_system: true, goal: true } } } })).toEqual({ ...GATE_OFF, task_system: true, goal: true })
+    expect(readNativeGates(undefined)).toEqual(GATE_OFF)
+    expect(readNativeGates({ metadata: { global: { gates: { task_system: "yes", goal: 1 } } } })).toEqual(GATE_OFF)
+    expect(readNativeGates({ metadata: { global: { gates: { task_system: true, goal: true } } } })).toEqual({ ...GATE_OFF, task_system: true, goal: true })
   })
 })
 
@@ -77,6 +77,11 @@ describe("conditional tool definitions", () => {
     const goal = buildConditionalToolDefinitions({ gates: { ...GATE_OFF, goal: true }, goalStore })
     expect(goal.names).toEqual(GOAL_TOOL_NAMES)
     const bash = buildConditionalToolDefinitions({ gates: { ...GATE_OFF, interactive_bash: true }, tmuxPath: "/usr/bin/tmux", ptyRunner: { run: async () => {} } })
+    expect(bash.names).toEqual(["interactive_bash"])
+  })
+
+  test("registers interactive_bash through a terminal factory with no tmux", () => {
+    const bash = buildConditionalToolDefinitions({ gates: { ...GATE_OFF, interactive_bash: true }, terminalFactory: () => ({}) })
     expect(bash.names).toEqual(["interactive_bash"])
   })
 
@@ -113,6 +118,25 @@ describe("registration on the V2 host", () => {
     expect(fake.transformDisposed()).toBe(true)
   })
 
+  test("derives the task list id from the setup directory, not the service cwd", async () => {
+    // given
+    const storage = memoryStorage()
+    const fake = fakeContext({ storage })
+    // when
+    const result = await registerConditionalNativeTools({
+      context: fake.context,
+      manifest: {},
+      gates: { task_system: true },
+      directory: "/work/proj",
+      log: () => {},
+    })
+    await result.definitions.task_create.execute({ subject: "t" }, { sessionID: "ses_1" })
+    // then
+    const keys = [...storage.map.keys()]
+    expect(keys.some((key) => key.includes("/proj/"))).toBe(true)
+    await result.dispose()
+  })
+
   test("keeps a gate-enabled family unregistered when its V2 domain is absent", async () => {
     const fake = fakeContext({})
     const result = await registerConditionalNativeTools({
@@ -125,7 +149,7 @@ describe("registration on the V2 host", () => {
     expect(result.unavailable.map((entry) => entry.family)).toEqual(["task_system"])
   })
 
-  test("registers interactive_bash only with both an enabled gate and a real tmux path", async () => {
+  test("registers interactive_bash with a real tmux path or a terminal factory", async () => {
     const pty = { create: async () => ({ data: { id: "p" } }), remove: async () => {} }
     const enabled = fakeContext({ pty })
     const withTmux = await registerConditionalNativeTools({
@@ -138,15 +162,28 @@ describe("registration on the V2 host", () => {
     expect(withTmux.registered).toEqual(["interactive_bash"])
     await withTmux.dispose()
 
+    const withoutTmux = fakeContext({})
+    const withTerminalFactory = await registerConditionalNativeTools({
+      context: withoutTmux.context,
+      manifest: {},
+      gates: { interactive_bash: true },
+      terminalFactory: () => ({}),
+      log: () => {},
+    })
+    expect(withTerminalFactory.registered).toEqual(["interactive_bash"])
+    expect(withoutTmux.added).toEqual(["interactive_bash"])
+    expect(withTerminalFactory.unavailable.map((entry) => entry.family)).toEqual([])
+    await withTerminalFactory.dispose()
+
     const disabled = fakeContext({ pty })
-    const withoutTmux = await registerConditionalNativeTools({
+    const withoutBackend = await registerConditionalNativeTools({
       context: disabled.context,
       manifest: {},
       gates: { interactive_bash: true },
       tmuxPath: "",
       log: () => {},
     })
-    expect(withoutTmux.registered).toEqual([])
+    expect(withoutBackend.registered).toEqual([])
     expect(disabled.added).toEqual([])
   })
 
@@ -161,6 +198,23 @@ describe("registration on the V2 host", () => {
     })
     expect(fake.added.sort()).toEqual([...GOAL_TOOL_NAMES].sort())
     expect(subscriptions).toBe(1)
+    await result.dispose()
+  })
+
+  test("reports the resolved gates and the families that registered through onRegistered", async () => {
+    const events = []
+    const fake = fakeContext({ storage: memoryStorage() })
+    const result = await registerConditionalNativeTools({
+      context: fake.context,
+      manifest: {},
+      gates: { goal: true },
+      onRegistered: (event) => events.push(event),
+      log: () => {},
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0].registered.sort()).toEqual([...GOAL_TOOL_NAMES].sort())
+    expect(events[0].gates.goal).toBe(true)
+    expect(events[0].gates.monitor).toBe(false)
     await result.dispose()
   })
 })

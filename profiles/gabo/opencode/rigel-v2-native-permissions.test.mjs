@@ -40,6 +40,12 @@ test("maps V1 write and apply_patch onto the native edit action", async () => {
   expect(rules.some((rule) => rule.action === "write" || rule.action === "apply_patch")).toBe(false)
 })
 
+test("accepts the V1 todoread permission the task system emits instead of aborting", async () => {
+  const { translateV1Permissions } = await load()
+  const { toolGates } = translateV1Permissions({ todowrite: "deny", todoread: "deny" })
+  expect(toolGates).toContainEqual({ pattern: "todoread", effect: "deny" })
+})
+
 test("maps the remaining native V1 actions to their V2 action names", async () => {
   const { translateV1Permissions } = await load()
   const { rules } = translateV1Permissions({

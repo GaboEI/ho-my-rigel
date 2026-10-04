@@ -72,6 +72,11 @@ const EXACT_GATE_BY_KEY = Object.freeze({
   skill_mcp: "skill_mcp",
   interactive_bash: "interactive_bash",
   question: "question",
+  // V1 emits `todoread` (alongside `todowrite`) whenever the task system is
+  // enabled (tool-config-handler.ts). V2 has no `todoread` tool, so the exact
+  // tool-name gate is harmless, but it must be accepted or agent registration
+  // throws and the whole plugin is disabled.
+  todoread: "todoread",
 })
 
 const FAMILY_GATE_RULES = Object.freeze([

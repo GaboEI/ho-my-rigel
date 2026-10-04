@@ -219,6 +219,44 @@ export async function resumeDelegatedSessionFromClients({ clients, ...input }) {
   throw new Error(`OpenCode V2 child session could not be resumed: ${diagnostics.join("; ")}`)
 }
 
+/**
+ * Normalize a native tool's return value to the OpenCode V2 host contract.
+ *
+ * V2's tool-result normalizer (schema-less tool definitions, i.e. no `output`
+ * schema) rejects an `output` property and throws a TypeError when the value is
+ * a primitive. It reads `content` and `metadata` instead. The V1 contract this
+ * runtime ports returned a bare string, and the delegation presenter returns
+ * `{ content, metadata }`; both are folded into `{ content, metadata? }` here so
+ * the host receives a valid object. This is the single normalization point,
+ * applied at the registration seam (`normalizeToolDefinition`), so no tool has
+ * to change its own return type.
+ */
+export function normalizeV2ToolResult(result) {
+  if (typeof result === "string") return { content: result }
+  if (result && typeof result === "object") {
+    if ("content" in result) return result
+    const content = typeof result.output === "string" ? result.output : JSON.stringify(result)
+    const normalized = { content }
+    if (result.metadata && typeof result.metadata === "object") normalized.metadata = result.metadata
+    return normalized
+  }
+  return { content: String(result) }
+}
+
+/**
+ * Wrap a tool definition's `execute` so whatever it returns (a V1-style string
+ * or an object) reaches the V2 host as a valid result object. Non-tool values
+ * pass through unchanged so a malformed registration still fails loudly.
+ */
+export function normalizeToolDefinition(definition) {
+  if (!definition || typeof definition.execute !== "function") return definition
+  const execute = definition.execute
+  return {
+    ...definition,
+    execute: async (input, toolContext) => normalizeV2ToolResult(await execute(input, toolContext)),
+  }
+}
+
 export function taskResult({ sessionID, agent, background, result }) {
   const lifecycle = background
     ? "The subagent is working in the background."
