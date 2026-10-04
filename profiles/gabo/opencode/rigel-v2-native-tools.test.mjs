@@ -2,8 +2,10 @@ import { expect, test } from "bun:test"
 import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 
 // A minimal V2 setup context: the session domain for session_* and look_at, and
-// the pty/storage domains for monitor. The aggregator only reads these at
-// construction; the tools resolve them lazily at execute.
+// the storage/event/session domains the monitor registry reads. The aggregator
+// only reads these at construction; the tools resolve them lazily at execute.
+// There is deliberately no pty domain: monitors run on the HTTP persistent
+// terminal served by `serverApi`.
 function fakeContext() {
   return {
     session: {
@@ -15,19 +17,32 @@ function fakeContext() {
       wait: async () => {},
       context: async () => ({ data: [] }),
     },
-    pty: { create: async () => ({ data: { id: "pty_1" } }), remove: async () => {}, snapshot: async () => ({ data: { text: "" } }) },
     storage: { get: async () => undefined, set: async () => {}, remove: async () => {}, scan: async () => [] },
     event: { subscribe: () => ({ async *[Symbol.asyncIterator]() {} }) },
   }
 }
 
-function familiesFor(manifest) {
+// A fake injected HTTP server API with the terminal methods the persistent
+// terminal port calls. `available` mirrors createServerApi's capability flag.
+function fakeServerApi() {
+  return {
+    available: true,
+    origin: "http://127.0.0.1:4321",
+    createTerminal: async () => ({ ok: true, data: { id: "pty_1" } }),
+    listTerminals: async () => ({ ok: true, data: [] }),
+    snapshotTerminal: async () => ({ ok: true, data: { text: "", info: undefined } }),
+    removeTerminal: async () => ({ ok: true }),
+  }
+}
+
+function familiesFor(manifest, { serverApi = fakeServerApi() } = {}) {
   return createNativeToolFamilies({
     clients: [fakeContext()],
     location: { directory: "/work" },
     manifest,
     context: fakeContext(),
     pluginConfig: { monitor: { enabled: true, allowed_commands: ["tail"] } },
+    serverApi,
   })
 }
 
@@ -46,12 +61,36 @@ test("the monitor family is absent when the monitor gate is off", () => {
   expect(registry).toBeUndefined()
 })
 
-test("the monitor family is registered when the monitor gate is on", () => {
-  const { tools, registry } = familiesFor({ metadata: { global: { gates: { monitor: true } } } })
+test("the monitor family is registered from the server API when the monitor gate is on", () => {
+  const { tools, registry, unavailable } = familiesFor({ metadata: { global: { gates: { monitor: true } } } })
   for (const name of ["monitor_start", "monitor_stop", "monitor_list", "monitor_output"]) {
     expect(tools[name]).toBeDefined()
   }
   expect(registry).toBeDefined()
+  expect(unavailable.some((entry) => entry.family === "monitor")).toBe(false)
+})
+
+test("the monitor family reports a typed unavailable entry when the server API is absent", () => {
+  const { tools, registry, unavailable } = familiesFor({ metadata: { global: { gates: { monitor: true } } } }, { serverApi: null })
+  for (const name of ["monitor_start", "monitor_stop", "monitor_list", "monitor_output"]) {
+    expect(tools[name]).toBeUndefined()
+  }
+  expect(registry).toBeUndefined()
+  const entry = unavailable.find((candidate) => candidate.family === "monitor")
+  expect(entry).toBeDefined()
+  expect(typeof entry.reason).toBe("string")
+})
+
+test("the monitor family stays unavailable when the origin resolves but the credential does not", () => {
+  const { tools, registry, unavailable } = familiesFor(
+    { metadata: { global: { gates: { monitor: true } } } },
+    { serverApi: { available: false, origin: "http://127.0.0.1:4321" } },
+  )
+  for (const name of ["monitor_start", "monitor_stop", "monitor_list", "monitor_output"]) {
+    expect(tools[name]).toBeUndefined()
+  }
+  expect(registry).toBeUndefined()
+  expect(unavailable.some((entry) => entry.family === "monitor")).toBe(true)
 })
 
 test("every registered tool exposes a description, input schema, and execute", () => {

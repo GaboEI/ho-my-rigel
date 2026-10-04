@@ -7,6 +7,7 @@ import {
   completedChildText,
   backgroundHandoffPrompt,
   isCoordinatorAgent,
+  normalizeToolDefinition,
 } from "./rigel-v2-native-core.mjs"
 import {
   categoryTaskPrompt,
@@ -26,12 +27,16 @@ import { createNativeRulesInjector } from "./rigel-v2-native-rules.mjs"
 import { createNativeWriteExistingFileGuard } from "./rigel-v2-native-write-guard.mjs"
 import { createNativeNonInteractiveEnvGuard } from "./rigel-v2-native-noninteractive.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
+import { readNativeDisabled, readNativeGates } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
 import { createSkillMcpManager, createSkillMcpToolDefinition, registerSkillMcpServers } from "./rigel-v2-native-skill-mcp.mjs"
 import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
+import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
+import { createServerApi } from "./rigel-v2-native-http.mjs"
+import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
 
 /**
  * Read the user's category overrides from the V2 setup context. V2 exposes the
@@ -106,11 +111,11 @@ export async function applyRequestedSkills(prompt, requestedSkills, { resolveSki
   return injection ? `${prompt}\n\n${injection}` : prompt
 }
 
-function recordAgentTuning(event) {
+function writeStateReceipt(fileName, event) {
   const stateRoot = process.env.XDG_STATE_HOME
   if (!stateRoot) return
   const directory = path.join(stateRoot, "ho-my-rigel")
-  const receipt = path.join(directory, "agent-tuning-applied.json")
+  const receipt = path.join(directory, fileName)
   const temporary = `${receipt}.${process.pid}.${randomUUID()}.tmp`
   try {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -118,10 +123,22 @@ function recordAgentTuning(event) {
     fs.renameSync(temporary, receipt)
   } catch (error) {
     try { fs.rmSync(temporary, { force: true }) } catch (cleanupError) {
-      console.error(`[ho-my-rigel] Could not remove incomplete native V2 tuning receipt: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+      console.error(`[ho-my-rigel] Could not remove incomplete native V2 receipt: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
     }
-    console.error(`[ho-my-rigel] Could not record native V2 agent tuning: ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[ho-my-rigel] Could not record native V2 receipt ${fileName}: ${error instanceof Error ? error.message : String(error)}`)
   }
+}
+
+function recordAgentTuning(event) {
+  writeStateReceipt("agent-tuning-applied.json", event)
+}
+
+function recordConditionalToolRegistration(event) {
+  writeStateReceipt("conditional-tools-registered.json", event)
+}
+
+function recordNativeToolFamilies(event) {
+  writeStateReceipt("native-tool-families-registered.json", event)
 }
 
 export function createTaskPresentation() {
@@ -223,51 +240,6 @@ export default {
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
-    // The persistent-terminal, shell and session-export surfaces are reached
-    // through the server's own loopback API. `createServerApi` resolves the
-    // origin from the V2 setup context, an explicit environment origin, or this
-    // process's serve argv (never a hardcoded port), and authenticates with
-    // OPENCODE_PASSWORD or OPENCODE_SERVER_PASSWORD. `terminalFactory` binds a
-    // session-scoped persistent terminal for the monitor and interactive_bash
-    // families.
-    const serverApi = createServerApi({ argv: process.argv, env: process.env, context })
-    const terminalFactory = (sessionID) => createPersistentTerminalPort({ serverApi, sessionID })
-    // Establish server identity BEFORE any server-dependent registration or
-    // request. The credential is sent only to an origin proven local by a
-    // pre-credential anchor, and a failed verification leaves `available` false
-    // so no monitor or persistent-terminal family registers. Never fails setup.
-    let identity
-    try {
-      identity = await serverApi.verifyIdentity()
-    } catch (error) {
-      identity = { ok: false, reason: error instanceof Error ? error.message : String(error) }
-    }
-    writeStateReceipt("server-identity.json", {
-      ok: identity?.ok === true,
-      trusted: serverApi.trusted,
-      anchor: serverApi.anchor,
-      origin: serverApi.origin,
-      originSource: serverApi.originSource,
-      version: identity?.info?.version,
-      pid: identity?.info?.pid,
-      urls: identity?.info?.urls,
-      reason: identity?.ok ? undefined : identity?.reason,
-    })
-    // Observability: record the host's own tool inventory once at setup, so the
-    // `question` builtin (host-owned, not re-registered by Rigel) is provably
-    // available rather than assumed. Never fails setup.
-    if (typeof context?.tool?.list === "function") {
-      try {
-        const hostTools = await context.tool.list()
-        const names = (Array.isArray(hostTools) ? hostTools : [])
-          .map((tool) => tool?.name ?? tool)
-          .filter((name) => typeof name === "string")
-          .sort()
-        writeStateReceipt("host-tool-inventory.json", { count: names.length, hasQuestion: names.includes("question"), names })
-      } catch (error) {
-        writeStateReceipt("host-tool-inventory.json", { error: error instanceof Error ? error.message : String(error) })
-      }
-    }
     const agentRequestBodies = new Map()
     // User category overrides come from the merged plugin config V2 exposes on
     // the setup context. They are read once and threaded through both the
@@ -307,9 +279,6 @@ export default {
         // so the host's real skill inventory is never read.
         home: context?.options?.skillsHome,
         env: context?.options?.skillsEnv,
-        // Profile `disabled_skills` is materialized in the manifest; apply it to
-        // the native registry so a disabled skill is never injected or exposed.
-        disabledSkills: new Set(readNativeDisabled(manifest).skills.map((name) => name.toLowerCase())),
       })
       : { skills: [], registered: [], dispose: undefined }
     const skillMcpManager = createSkillMcpManager()
@@ -456,6 +425,18 @@ export default {
     const nonInteractiveEnv = createNativeNonInteractiveEnvGuard()
     const backgroundChildren = new Map()
     const abortBackgroundHandoffs = new AbortController()
+    // Session/todo surface (Fase 3 T5b). V2 has no native session-todo API, so
+    // the runtime owns a per-session registry over `ctx.storage`: the task tools
+    // write it through `syncTodos`, and the session_* tools read real todos from
+    // it. An absent storage domain degrades to no registry (readTodos undefined)
+    // rather than a fabricated empty constant.
+    const sessionTodoStore = context?.storage
+      && typeof context.storage.get === "function"
+      && typeof context.storage.set === "function"
+      ? createV2SessionTodoStore({ storage: context.storage })
+      : undefined
+    const readTodos = sessionTodoStore ? (sessionID) => sessionTodoStore.readTodos(sessionID) : undefined
+    const taskTodoSync = sessionTodoStore ? createTaskTodoSync({ store: sessionTodoStore }) : undefined
     // Task 15: the monitor registry is created inside `tool.transform` (it needs
     // the V2 pty/storage/event domains) and disposed on teardown. It is `let`
     // because the transform callback runs after this declaration.
@@ -529,12 +510,12 @@ export default {
       // `rigel_task`. Only expose it once a skill was discovered; a host with
       // no skill MCP server has nothing for it to call.
       if (skillRegistry.skills.length > 0) {
-        editor.add(normalizeToolDefinition(createSkillMcpToolDefinition({
+        editor.add(createSkillMcpToolDefinition({
           manager: skillMcpManager,
           getSkills: async () => skillRegistry.skills,
-        })))
+        }))
       }
-      editor.add(normalizeToolDefinition({
+      editor.add({
         name: taskName,
         options: { codemode: false },
         description: createTaskPresentation(),
@@ -593,7 +574,7 @@ export default {
           }
           return taskResult(delegated)
         },
-      }))
+      })
       if (process.env.RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION === "1") {
         const after = editor.get?.(taskName)
         console.error(`[ho-my-rigel] Native V2 task registration probe: name=${taskName}; editor=${Object.keys(editor ?? {}).sort().join(",")}; before=${Boolean(before)}; after=${Boolean(after)}`)
@@ -607,16 +588,11 @@ export default {
         location,
         manifest,
         context,
-        // The V2 setup context exposes no `config`; the resolved monitor block
-        // is materialized into the manifest by the generator.
-        pluginConfig: { monitor: manifest.metadata?.global?.monitor },
-        readTodos,
-        serverApi,
+        pluginConfig: context?.config,
       })
       nativeToolRegistry = families.registry
-      recordNativeToolFamilies({ gates: readNativeGates(manifest), registered: Object.keys(families.tools).sort(), unavailable: families.unavailable ?? [] })
       for (const [name, definition] of Object.entries(families.tools)) {
-        editor.add(normalizeToolDefinition({ name, options: { codemode: false }, ...definition }))
+        editor.add({ name, options: { codemode: false }, ...definition })
       }
     })
     const directoryReadRegistration = typeof context?.tool?.hook === "function"
@@ -676,9 +652,6 @@ export default {
       context,
       manifest,
       directory: location.directory,
-      syncTodos: taskTodoSync?.syncTodos,
-      terminalFactory,
-      onRegistered: (event) => recordConditionalToolRegistration(event),
     })
     return async () => {
       abortBackgroundHandoffs.abort()

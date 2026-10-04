@@ -23,6 +23,7 @@ import { createSessionTools } from "./tools/session.tools.mjs"
 import { createLookAtTool } from "./tools/look-at.tools.mjs"
 import { createMonitorTools } from "./tools/monitor.tools.mjs"
 import { createMonitorRegistry } from "./tools/monitor-engine.mjs"
+import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
 import { readNativeGates } from "./rigel-v2-native-config.mjs"
 
 /**
@@ -32,30 +33,45 @@ import { readNativeGates } from "./rigel-v2-native-config.mjs"
  * @param {object[]} input.clients   ordered V2 client candidates
  * @param {object}   input.location  V2 location
  * @param {object}   input.manifest  materialized agent manifest (gate source)
- * @param {object}   input.context   V2 setup context (pty/storage/event domains)
+ * @param {object}   input.context   V2 setup context (storage/event/session domains)
  * @param {object}   input.pluginConfig  profile config block (monitor settings)
- * @returns {{ tools: Record<string, object>, registry: object|undefined }}
+ * @param {object}   [input.serverApi]   injected HTTP server API (createServerApi)
+ * @returns {{ tools: Record<string, object>, registry: object|undefined, unavailable: object[] }}
  */
-export function createNativeToolFamilies({ clients, location, manifest, context, pluginConfig }) {
+export function createNativeToolFamilies({ clients, location, manifest, context, pluginConfig, readTodos, serverApi }) {
   const gates = readNativeGates(manifest)
   const tools = {}
 
-  Object.assign(tools, createSessionTools({ clients, directory: location?.directory }))
+  Object.assign(tools, createSessionTools({ clients, directory: location?.directory, readTodos, serverApi }))
   tools.look_at = createLookAtTool({ clients, location })
 
   let registry
+  const unavailable = []
   if (gates.monitor) {
-    registry = createMonitorRegistry({
-      storage: context?.storage,
-      pty: context?.pty,
-      event: context?.event,
-      sessions: context?.session,
-      config: pluginConfig?.monitor ?? {},
-    })
-    Object.assign(tools, createMonitorTools({ registry, pluginConfig }))
+    // A monitor is a session-scoped persistent terminal served by the HTTP API;
+    // the V2 setup context exposes no persistent-pty domain. Availability hinges
+    // on the resolved server API being fully usable (a loopback origin from the
+    // V2 host, the environment, or this process's serve argv, plus the server
+    // credential). A resolved-but-unauthenticated origin is not enough.
+    if (serverApi?.available) {
+      const terminalFactory = (sessionID) => createPersistentTerminalPort({ serverApi, sessionID })
+      registry = createMonitorRegistry({
+        storage: context?.storage,
+        terminalFactory,
+        event: context?.event,
+        sessions: context?.session,
+        config: pluginConfig?.monitor ?? {},
+      })
+      Object.assign(tools, createMonitorTools({ registry, pluginConfig }))
+    } else {
+      unavailable.push({
+        family: "monitor",
+        reason: "OpenCode V2 server API unavailable: a loopback server origin and OPENCODE_PASSWORD or OPENCODE_SERVER_PASSWORD are required for persistent terminals",
+      })
+    }
   }
 
-  return { tools, registry }
+  return { tools, registry, unavailable }
 }
 
 export { readNativeGates }
