@@ -7,6 +7,7 @@ import fs from "node:fs"
 import path from "node:path"
 import legacyModule from "../../dist/index.js"
 import { sortAgentsByCanonicalOrder } from "./opencode/rigel-v2-native-agent-order.mjs"
+import { deriveNativeGates, resolveNativePluginConfig } from "./opencode/rigel-v2-native-config.mjs"
 
 const args = process.argv.slice(2)
 const take = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined }
@@ -15,6 +16,7 @@ const outputPath = take("--output")
 const directory = take("--directory") || process.cwd()
 const selectionPath = take("--selection")
 const judgePath = take("--judge")
+const profileRoot = take("--profile-root")
 if (!inputPath || !outputPath) {
   console.error("Usage: OMO_PROFILE=gabo node generate-v2-agents.mjs --input <opencode.json> --output <rigel-agent-manifest.mjs> --selection <v2-agent-selection.json> --judge <judge.v2.json> [--directory <cwd>]")
   process.exit(2)
@@ -55,6 +57,26 @@ try {
   for (const { id } of sortAgentsByCanonicalOrder(Object.keys(selected).map((key) => ({ id: key, name: key })))) {
     orderedSelected[id] = selected[id]
   }
+  // The manifest is the materialized artifact: the runtime reads gates and
+  // categories from `metadata.global` and never parses `omo.jsonc` itself. The
+  // materializer (this generator) owns that parse, using the parity-pinned
+  // native resolver rather than the V1 plugin's internal config object.
+  // `--profile-root` pins the user layer so resolution never depends on an
+  // ambient HOME.
+  const pluginView = resolveNativePluginConfig({
+    directory,
+    ...(profileRoot ? { env: { ...process.env, HOME: profileRoot } } : {}),
+  })
+  const gates = deriveNativeGates(pluginView)
+  // A V1 tool default can carry a hard global disable for a family the native
+  // profile explicitly enables (`task_*: false` is the default). The native gate
+  // wins: an enabled family must not stay denied by a stale V1 tool default, or
+  // the family registers but every call is rejected by the permission gate.
+  const tools = { ...(config.tools ?? {}) }
+  if (gates.task_system) tools["task_*"] = true
+  if (gates.goal) tools["goal_*"] = true
+  if (gates.monitor) tools["monitor_*"] = true
+  if (gates.interactive_bash) tools["interactive_bash"] = true
   const materialized = {
     defaultAgent: config.default_agent,
     agents: orderedSelected,
@@ -62,8 +84,15 @@ try {
       generatedBy: "Ho My Rigel V2 native runtime",
       profile: process.env.OMO_PROFILE || null,
       global: {
-        tools: { ...(config.tools ?? {}) },
+        tools,
         permission: { ...(config.permission ?? {}) },
+        gates,
+        categories: { ...(pluginView.categories ?? {}) },
+        disabled: { ...(pluginView.disabled ?? {}) },
+        // The resolved monitor block (enabled + allowed_commands) is needed by
+        // the monitor tools' permission check; the V2 setup context has no
+        // `config`, so the manifest is the only honest source.
+        monitor: pluginView.monitor,
       },
     },
     modes: { defaultUltrawork: selection?.nativeModes?.defaultUltrawork === true },

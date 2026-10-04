@@ -35,9 +35,12 @@ fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 })
 const generatorHome = fs.mkdtempSync(path.join(path.dirname(output), "generator-home-"))
 const generatorProfile = path.join(generatorHome, ".omo")
 fs.mkdirSync(path.join(generatorProfile, "opencode/prompts"), { recursive: true, mode: 0o700 })
+// The profile source is overridable for a gates-on QA run; the default stays the
+// tracked gabo profile so normal activation is unchanged.
+const profileSource = process.env.RIGEL_V2_PROFILE_FILE || path.join(sourceRoot, "profiles/gabo/omo.jsonc")
 fs.writeFileSync(
   path.join(generatorProfile, "omo.jsonc"),
-  fs.readFileSync(path.join(sourceRoot, "profiles/gabo/omo.jsonc"), "utf8").replaceAll("__OMO_PROFILE_ROOT__", generatorProfile),
+  fs.readFileSync(profileSource, "utf8").replaceAll("__OMO_PROFILE_ROOT__", generatorProfile),
   { mode: 0o600 },
 )
 fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/prompts/sisyphus-orchestration.md"), path.join(generatorProfile, "opencode/prompts/sisyphus-orchestration.md"))
@@ -45,7 +48,7 @@ const generated = childProcess.spawnSync(process.execPath, [
   path.join(sourceRoot, "profiles/gabo/generate-v2-agents.mjs"),
   "--input", configFile, "--output", output,
   "--selection", selectionFile, "--judge", judgeFile,
-  "--directory", home,
+  "--directory", home, "--profile-root", generatorHome,
 ], { cwd: sourceRoot, env: { ...process.env, HOME: generatorHome, XDG_CONFIG_HOME: path.dirname(path.dirname(configFile)), OMO_PROFILE: "gabo" }, encoding: "utf8" })
 fs.rmSync(generatorHome, { recursive: true, force: true })
 if (generated.status !== 0) fail(`la generación del manifiesto falló: ${generated.stderr || generated.stdout}`)

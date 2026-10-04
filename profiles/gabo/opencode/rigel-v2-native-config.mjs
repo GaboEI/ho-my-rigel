@@ -773,6 +773,22 @@ export function readUserCategories(manifest) {
 }
 
 /**
+ * Read the materialized denylists (tools / agents / skills) the generator wrote
+ * from the resolved config view. Returns normalized string arrays; absent or
+ * malformed data yields empty arrays so a caller can never crash on a manifest.
+ */
+export function readNativeDisabled(manifest) {
+  const raw = manifest?.metadata?.global?.disabled
+  const source = isPlainObject(raw) ? raw : {}
+  const normalize = (value) => Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
+  return {
+    tools: normalize(source.tools),
+    agents: normalize(source.agents),
+    skills: normalize(source.skills),
+  }
+}
+
+/**
  * Convenience predicate for a single gate. Kept separate from
  * `readNativeGates` so a caller that only needs one gate does not allocate the
  * whole record, and so the "unknown gate is off" rule lives in one place.
@@ -780,6 +796,27 @@ export function readUserCategories(manifest) {
 export function isNativeGateEnabled(manifest, gate) {
   if (!GATE_KEYS.includes(gate)) return false
   return readNativeGates(manifest)[gate] === true
+}
+
+/**
+ * Derive the materialized `metadata.global.gates` record from a resolved native
+ * plugin config view (the inverse of `readNativeGates`). The manifest generator
+ * writes exactly this shape so the runtime never parses `omo.jsonc` itself.
+ *
+ * `interactive_bash` has no `omo.jsonc` key: the V1 gate is pure tmux
+ * availability at run time (`interactive-bash-availability.ts` `which("tmux")`).
+ * Baking host availability into a portable manifest would be wrong, so this gate
+ * only records that the config permits the family (it is not explicitly
+ * disabled); the runtime's own tmux probe remains the availability authority.
+ */
+export function deriveNativeGates(view) {
+  const disabledTools = Array.isArray(view?.disabled?.tools) ? view.disabled.tools : []
+  return {
+    monitor: view?.monitor?.enabled === true,
+    goal: view?.goal?.enabled === true,
+    task_system: view?.experimental?.task_system === true,
+    interactive_bash: !disabledTools.includes("interactive_bash"),
+  }
 }
 
 export { GATE_KEYS }

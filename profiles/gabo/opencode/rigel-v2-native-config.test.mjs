@@ -10,7 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { resolveNativePluginConfig } from "./rigel-v2-native-config.mjs"
+import { deriveNativeGates, readNativeDisabled, resolveNativePluginConfig } from "./rigel-v2-native-config.mjs"
 
 const created = []
 
@@ -287,5 +287,57 @@ describe("#given an injected file system", () => {
     expect(view.monitor.enabled).toBe(true)
     expect(view.disabled.tools).toEqual(["x"])
     expect(view.sources.find((source) => source.scope === "user").loaded).toBe(true)
+  })
+})
+
+describe("#given a resolved native plugin config view", () => {
+  test("#when gates are derived #then they mirror the config keys and permit interactive_bash unless disabled", () => {
+    // given
+    const off = { monitor: undefined, goal: { enabled: false }, experimental: { task_system: false }, disabled: { tools: [] } }
+    // when
+    const offGates = deriveNativeGates(off)
+    // then
+    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, interactive_bash: true })
+
+    // given
+    const on = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: [] } }
+    // when
+    const onGates = deriveNativeGates(on)
+    // then
+    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: true })
+
+    // given
+    const disabled = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: ["interactive_bash"] } }
+    // when
+    const disabledGates = deriveNativeGates(disabled)
+    // then
+    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: false })
+  })
+
+  test("#when the view is malformed #then every config gate degrades closed", () => {
+    // given / when
+    const gates = deriveNativeGates(undefined)
+    // then
+    expect(gates.monitor).toBe(false)
+    expect(gates.goal).toBe(false)
+    expect(gates.task_system).toBe(false)
+  })
+})
+
+describe("#given a materialized manifest", () => {
+  test("#when the disabled denylists are materialized #then readNativeDisabled returns normalized arrays", () => {
+    // given
+    const manifest = { metadata: { global: { disabled: { tools: ["x", 1], agents: [], skills: ["dev-browser", "ultimate-browsing"] } } } }
+    // when
+    const disabled = readNativeDisabled(manifest)
+    // then
+    expect(disabled.tools).toEqual(["x"])
+    expect(disabled.skills).toEqual(["dev-browser", "ultimate-browsing"])
+  })
+
+  test("#when the manifest carries no denylists #then every list is empty", () => {
+    // given / when / then
+    expect(readNativeDisabled(undefined)).toEqual({ tools: [], agents: [], skills: [] })
+    expect(readNativeDisabled({ metadata: { global: {} } })).toEqual({ tools: [], agents: [], skills: [] })
   })
 })
