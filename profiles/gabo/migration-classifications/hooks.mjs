@@ -61,6 +61,14 @@ export default {
     futureEvidence:
       "`rigel-v2-claude-code-hooks.mjs`; `rigel-v2-claude-code-hooks.test.mjs`; `rigel-v2-context-collector.mjs`",
   },
+  "compaction-context-injector": {
+    classification: "Adaptar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 inyecta la plantilla de contexto de 8 secciones mas el historial de sesiones delegadas en el pedido de resumen de la compactacion, captura el agent/model/tools antes de compactar y los restaura tras la compactacion. Experimento A (drive hermetico qa-v2-t21-compaction-experiment.mjs, 2026-10-06): en V2.0.22 la mutacion de event.system en el hook compaction NO llega al proveedor (contrato previo), pero la mutacion de event.messages SI llega al body del resumen (marcador capturado; kind \"compaction\" observable en http.request) -> estrategia A1. El contenido viaja como V2 message parts (el shape string crashea SessionModelRequest.prepare). EFECTO 1: port completo en `rigel-v2-native-compaction-context.mjs` (plantilla byte-port + formatDelegatedSessionHistory con limites V1 20/240/6000 + formatForCompaction sobre el background manager) cableado en rigel-v2-native.mjs con dispose; contrato re-graduado qa-v2-compaction-hook-contract.mjs (deuda 2026-10-03 de expectativas invertidas corregida) afirma la propagacion positiva con el runtime nativo real. EFECTO 2: Experimento B demostro que el host V2 preserva agent y tools del request primario a traves de la compactacion (pre/post hasTaskTool true, session agent estable) -> el checkpoint V1 equivale a builtin V2; la restauracion de ultrawork/roster/reglas/directorio ya corre nativamente (eventos de compactacion + keyword seam + clear/reinject) y quedo cubierta por regresion. Refinamientos 2026-10-06: (1) disparador redundante de restauracion en el boundary http.request (`noteCompactionRestoration` sobre la heuristica del resumen y/o kind \"compaction\") que marca needsRestoration en el keyword state independientemente del stream de eventos (volatil por contrato: overflow y eventos perdidos en desconexion, opencode.ai/v2/docs/api event.subscribe); (2) drivers deterministas con `POST /api/experimental/session/{id}/wait` (disponible en el binario: wait-endpoint) en lugar de sleep-polling fijo. disabled_hooks deja de listar el hook (siempre-on como V1).",
+    futureEvidence:
+      "`rigel-v2-native-compaction-context.mjs`; `rigel-v2-native-compaction-context.test.mjs`; `rigel-v2-background-manager.mjs` (formatForCompaction); `rigel-v2-native.mjs` (hook compaction + trigger redundante http.request + dispose); `qa-v2-t21-compaction-experiment.mjs`; `qa-v2-compaction-hook-contract.mjs` (re-graduado); `.omo/evidence/20261006-t21-compaction/`",
+  },
   "comment-checker": {
     classification: "Migrar",
     rationale:

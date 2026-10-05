@@ -58,6 +58,7 @@ import { createFileBackgroundState, createStorageBackgroundState } from "./rigel
 // before/after/request collections over the runtime's ONE fsync tracker; the
 // state factories come from their binder modules.
 import { createFlowRules } from "./rigel-v2-native-flow-rules.mjs"
+import { createNativeCompactionContextHook, isCompactionSummaryRequest } from "./rigel-v2-native-compaction-context.mjs"
 import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
 import { applyPromptAdmission, createStopContinuationState, repairChatToolPairs, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
 import { createNativeAutoSlashCommandHook } from "./rigel-v2-auto-slash-command-bridge.mjs"
@@ -1170,6 +1171,24 @@ export default {
       await teamStatusInjector?.(event)
     })
     const modelRequestRegistration = await context.session.hook("model.request", nativeModelRequestPipeline)
+    // T21: the compaction context rides on the summary request. The live
+    // experiment proved `event.messages` mutations in the `compaction` hook DO
+    // reach the provider (marked block captured in the outgoing summary body),
+    // so the V1 `output.context` effect is carried by this hook. Content must
+    // be V2 message parts; a string content crashes
+    // `SessionCompaction.compact` in `SessionModelRequest.prepare`.
+    const compactionContextRegistration = typeof context?.session?.hook === "function"
+      ? await context.session.hook("compaction", createNativeCompactionContextHook({
+        getHistory: (sessionID) => {
+          try {
+            return backgroundManager.formatForCompaction(sessionID)
+          } catch (error) {
+            console.error(`[oh-my-rigel] Native V2 compaction history read failed: ${error instanceof Error ? error.message : String(error)}`)
+            return undefined
+          }
+        },
+      }))
+      : undefined
     // Native HTTP is reserved for the image transport mutation. Context,
     // admission, semantic options, headers, and fallback all use V2 hooks.
     const imageRequestRegistration = await context.session.hook("http.request", async (input) => {
@@ -1177,6 +1196,17 @@ export default {
       try { body = await input.request.clone().json() } catch { return }
       const shape = resolveRequestShape(body)
       if (shape) {
+        // T21 refinement: the V2 event stream is volatile by contract (a slow
+        // consumer overflows and events during disconnection are missed), so
+        // the keyword restoration flag gets a redundant trigger from the
+        // summary request itself. Non-compaction requests never mark anything.
+        if (typeof input.sessionID === "string") {
+          try {
+            if (isCompactionSummaryRequest({ body, kind: input.kind })) keywordState.markNeedsRestoration(input.sessionID)
+          } catch (error) {
+            console.error(`[oh-my-rigel] Native V2 compaction restoration trigger failed: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }
         await runRequestSteps({
           body,
           shape,
@@ -1309,7 +1339,7 @@ export default {
       await ulwExecuteCommandRegistration?.dispose?.()
       autoSlashCommand.clear()
       disposeClaudeCodeHooks()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), compactionContextRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
     }
   },
 }

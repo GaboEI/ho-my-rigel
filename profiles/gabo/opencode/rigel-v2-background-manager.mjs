@@ -39,6 +39,108 @@ import { MAX_WAKE_ATTEMPTS, createHandoffPump } from "./rigel-v2-background-hand
 
 export { readBackgroundMarker, writeBackgroundMarker, clearBackgroundMarker, MAX_WAKE_ATTEMPTS }
 
+// Compaction-history budget, mirrored from the V1 owner
+// (`packages/omo-opencode/src/features/background-agent/task-history.ts`): at
+// most 20 delegated sessions, each description capped at 240 chars, and the
+// whole summary capped at 6000 chars. `formatCompactionHistory` is pure and is
+// the single owner of the bounded formatter used by the manager's
+// `formatForCompaction`.
+const MAX_COMPACTION_ENTRIES = 20
+const MAX_COMPACTION_DESCRIPTION_CHARS = 240
+const MAX_COMPACTION_TOTAL_CHARS = 6000
+const COMPACTION_TRUNCATION_SUFFIX = "... [truncated]"
+
+/**
+ * Render bounded, line-oriented compaction history for delegated sessions.
+ *
+ * Each entry carries `{ id, agent, category, status, resultStatus, sessionID,
+ * description }`; a raw background record's `taskId`/`prompt`/object `agent` and
+ * `category` are also accepted. The newest entries are listed first, at most 20
+ * are kept, and both the per-entry description and the whole summary are
+ * bounded. Returns null for an empty input. Pure: it reads its argument and
+ * returns a string, never mutating the input.
+ */
+export function formatCompactionHistory(entries) {
+  const list = Array.isArray(entries) ? entries : []
+  if (list.length === 0) return null
+  const recent = list.slice(-MAX_COMPACTION_ENTRIES)
+  const olderOmittedCount = list.length - recent.length
+  const lines = []
+  if (olderOmittedCount > 0) {
+    lines.push(compactionOmittedSummary(olderOmittedCount))
+  }
+  let budgetOmittedCount = 0
+  for (let index = recent.length - 1; index >= 0; index--) {
+    const entry = recent[index]
+    if (!entry) continue
+    const line = formatCompactionEntry(entry)
+    if (!appendWithinBudget(lines, line, MAX_COMPACTION_TOTAL_CHARS)) {
+      budgetOmittedCount = index + 1
+      break
+    }
+  }
+  if (budgetOmittedCount > 0) {
+    appendBudgetSummary(lines, budgetOmittedCount)
+  }
+  return lines.join("\n")
+}
+
+function compactionOmittedSummary(count) {
+  return `- ${count} delegated sessions omitted to stay within compaction budget.`
+}
+
+function nameOf(value) {
+  if (value && typeof value === "object") return typeof value.name === "string" ? value.name : ""
+  return value ?? ""
+}
+
+function formatCompactionEntry(entry) {
+  const status = entry.status ?? entry.resultStatus ?? "unknown"
+  const description = compactInline(entry.description ?? entry.prompt ?? "", MAX_COMPACTION_DESCRIPTION_CHARS)
+  const parts = [
+    `- **${compactInline(nameOf(entry.agent), 80)}**`,
+    entry.category ? `[${compactInline(nameOf(entry.category), 60)}]` : "",
+    `(${status})`,
+    ` task_id: \`${compactInline(entry.id ?? entry.taskId ?? "", 120)}\``,
+    description ? `: ${description}` : "",
+    entry.sessionID ? ` | session: \`${compactInline(entry.sessionID, 120)}\`` : "",
+  ]
+  return parts.filter((part) => part.length > 0).join("")
+}
+
+function compactInline(value, maxChars) {
+  const normalized = String(value ?? "").replace(/[\n\r]+/g, " ").replace(/\s+/g, " ").replace(/`/g, "'").trim()
+  if (normalized.length <= maxChars) {
+    return normalized
+  }
+  const keepChars = Math.max(0, maxChars - COMPACTION_TRUNCATION_SUFFIX.length)
+  return `${normalized.slice(0, keepChars).trimEnd()}${COMPACTION_TRUNCATION_SUFFIX}`
+}
+
+function appendWithinBudget(lines, line, maxChars) {
+  const currentLength = joinedLength(lines)
+  const separatorLength = lines.length === 0 ? 0 : 1
+  if (currentLength + separatorLength + line.length > maxChars) {
+    return false
+  }
+  lines.push(line)
+  return true
+}
+
+function appendBudgetSummary(lines, omittedCount) {
+  const summary = compactionOmittedSummary(omittedCount)
+  if (appendWithinBudget(lines, summary, MAX_COMPACTION_TOTAL_CHARS)) {
+    return
+  }
+  while (lines.length > 0 && !appendWithinBudget(lines, summary, MAX_COMPACTION_TOTAL_CHARS)) {
+    lines.pop()
+  }
+}
+
+function joinedLength(lines) {
+  return lines.reduce((total, line, index) => total + line.length + (index === 0 ? 0 : 1), 0)
+}
+
 function defaultReport(error, context) {
   const message = error instanceof Error ? error.message : String(error)
   console.error(`[oh-my-rigel] Native V2 background manager: session=${context?.sessionID ?? "unknown"}; phase=${context?.phase ?? "unknown"}; ${message}`)
@@ -742,6 +844,31 @@ export function createBackgroundManager({
     return decideBackgroundRetry(input)
   }
 
+  /**
+   * Bounded, read-only compaction summary of a parent's delegated sessions for
+   * the T21 "Active/Recent Delegated Sessions" context section. Each tracked
+   * record is mapped to a compaction entry (task id, agent, category, status,
+   * session, prompt-derived description) and the bounded formatting is delegated
+   * to `formatCompactionHistory`. Status falls back to the record's
+   * `resultStatus` when no live status is present. Returns null when the parent
+   * has no records. It never mutates queue or task state.
+   */
+  function formatForCompaction(parentSessionID) {
+    const records = tasksOf(parentSessionID)
+    if (records.length === 0) return null
+    return formatCompactionHistory(
+      records.map((record) => ({
+        id: record.taskId,
+        agent: record.agent,
+        category: record.category,
+        status: record.status ?? record.resultStatus,
+        resultStatus: record.resultStatus,
+        sessionID: record.sessionID,
+        description: record.prompt,
+      })),
+    )
+  }
+
   if (abortSignal && typeof abortSignal.addEventListener === "function") {
     abortSignal.addEventListener("abort", dispose, { once: true })
   }
@@ -770,5 +897,6 @@ export function createBackgroundManager({
     persist,
     whenIdle,
     classifyRetry,
+    formatForCompaction,
   }
 }

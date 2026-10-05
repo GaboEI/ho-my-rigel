@@ -671,7 +671,8 @@ test("native runtime registers its ordered tool hook chain and disposes every re
   // execute.after handlers (directory instructions, then the ordered result
   // chain), three execute.before handlers (the ordered write-guard chain,
   // the non-interactive env guard, the permission gate), prompt admission,
-  // model-visible context, semantic model requests, and image transport.
+  // the claude-code compaction hook, model-visible context, semantic model
+  // requests, the T21 compaction-context hook, and image transport.
     expect(registrations.map((registration) => registration.name)).toEqual([
       "execute.after",
       "execute.after",
@@ -685,6 +686,7 @@ test("native runtime registers its ordered tool hook chain and disposes every re
     "prompt",
     "context",
     "model.request",
+    "compaction",
     "http.request",
     ])
 

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import {
   clearBackgroundMarker,
   createBackgroundManager,
+  formatCompactionHistory,
   readBackgroundMarker,
   writeBackgroundMarker,
 } from "./rigel-v2-background-manager.mjs"
@@ -724,6 +725,165 @@ describe("#given a session with transitive background descendants", () => {
     expect((pState?.tasks ?? []).map((task) => task.taskId)).toEqual([])
     expect((otherState?.tasks ?? []).map((task) => task.taskId)).toEqual(["u1"])
     await manager.dispose()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Compaction history (T21 "Active/Recent Delegated Sessions")
+// ---------------------------------------------------------------------------
+
+function createAdmittingManager() {
+  return createBackgroundManager({
+    config: { defaultConcurrency: 1 },
+    startChild: async (descriptor, onSession) => { onSession(`ses_${descriptor.taskId}`); return { sessionID: `ses_${descriptor.taskId}` } },
+    runHandoff: async () => {},
+  })
+}
+
+describe("#given a manager with no records for a parent", () => {
+  test("#when formatForCompaction is called #then it returns null and the empty helper returns null", () => {
+    // given
+    const manager = createAdmittingManager()
+
+    // when / then
+    expect(manager.formatForCompaction("missing")).toBeNull()
+    expect(formatCompactionHistory([])).toBeNull()
+    manager.dispose()
+  })
+})
+
+describe("#given a parent with fewer than the compaction cap of records", () => {
+  test("#when formatForCompaction is called #then every record is listed in the V1 line format", async () => {
+    // given
+    const manager = createAdmittingManager()
+    for (let index = 1; index <= 5; index += 1) {
+      manager.admit({ taskId: `t${index}`, parentSessionID: "p", agent: { name: "explore" }, category: { name: "quick" }, prompt: `prompt ${index}`, modelKey: "m" })
+    }
+    await tick()
+
+    // when
+    const output = manager.formatForCompaction("p")
+
+    // then: the newest entry is a running child, the rest are queued, and every
+    // record appears exactly once.
+    expect(typeof output).toBe("string")
+    for (let index = 1; index <= 5; index += 1) {
+      expect(output).toContain(`task_id: \`t${index}\``)
+    }
+    expect(output).toContain("- **explore**[quick](running)")
+    expect(output).toContain("- **explore**[quick](queued)")
+    manager.dispose()
+  })
+})
+
+describe("#given a parent with more records than the compaction cap", () => {
+  test("#when formatForCompaction is called #then only the 20 most recent are kept with the omitted summary", async () => {
+    // given: 23 records, so the 3 oldest must be dropped.
+    const manager = createAdmittingManager()
+    for (let index = 1; index <= 23; index += 1) {
+      manager.admit({ taskId: `t${String(index).padStart(2, "0")}`, parentSessionID: "p", agent: { name: "explore" }, prompt: `prompt ${index}`, modelKey: "m" })
+    }
+    await tick()
+
+    // when
+    const output = manager.formatForCompaction("p")
+
+    // then
+    expect(output).toContain("- 3 delegated sessions omitted to stay within compaction budget.")
+    expect(output).not.toContain("task_id: `t01`")
+    expect(output).not.toContain("task_id: `t02`")
+    expect(output).not.toContain("task_id: `t03`")
+    for (let index = 4; index <= 23; index += 1) {
+      expect(output).toContain(`task_id: \`t${String(index).padStart(2, "0")}\``)
+    }
+    manager.dispose()
+  })
+})
+
+describe("#given a queued record whose prompt exceeds the description cap", () => {
+  test("#when formatForCompaction is called #then the description is compacted at 240 chars", async () => {
+    // given
+    const manager = createAdmittingManager()
+    manager.admit({ taskId: "head", parentSessionID: "p", agent: { name: "explore" }, prompt: "short", modelKey: "m" })
+    manager.admit({ taskId: "long", parentSessionID: "p", agent: { name: "explore" }, prompt: "x".repeat(300), modelKey: "m" })
+    await tick()
+
+    // when
+    const output = manager.formatForCompaction("p")
+
+    // then: 240 chars total including the suffix.
+    const expected = `${"x".repeat(240 - "... [truncated]".length)}... [truncated]`
+    expect(output).toContain(`: ${expected}`)
+    expect(output).not.toContain("x".repeat(241))
+    manager.dispose()
+  })
+})
+
+describe("#given a compaction entry whose live status is absent", () => {
+  test("#when formatCompactionHistory runs #then it falls back to resultStatus", () => {
+    // when
+    const output = formatCompactionHistory([
+      { id: "t1", agent: "explore", category: "quick", status: undefined, resultStatus: "failed", sessionID: "ses_1", description: "did a thing" },
+    ])
+
+    // then
+    expect(output).toBe("- **explore**[quick](failed) task_id: `t1`: did a thing | session: `ses_1`")
+  })
+})
+
+describe("#given a compaction history that would exceed the total char budget", () => {
+  test("#when formatCompactionHistory runs #then the summary stays within 6000 chars and reports the omission", () => {
+    // given: 20 entries whose per-line length exceeds a fifth of the budget.
+    const entries = Array.from({ length: 20 }, (_, index) => ({
+      id: `t${index}`,
+      agent: "a".repeat(80),
+      category: "c".repeat(60),
+      status: "succeeded",
+      sessionID: "s".repeat(120),
+      description: "d".repeat(240),
+    }))
+
+    // when
+    const output = formatCompactionHistory(entries)
+
+    // then
+    expect(output.length).toBeLessThanOrEqual(6000)
+    expect(output).toContain("delegated sessions omitted to stay within compaction budget.")
+    expect(output).not.toContain("task_id: `t0`")
+    expect(output).toContain("task_id: `t19`")
+  })
+})
+
+describe("#given a parent with active and queued records", () => {
+  test("#when formatForCompaction is called twice #then it is read-only and stable", async () => {
+    // given
+    const manager = createAdmittingManager()
+    manager.admit({ taskId: "t1", parentSessionID: "p", agent: { name: "explore" }, prompt: "a", modelKey: "m" })
+    manager.admit({ taskId: "t2", parentSessionID: "p", agent: { name: "explore" }, prompt: "b", modelKey: "m" })
+    await tick()
+    const before = {
+      active: manager.activeCount("p"),
+      running: manager.runningCount("p"),
+      wakes: manager.pendingWakeCount("p"),
+      queue: manager.queueStats("m"),
+      task: manager.getTask("t2"),
+    }
+
+    // when
+    const first = manager.formatForCompaction("p")
+    const second = manager.formatForCompaction("p")
+
+    // then
+    expect(first).toBe(second)
+    expect({
+      active: manager.activeCount("p"),
+      running: manager.runningCount("p"),
+      wakes: manager.pendingWakeCount("p"),
+      queue: manager.queueStats("m"),
+      task: manager.getTask("t2"),
+    }).toEqual(before)
+    expect(before.task.prompt).toBe("b")
+    manager.dispose()
   })
 })
 
