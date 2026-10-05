@@ -12,33 +12,39 @@ export default {
   },
   "anthropic-context-window-limit-recovery": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La recuperación V1 en `hooks/anthropic-context-window-limit-recovery/recovery-hook.ts` aplica truncación, resumen y deduplicación ante errores de límite de contexto; se migra suscribiéndose a los eventos de error de sesión del runtime nativo V2 y aplicando las mismas estrategias sobre el estado de la sesión.",
-    futureEvidence: "task:18",
+      "La recuperación V1 ante límite de contexto se adapta a `ctx.session.compact`: `rigel-v2-native-phase4-events.mjs` reconoce el error de límite, solicita una compactación V2 una sola vez por incidente y libera el dedupe al terminar o borrar la sesión.",
+    futureEvidence: "`rigel-v2-native-phase4-events.mjs`; `rigel-v2-native-phase4-events.test.mjs`; OpenCode V2 Plugins API: `ctx.session.compact`",
   },
   "ast-grep-sg-provision": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "unwired upstream",
     rationale:
-      "La provisión V1 en `hooks/ast-grep-sg-provision/hook.ts` asegura el binario sg que consume la skill ast-grep; en el espejo se resuelve al preparar el runtime y viaja con la entrega de skills, sin exponer comportamiento propio de agente.",
-    futureEvidence: "task:14",
+      "La provision V1 en `hooks/ast-grep-sg-provision/hook.ts` asegura el binario sg que consume la skill ast-grep; el perfil gabo no incluye la skill ast-grep y skills-loader-core no la expone como builtin del bundle nativo, asi que la provision no tiene consumidor en este perfil y queda desconectada hasta que la skill viaje con el kit.",
+    futureEvidence: "contract:profiles/gabo/skills (sin skill ast-grep en el kit); packages/skills-loader-core",
   },
   atlas: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El orquestador V1 en `hooks/atlas/atlas-hook.ts` gobierna las sesiones boulder y background; se migra al runtime nativo V2 con suscripción a los eventos de sesión y guardas en tool.execute.before/after para la continuación y el auto-commit.",
-    futureEvidence: "task:20",
+      "El trabajo Atlas V1 se entrega por `/ulw-execute` con estado boulder durable y por la continuación nativa de idle: `rigel-v2-native-phase4-events.mjs` detecta trabajo background activo del orquestador y entrega una continuación sintética mediante la API V2.",
+    futureEvidence: "`rigel-v2-ulw-execute.mjs`; `rigel-v2-ulw-execute.test.mjs`; `rigel-v2-native-phase4-events.mjs`; `rigel-v2-native-phase4-events.test.mjs`",
   },
   "auto-slash-command": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El ejecutor V1 en `hooks/auto-slash-command/hook.ts` detecta y ejecuta comandos embebidos en el mensaje del usuario; se migra al modelo de comandos nativo de V2 con despacho desde el runtime, cubriendo los comandos de skill y de plugin.",
-    futureEvidence: "task:14",
+      "El ejecutor V1 en `hooks/auto-slash-command/hook.ts` detecta y ejecuta comandos embebidos en el mensaje del usuario, cubriendo los comandos de skill y de plugin. El puerto nativo corre sobre el seam oficial de admisión de prompts de V2 (`ctx.session.hook(\"prompt\")`, draft canónico mutable), con detector, ejecutor, dedupe y el puente skill-command propios.",
+    futureEvidence:
+      "`rigel-v2-auto-slash-command-bridge.mjs`; `rigel-v2-auto-slash-command-bridge.test.mjs`; `rigel-v2-native.mjs` (hook prompt); `live-qa/wave3-auto-slash.md`",
   },
   "auto-update-checker": {
     classification: "Migrar",
+    status: "Incompatible (con evidencia)",
     rationale:
-      "El chequeo V1 en `hooks/auto-update-checker/hook.ts` concentra los avisos de versión, configuración y proveedores en el arranque; se migra al init del runtime nativo V2 reproduciendo los toasts y el diagnóstico de inicio.",
-    futureEvidence: "task:20",
+      "El chequeo V1 instala o consulta actualizaciones y publica toasts de versión. La API oficial de plugins V2 publica transformaciones, hooks, sesiones, herramientas y eventos, pero no una API de actualización ni de toast; no existe una superficie V2 segura para reproducir ese efecto del host.",
+    futureEvidence: "OpenCode V2 Plugins API: Overview/API/Hooks, sin servicio de actualización ni toast; incompatibilidad explícita, no un puntero a tarea cerrada.",
   },
   "category-skill-reminder": {
     classification: "Migrar",
@@ -49,9 +55,11 @@ export default {
   },
   "claude-code-hooks": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El despachador V1 en `hooks/claude-code-hooks/claude-code-hooks-hook.ts` ejecuta hooks configurados de Claude Code en mensajes, tools y compactación; se migra reutilizando claude-code-compat-core y suscribiéndose a los eventos equivalentes del runtime nativo V2.",
-    futureEvidence: "task:20",
+      "El despachador V1 se adapta con `createNativeClaudeCodeHooks`, que registra prompt, compactación y hooks before/after de herramientas y consume SessionStart/Stop desde la suscripción V2; sus salidas de prompt llegan al colector de contexto nativo.",
+    futureEvidence:
+      "`rigel-v2-claude-code-hooks.mjs`; `rigel-v2-claude-code-hooks.test.mjs`; `rigel-v2-context-collector.mjs`",
   },
   "comment-checker": {
     classification: "Migrar",
@@ -92,10 +100,10 @@ export default {
   },
   goal: {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "El objetivo persistente V1 en `hooks/goal/index.ts` gobierna la continuidad por idle y el uso por sesión; se migra al runtime nativo V2 con estado por sessionID, suscripción al evento de idle y las herramientas create_goal, update_goal y get_goal bajo el gate goal.enabled.",
-    futureEvidence: "task:16",
+    futureEvidence: "tools/goal.tools.mjs; rigel-v2-native.mjs (comando goal + onStop); rigel-v2-native-conditional-tools.mjs; live-qa/wave1-goal.md",
   },
   "hashline-read-enhancer": {
     classification: "Migrar",
@@ -109,7 +117,7 @@ export default {
     status: "Migrado parcialmente",
     rationale:
       "La sesión V1 en `hooks/interactive-bash-session/hook.ts` gestiona el ciclo de vida tmux de interactive_bash; se migra al runtime nativo V2 cuando tmux está disponible, replicando el tracker y el estado por sesión.",
-    futureEvidence: "task:16",
+    futureEvidence: "`tools/interactive-bash.tools.mjs`; `rigel-v2-native-conditional-tools.mjs`",
   },
   "json-error-recovery": {
     classification: "Equivale a builtin V2",
@@ -134,9 +142,10 @@ export default {
   },
   "model-fallback": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "La cadena proactiva V1 en `hooks/model-fallback/hook.ts` reescribe el modelo en chat.params; se migra resolviendo la cadena por agente en la frontera http.request del runtime nativo V2 y reescribiendo el campo model del payload.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-model-chains.mjs`; `rigel-v2-native-model-chains.test.mjs`; `rigel-v2-native.mjs` (fallback proactivo en model.request y reactivo en session.error)",
   },
   "monitor-status-injector": {
     classification: "Migrar",
@@ -152,15 +161,17 @@ export default {
   },
   "no-hephaestus-non-gpt": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El guard V1 en `hooks/no-hephaestus-non-gpt/hook.ts` restringe Hephaestus a modelos GPT; se migra con el gate de proveedor del roster V2 (requiresProvider e isHephaestusSupportedModel) al registrar el agente.",
-    futureEvidence: "task:11",
+    futureEvidence: "`rigel-v2-native-hephaestus.mjs`; `rigel-v2-native-hephaestus.test.mjs`",
   },
   "no-sisyphus-gpt": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El guard V1 en `hooks/no-sisyphus-gpt/hook.ts` bloquea Sisyphus en proveedores no GPT; se migra al runtime nativo V2 resolviendo el proveedor del modelo en la frontera http.request y denegando o avisando por toast.",
-    futureEvidence: "task:8",
+      "El guard V1 en `hooks/no-sisyphus-gpt/hook.ts` bloquea Sisyphus en proveedores no GPT; en el runtime nativo la seleccion de modelos de cada agente pasa por las cadenas y gates del manifiesto (`requiresProvider`/gate por agente en el registro) y por el fallback de `rigel-v2-native-model-chains.mjs`, que nunca resuelve a un modelo fuera de la cadena del agente.",
+    futureEvidence: "`rigel-v2-native-model-chains.mjs`; `rigel-v2-native-hephaestus.mjs` (gate equivalente); `rigel-v2-native-agents.mjs`",
   },
   "notepad-write-guard": {
     classification: "Migrar",
@@ -209,9 +220,10 @@ export default {
   },
   "runtime-fallback": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El fallback reactivo V1 en `hooks/runtime-fallback/hook.ts` reacciona a los errores del proveedor; se migra al runtime nativo V2 suscribiéndose a los eventos de error de sesión y reintentando con el siguiente escalón.",
-    futureEvidence: "task:8",
+      "El fallback reactivo V1 reacciona a los errores del proveedor; el port nativo marca el modelo fallido en los eventos `session.execution.failed`/`session.error` y resuelve el siguiente escalon con `switchModel` (pre-seleccion, permite cambiar proveedor) via `applyReactiveFallback`.",
+    futureEvidence: "`rigel-v2-native-model-chains.mjs`; `rigel-v2-native.mjs` (applyReactiveFallback en el bucle de eventos); `rigel-v2-native-model-chains.test.mjs`",
   },
   "sisyphus-junior-notepad": {
     classification: "Migrar",
@@ -225,9 +237,9 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "El guard V1 en `hooks/stop-continuation-guard/hook.ts` atiende el comando de parada y detiene la continuidad. V2 no expone `command.execute.before`, asi que el paso `stop-continuation-guard` de `rigel-v2-native-request-steps.mjs` observa el ultimo mensaje de usuario en la frontera `http.request`, marca la sesion detenida y elimina cualquier continuacion encolada; el estado se limpia en `session.deleted`.",
+      "El guard V1 en `hooks/stop-continuation-guard/hook.ts` atiende el comando de parada, cancela las tareas background descendientes en estado running/pending y escribe el marcador de continuacion `stop`. V2 no expone `command.execute.before`, asi que el paso `stop-continuation-guard` de `rigel-v2-native-request-steps.mjs` observa el ultimo mensaje de usuario en la frontera `http.request`, marca la sesion detenida y elimina cualquier continuacion encolada; en la remediacion de la auditoria de Fase 4 el runtime ademas cancela los descendientes (queued/starting/running) via `rigel-v2-background-manager.mjs` y escribe/limpia el marcador `sources.stop` (`.omo/run-continuation/<sessionID>.json`) via `rigel-v2-background-marker.mjs`; el estado se limpia en `session.deleted`.",
     futureEvidence:
-      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`",
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`; `rigel-v2-background-manager.mjs`; `rigel-v2-background-manager.test.mjs`; `.omo/evidence/20261005-phase4-audit-remediation/task-r1.txt`",
   },
   "tasks-todowrite-disabler": {
     classification: "Equivale a builtin V2",
@@ -237,21 +249,24 @@ export default {
   },
   "team-mailbox-injector": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El inyector V1 en `hooks/team-mailbox-injector/hook.ts` incorpora los mensajes pendientes del buzón del equipo; se migra al runtime nativo V2 leyendo el buzón por sessionID e inyectando los mensajes en la frontera http.request bajo el gate team_mode.enabled.",
-    futureEvidence: "gate:team_mode.enabled",
+      "El inyector V1 incorpora los mensajes pendientes del buzon en el turno. El port nativo inyecta un bloque `<team-mailbox>` con los mensajes no leidos del miembro y los marca leidos (la inyeccion ES la entrega), sobre el hook `context` de V2 bajo el gate team_mode.",
+    futureEvidence: "`rigel-v2-team-gating.mjs` (createNativeTeamMailboxInjector); `rigel-v2-team-gating.test.mjs`; `rigel-v2-native.mjs` (hook context)",
   },
   "team-mode-status-injector": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El inyector V1 en `hooks/team-mode-status-injector/hook.ts` publica el bloque de estado del equipo en los mensajes; se migra inyectándolo en la frontera http.request del runtime nativo V2 bajo el gate team_mode.enabled.",
-    futureEvidence: "gate:team_mode.enabled",
+      "El inyector V1 incorpora el estado del equipo en el turno. El port nativo inyecta un bloque `<team-status>` (estado del team y de cada miembro) en el ultimo mensaje de usuario real via el hook `context` de V2, para cualquier participante (lead o miembro), bajo el gate team_mode.",
+    futureEvidence: "`rigel-v2-team-gating.mjs` (createNativeTeamStatusInjector); `rigel-v2-team-gating.test.mjs`; `rigel-v2-native.mjs` (hook context)",
   },
   "team-tool-gating": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El gate V1 en `hooks/team-tool-gating/hook.ts` restringe las herramientas de equipo según el rol del miembro; team mode se migra completo, así que se porta al runtime nativo V2 como guard en tool.execute.before bajo el gate team_mode.enabled.",
-    futureEvidence: "gate:team_mode.enabled",
+      "El gate V1 en `hooks/team-tool-gating/hook.ts` restringe las herramientas de equipo segun el rol. La regla nativa corre en la cadena `execute.before` de V2 bajo el gate team_mode: team_create denegado a participantes, delete/shutdown_request solo lead, approve/reject participantes, herramientas universales solo participantes del team nombrado; la denegacion lanza y bloquea la llamada.",
+    futureEvidence: "`rigel-v2-team-gating.mjs` (createNativeTeamGatingRule); `rigel-v2-team-gating.test.mjs`; `rigel-v2-native.mjs` (nativeBeforeRules)",
   },
   "todo-description-override": {
     classification: "Migrar",
@@ -271,15 +286,18 @@ export default {
   },
   "ulw-execute": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El comando V1 en `hooks/ulw-execute/ulw-execute-hook.ts` arranca una sesión de trabajo de Atlas con contexto de boulder y worktree; se migra al modelo de comandos nativo de V2 y al contexto de sesión del runtime.",
-    futureEvidence: "task:20",
+      "El comando V1 se entrega como comando V2 `/ulw-execute`: crea o reanuda estado boulder durable, selecciona plan, prepara notepads, cambia al agente Atlas cuando está disponible y entrega el contexto sin duplicarlo.",
+    futureEvidence:
+      "`rigel-v2-ulw-execute.mjs`; `rigel-v2-ulw-execute.test.mjs`; registro `context.command.transform` en `rigel-v2-native.mjs`",
   },
   "unstable-agent-babysitter": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El vigilante V1 en `hooks/unstable-agent-babysitter/unstable-agent-babysitter-hook.ts` analiza mensajes de subagentes inestables y añade un recordatorio; se migra al runtime nativo V2 suscribiéndose al idle de sesión y transformando los mensajes.",
-    futureEvidence: "task:20",
+      "El vigilante V1 se adapta al estado durable de hijos V2: en idle, `rigel-v2-native-phase4-events.mjs` consulta el conteo background del padre y entrega una advertencia sintética una sola vez hasta limpiar la sesión.",
+    futureEvidence: "`rigel-v2-native-phase4-events.mjs`; `rigel-v2-native-phase4-events.test.mjs`; `rigel-v2-background-manager.mjs`",
   },
   "webfetch-redirect-guard": {
     classification: "Migrar",

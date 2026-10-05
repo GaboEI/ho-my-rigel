@@ -72,15 +72,17 @@ export default {
   },
   "fallback-chain-resolution": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "La resolución de cadenas de fallback de `packages/omo-opencode/src/cli/fallback-chain-resolution.ts` es lógica de generación de configuración en instalación, sin superficie de runtime propia; el fallback de runtime lo cubre la tarea 8.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (cadenas portadas de model-core)",
   },
   "fallback-lane-policy": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "La política de carriles excluidos de `packages/omo-opencode/src/cli/fallback-lane-policy.ts` solo participa en la generación de configuración de instalación y no expone comportamiento de runtime en V2.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (cadenas portadas de model-core)",
   },
   "get-local-version": {
     classification: "Migrar",
@@ -126,9 +128,10 @@ export default {
   },
   "mcp-oauth": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "La gestión OAuth PKCE de MCP de tier 3 de `packages/omo-opencode/src/cli/mcp-oauth/` se adapta al sistema MCP de V2, porque el CLI de OpenCode no cubre el login OAuth de MCP embebidos en skill.",
-    futureEvidence: "task:14",
+      "El flujo OAuth PKCE de MCP de tier 3 vive en el manager nativo (`rigel-v2-skill-mcp-oauth.mjs`); el comando interactivo de CLI `mcp oauth login` no tiene puerto porque el runtime nativo no ejecuta el CLI de OmO. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
+    futureEvidence: "`rigel-v2-skill-mcp-oauth.mjs`; `rigel-v2-skill-mcp-oauth.test.mjs`",
   },
   "minimum-opencode-version": {
     classification: "Adaptar",
@@ -138,21 +141,24 @@ export default {
   },
   "model-fallback": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "La generación de configuración de fallback por disponibilidad de proveedores de `packages/omo-opencode/src/cli/model-fallback.ts` se adapta al esquema unificado de V2; el fallback de runtime se porta en la tarea 8.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (cadenas portadas de model-core)",
   },
   "model-fallback-requirements": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "Las cadenas de fallback por agente de `packages/omo-opencode/src/cli/model-fallback-requirements.ts` se adaptan al runtime nativo, con las cadenas portadas desde model-core en la tarea 8.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (cadenas portadas de model-core)",
   },
   "model-fallback-types": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "Los tipos de `packages/omo-opencode/src/cli/model-fallback-types.ts` son contratos de datos de la generación de configuración de instalación y no tienen superficie de runtime propia.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (cadenas portadas de model-core)",
   },
   "native-dev-platform-flag": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -168,21 +174,24 @@ export default {
   },
   "openai-only-model-catalog": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "El filtrado de catálogo solo OpenAI de `packages/omo-opencode/src/cli/openai-only-model-catalog.ts` se adapta a la resolución de modelos del runtime nativo de V2.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs; rigel-v2-native-model-chains.test.mjs",
   },
   "provider-availability": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "La detección de disponibilidad de proveedores de `packages/omo-opencode/src/cli/provider-availability.ts` se adapta a las credenciales y proveedores reales del runtime nativo de V2.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (readAvailableModels)",
   },
   "provider-model-id-transform": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "El reenvío de transformación de id de modelo de `packages/omo-opencode/src/cli/provider-model-id-transform.ts` es un shim de model-core sin comportamiento de runtime propio.",
-    futureEvidence: "task:8",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs (modelKey/parseModel)",
   },
   "refresh-model-capabilities": {
     classification: "Adaptar",

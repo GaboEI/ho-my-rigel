@@ -25,9 +25,10 @@ if (profile.websearch?.provider !== "tavily") fail("websearch must use Tavily")
 if (!profile.disabled_mcps?.includes("context7")) fail("OmO Context7 must be disabled")
 if (profile.browser_automation_engine?.provider !== "playwright") fail("Playwright must be canonical")
 if (profile.default_mode?.ultrawork !== true) fail("Ultrawork must be enabled by default through OmO's native setting")
-if (profile.goal?.enabled !== false || profile.default_mode?.goal !== false) fail("OmO root Goal must stay disabled")
-for (const hook of ["goal", "compaction-context-injector", "compaction-todo-preserver"]) {
-  if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled to preserve the external root authority`)
+if (profile.goal?.enabled !== true) fail("OmO root Goal must be enabled for internal ownership")
+if (profile.disabled_hooks?.includes("goal")) fail("OmO goal hook must be enabled for internal ownership")
+for (const hook of ["compaction-context-injector", "compaction-todo-preserver"]) {
+  if (!profile.disabled_hooks?.includes(hook)) fail(`OmO ${hook} must be disabled`)
 }
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")

@@ -75,7 +75,8 @@ try {
   const tools = { ...(config.tools ?? {}) }
   if (gates.task_system) tools["task_*"] = true
   if (gates.goal) tools["goal_*"] = true
-  if (gates.monitor) tools["monitor_*"] = true
+   if (gates.monitor) tools["monitor_*"] = true
+   if (gates.team_mode) tools["team_*"] = true
   if (gates.interactive_bash) tools["interactive_bash"] = true
   if (gates.hashline_edit) tools["hashline_edit"] = true
   const materialized = {
@@ -88,6 +89,9 @@ try {
         tools,
         permission: { ...(config.permission ?? {}) },
         gates,
+        maxTools: pluginView.experimental?.max_tools,
+        mcp: { disabled: [...(pluginView.disabled_mcps ?? [])], envAllowlist: [...(pluginView.mcp_env_allowlist ?? [])] },
+        tmuxVisualization: pluginView.team_mode?.tmux_visualization === true,
         categories: { ...(pluginView.categories ?? {}) },
         disabled: { ...(pluginView.disabled ?? {}) },
         // The resolved monitor block (enabled + allowed_commands) is needed by

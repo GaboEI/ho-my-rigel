@@ -24,16 +24,17 @@ export default {
   },
   "Team mode": {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
-      "El team mode completo (sección de team mode del plan, gate `team_mode.enabled`) se migra a V2 con sus herramientas, mailbox y ciclo de vida de miembros, sin recortes de alcance.",
-    futureEvidence: "gate:team_mode.enabled",
+      "El team mode (gate `team_mode.enabled`) corre en V2 con las 12 herramientas team_*, los 4 handlers de eventos, el gating por rol y los inyectores de mailbox/estado sobre el storage nativo. Gap exacto: worktrees por miembro (la visualizacion tmux ya esta reescrita). Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
+    futureEvidence: "`tools/team.tools.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-gating.mjs`; `rigel-v2-native.mjs` (wiring gate team_mode)",
   },
   Goal: {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "El modo Goal (sección de goal del plan, gate `goal.enabled`) se migra con `create_goal`, `update_goal` y `get_goal` portados a la superficie nativa de V2 como indica la tarea 16.",
-    futureEvidence: "task:16",
+    futureEvidence: "tools/goal.tools.mjs; rigel-v2-native.mjs (comando goal); rigel-v2-native-conditional-tools.test.mjs",
   },
   continuations: {
     classification: "Adaptar",

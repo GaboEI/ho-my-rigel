@@ -16,15 +16,17 @@ export default {
   },
   atlas: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "atlas/agent.ts define el orquestador primario, sus prompts por modelo y su modo; el manifiesto nativo y rigel-v2-native-agents.mjs deben registrar su roster y su modo no delegable.",
-    futureEvidence: "task:12",
+    futureEvidence: "rigel-v2-native-agents.mjs; v2-agent-selection.json; generate-v2-agents.mjs",
   },
   "builtin-agents": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "builtin-agents/ contiene las factorias condicionales que arman el roster y aplican overrides, resolucion de modelo y permisos antes de escribir el manifiesto, incluido el gate de Hephaestus, por lo que su efecto debe reproducirse en V2.",
-    futureEvidence: "task:13",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`",
   },
   "dynamic-agent-category-skills-guide": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -70,15 +72,17 @@ export default {
   },
   explore: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "explore.ts define el subagente de busqueda con sus restricciones de herramientas y metadatos; el manifiesto V2 debe incluir su definicion y su cadena de fallback.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   "frontier-tool-schema-guard": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "frontier-tool-schema-guard.ts niega grep y glob para modelos frontier; en V2 debe adaptarse al vocabulario de acciones y recursos del modelo de permisos de AgentV2Info.",
-    futureEvidence: "task:10",
+    futureEvidence: "`rigel-v2-native-permissions.mjs`; `rigel-v2-native-agents.mjs`; `rigel-v2-native-agents.test.mjs`",
   },
   "gpt-apply-patch-guard": {
     classification: "Adaptar",
@@ -94,9 +98,10 @@ export default {
   },
   hephaestus: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "hephaestus/agent.ts define el agente autonomo primario y su gate de modelo soportado; el roster nativo debe restaurarlo con el gate de proveedor sobre el manifiesto.",
-    futureEvidence: "task:11",
+    futureEvidence: "rigel-v2-native-hephaestus.mjs; rigel-v2-native-hephaestus.test.mjs; v2-agent-selection.json",
   },
   "kimi-tool-loop-guard": {
     classification: "Migrar",
@@ -106,51 +111,59 @@ export default {
   },
   librarian: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "librarian.ts define el subagente de busqueda externa con sus restricciones; su definicion y su cadena de fallback deben portarse al manifiesto nativo.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   metis: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "metis.ts define el consultor de pre-planificacion con prompts por modelo y restricciones; el manifiesto nativo debe portar su definicion y fallback.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   momus: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "momus.ts define el revisor de planes y selecciona el prompt segun el modelo; su definicion debe portarse al manifiesto nativo.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   "momus-gpt-5-6": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "momus-gpt-5-6.ts es la variante de prompt GPT-5.6 consumida por momus.ts; la definicion de Momus en V2 debe conservar esa seleccion por modelo.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   "multimodal-looker": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "multimodal-looker.ts define el subagente de analisis de medios con allowlist de solo lectura; el modelo de permisos V2 debe reproducir su bloqueo restrictivo.",
-    futureEvidence: "task:10",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `v2-agent-selection.json`",
   },
   oracle: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "oracle.ts define el consultor de solo lectura con prompts por modelo y su cadena de fallback; el manifiesto nativo debe portar la definicion.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   prometheus: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "prometheus/system-prompt.ts carga el prompt del planificador y su permiso; el manifiesto V2 debe registrar su modo primary y su no delegabilidad.",
-    futureEvidence: "task:12",
+    futureEvidence: "rigel-v2-native-agents.mjs; v2-agent-selection.json; generate-v2-agents.mjs",
   },
   sisyphus: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "sisyphus-agent-factory.ts y el directorio sisyphus/ seleccionan el prompt por modelo y arman el agente orquestador principal; su definicion debe portarse al manifiesto nativo.",
-    futureEvidence: "task:8",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   "sisyphus-agent-config": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -214,14 +227,16 @@ export default {
   },
   "sisyphus-junior": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "sisyphus-junior/agent.ts define el ejecutor por categoria con sus defaults y prompts por modelo; el manifiesto nativo debe llevar su maxTokens y su tuning al payload V2.",
-    futureEvidence: "task:9",
+    futureEvidence: "`rigel-v2-native-agents.mjs`; `generate-v2-agents.mjs`; `v2-agent-selection.json`; `rigel-v2-native-prompt.mjs`",
   },
   "sisyphus-runtime-prompt-reconciler": {
     classification: "Migrar",
+    status: "Pendiente de ejecución",
     rationale:
-      "sisyphus-runtime-prompt-reconciler.ts reconstruye el prompt de Sisyphus por peticion cuando el modelo de runtime difiere del configurado y esta cableado en plugin/system-transform.ts, por lo que su comportamiento de runtime debe migrarse a la frontera de prompt V2.",
-    futureEvidence: "task:8",
+      "Correccion de cierre (contradiccion resuelta contra el codigo): el runtime nativo registra el prompt de Sisyphus como definicion estatica baked al modelo configurado en el manifiesto; no existe rebuild por modelo de runtime (V1 lo hacia en el system-transform por request, seam que V2 no expone). El seam adaptable en V2 es el hook `context` (`event.system`). Destino: Fase 5.",
+    futureEvidence: "dueno: rigel-v2-native-prompt.mjs (context hook); verificado: manifiesto con prompt estatico de 35904 caracteres sin reconciliacion; destino Fase 5",
   },
 }

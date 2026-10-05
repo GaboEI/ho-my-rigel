@@ -57,9 +57,10 @@ export default {
   },
   "claude-code-mcp-loader": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El cargador MCP de tier 2 de `features/claude-code-mcp-loader/` (parseo de `.mcp.json` y expansión de `${VAR}` sobre `packages/claude-code-compat-core/`) se migra como segunda capa del sistema MCP de tres niveles de V2.",
-    futureEvidence: "task:14",
+      "El cargador MCP de tier 2 de `features/claude-code-mcp-loader/` esta portado: la lista de archivos V1 (.claude.json, .mcp.json user y project, .claude/.mcp.json local), last-wins, `disabled: true` que elimina de scopes previos, filtro de scope local, expansion `${VAR}`/`${VAR:-default}` con la regla de seguridad V1 (la allowlist `mcp_env_allowlist` es de capa usuario y un proyecto no puede extenderla) y registro via `ctx.mcp.transform` con la traduccion local/remote del loader tier-3.",
+    futureEvidence: "`rigel-v2-claude-code-mcp.mjs`; `rigel-v2-claude-code-mcp.test.mjs`; `rigel-v2-native-config.mjs` (readNativeMcpPolicy, allowlist solo capa user); `rigel-v2-native.mjs` (registro); mutaciones del ledger (2 casos tier-2)",
   },
   "claude-code-session-state": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -75,10 +76,10 @@ export default {
   },
   "context-injector": {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "`features/context-injector/` es un colector generico de contexto (register/getPending/consume con orden por prioridad) mas un hook de transform; es una superficie mas amplia que T19. T19 cubre la inyeccion de `AGENTS.md`/`README.md` por `rigel-v2-directory-instructions.mjs` (anexada al resultado de lectura) y de reglas por `rigel-v2-native-rules.mjs`; la semantica generica de registro/prioridad/consumo del colector y sus consumidores fuera de alcance (claude-code-hooks, keyword-detector) siguen sin equivalente nativo.",
-    futureEvidence: "`rigel-v2-directory-instructions.mjs`; `rigel-v2-native-rules.mjs`",
+      "`features/context-injector/` es un colector generico de contexto (register/getPending/consume con orden por prioridad y separador canonico) mas un hook de transform. Ola 4b lo porto completo: el colector nativo (`rigel-v2-context-collector.mjs`) alimenta el consumidor del hook `context` de V2 (`event.messages`), y el productor claude-code-hooks registra su contexto con source custom y prioridad high. El consumo real en la peticion del proveedor se demostro en el lab con un proveedor simulado loopback (captura del body con el marcador del hook).",
+    futureEvidence: "`rigel-v2-context-collector.mjs`; `rigel-v2-native-prompt.test.mjs` (casos del colector); `rigel-v2-claude-code-hooks.mjs`; `rigel-v2-native.mjs` (hook context); `live-qa/wave4-collector-claude-code-hooks.md`; `live-qa/wave4b-mock-provider-capture.json`",
   },
   "hook-message-injector": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -88,9 +89,10 @@ export default {
   },
   "mcp-oauth": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El flujo OAuth 2.0 con PKCE, DCR y step-up de `features/mcp-oauth/` sobre `packages/mcp-client-core/` se migra como parte del sistema MCP de tres niveles de V2 con la misma seguridad.",
-    futureEvidence: "task:14",
+    futureEvidence: "`rigel-v2-skill-mcp-oauth.mjs`; `rigel-v2-native-skill-mcp.mjs`; `rigel-v2-skill-mcp-oauth.test.mjs`",
   },
   monitor: {
     classification: "Migrar",
@@ -107,16 +109,17 @@ export default {
   },
   "opencode-runtime-skills": {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
-      "La fuente de skills de seguridad en runtime de `features/opencode-runtime-skills/`, que selecciona skills y las sirve por sesión sobre `packages/skills-loader-core/`, se migra al runtime nativo como fuente de skills de sesión.",
-    futureEvidence: "task:14",
+      "La fuente de skills en runtime de `features/opencode-runtime-skills/` se cubre consumiendo el catalogo fusionado del host (`ctx.skill.list()`) con single-flight y fallback al disco (`createRuntimeHostSkillSource`); el servidor de fuente de skills de seguridad por sesion no tiene seam equivalente en el dominio de skills de V2 y se considera adaptado fuera.",
+    futureEvidence: "`rigel-v2-native-skills.mjs` (createRuntimeHostSkillSource); `rigel-v2-native-skills.test.mjs`",
   },
   "opencode-skill-loader": {
     classification: "Migrar",
     status: "Migrado",
     rationale:
       "El descubrimiento de skills de cuatro ámbitos con prioridad numérica de `features/opencode-skill-loader/` sobre `packages/skills-loader-core/` se migra para alimentar las herramientas `skill` y `skill_mcp` nativas.",
-    futureEvidence: "task:14",
+    futureEvidence: "`rigel-v2-native-skills.mjs` (discoverSkills/registerNativeSkills); `rigel-v2-native-skills.test.mjs`",
   },
   "opengateway-provider": {
     classification: "Migrar",
@@ -126,15 +129,17 @@ export default {
   },
   "run-continuation-state": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "Los marcadores persistentes de continuación de `features/run-continuation-state/` que sostienen al subcomando `run` entre invocaciones se migran al estado de continuación del runtime nativo V2.",
-    futureEvidence: "task:20",
+      "Los dos orígenes vivos V1, `background-task` y `stop`, se conservan en `.omo/run-continuation/<session>.json`; el manager actualiza el primero y el guard de parada escribe o libera el segundo antes de cancelar descendientes.",
+    futureEvidence: "`rigel-v2-background-marker.mjs`; `rigel-v2-background-manager.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "skill-mcp-manager": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El ciclo de vida de MCP de tier 3 de `features/skill-mcp-manager/` sobre `packages/mcp-client-core/`, aislado por la clave `${sessionID}:${skillName}:${serverName}`, se migra para el MCP embebido en skills con transporte stdio y HTTP.",
-    futureEvidence: "task:14",
+    futureEvidence: "`rigel-v2-native-skill-mcp.mjs`; `rigel-v2-native.mjs`",
   },
   "task-toast-manager": {
     classification: "Migrar",
@@ -144,15 +149,17 @@ export default {
   },
   "team-mode": {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
-      "La coordinación multiagente paralela de `features/team-mode/` con primitivas de dominio en `packages/team-core/` se migra completa, incluidas las 12 herramientas `team_*`, el mailbox, el tasklist y su gate de configuración.",
-    futureEvidence: "contract:qa-v2-team-mode-contract.mjs",
+      "La coordinacion multiagente de `features/team-mode/` vive sobre el modelo nativo de storage (`rigel-v2/team/<name>`): las 12 herramientas team_*, los 4 handlers de eventos (idle wake hint, member status, member error, lead orphan), el gating por rol y los inyectores de mailbox y estado. Gap exacto: los worktrees por miembro no tienen puerto. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
+    futureEvidence: "`tools/team.tools.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-gating.mjs`; `rigel-v2-team-events.test.mjs`; `rigel-v2-team-gating.test.mjs`; `rigel-v2-native-conditional-tools.test.mjs`",
   },
   "tmux-subagent": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La orquestación de paneles tmux de `features/tmux-subagent/` sobre `packages/tmux-core/`, con seguimiento de sesiones y decisiones de panel, se migra para la visualización opcional de subagentes en V2.",
-    futureEvidence: "task:16",
+      "Resuelto por decision de Gabo (2026-10-05, opcion A): reescritura nativa completa. La visualizacion vive en `profiles/gabo/opencode/rigel-v2-tmux-viz-*.mjs`: elegibilidad y degradacion explicita (`rigel-v2-tmux-viz-env.mjs`), runner del CLI tmux + salud del server (`rigel-v2-tmux-viz-runner.mjs`), query y parseo del estado de paneles con la heuristica de main pane (`rigel-v2-tmux-viz-pane-state.mjs`), planificacion de grid y decisiones de split con las constantes V1 (`rigel-v2-tmux-viz-layout.mjs`), polling con activacion por foco/gracia 5s, estabilidad 10s/3 ticks, grace 30s y timeout 60min (`rigel-v2-tmux-viz-polling.mjs`), cleanup con C-c + kill-pane, reintentos 3/15min y zombie sweep (`rigel-v2-tmux-viz-cleanup.mjs`), y el manager orquestador (`rigel-v2-tmux-viz-manager.mjs`) cableado en `rigel-v2-native.mjs` bajo el gate `team_mode.tmux_visualization`. El contrato completo se demostro contra tmux 3.4 real: deteccion dentro de tmux, split de panel con titulo omo-subagent-*, tracking y limpieza tras session.deleted.",
+    futureEvidence: "`rigel-v2-tmux-viz-*.mjs` + `rigel-v2-tmux-viz-*.test.mjs`; `.omo/evidence/20261005-tmux-subagent-native/live-tmux-pane-lifecycle.json`; mutaciones del ledger (5 casos tmux-viz); wiring `rigel-v2-native.mjs`",
   },
   "tool-metadata-store": {
     classification: "Interno de build (sin superficie de runtime)",

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Drives the existing isolated V2 laboratory and records the exact tuning
- * payload applied at the final http.request boundary. It never starts,
+ * options applied at the V2 context boundary. It never starts,
  * stops, refreshes, or otherwise launches OpenCode.
  */
 import childProcess from "node:child_process"

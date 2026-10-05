@@ -32,14 +32,14 @@ const ALLOWED_STATUSES = new Set([
 // two `monitor` rows (tools and features) both carry the same authored status,
 // so the duplicate entry requires both rows to render it.
 const EXPECTED_STATUS_ROWS = [
-  ["goal", "Migrado parcialmente"],
+  ["goal", "Migrado"],
   ["interactive-bash-session", "Migrado parcialmente"],
   ["monitor", "Migrado parcialmente"],
   ["monitor", "Migrado parcialmente"],
   ["session-manager", "Migrado"],
   ["task", "Migrado parcialmente"],
   ["opencode-skill-loader", "Migrado"],
-  ["Goal", "Migrado parcialmente"],
+  ["Goal", "Migrado"],
 ]
 
 // Row shape: | `name` | classification | status | rationale | future evidence |

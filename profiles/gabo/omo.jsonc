@@ -14,7 +14,7 @@
         "browser_automation_engine": { "provider": "playwright" },
         "hashline_edit": true,
         "goal": {
-          "enabled": false,
+          "enabled": true,
           "auto_start": false,
           "default_max_iterations": 100
         },
@@ -24,7 +24,6 @@
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
         "disabled_hooks": [
-          "goal",
           "compaction-context-injector",
           "compaction-todo-preserver"
         ],
