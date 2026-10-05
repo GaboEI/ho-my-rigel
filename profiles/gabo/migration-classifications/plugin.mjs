@@ -40,9 +40,11 @@ export default {
   },
   "chat-message": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/chat-message.ts` resuelve la variante del primer mensaje, la sesión y la detección de keywords; V2 no expone `chat.message`, así que se adapta en la frontera `http.request` de `rigel-v2-native-prompt.mjs`.",
-    futureEvidence: "task:20",
+      "`plugin/chat-message.ts` resuelve la variante del primer mensaje, la sesion y la deteccion de keywords; V2 no expone `chat.message`, asi que se adapta a la frontera `http.request`. La deteccion de keywords (`ultrawork`/`ulw`, team, `hyperplan` y combo), el enrutado por modelo y la inyeccion de los cuerpos V1 se portan en `rigel-v2-native-keyword-seam.mjs` y `rigel-v2-native-prompt.mjs`; la variante por turno del primer mensaje sigue siendo el muro documentado y no se reimplemento.",
+    futureEvidence:
+      "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-keyword-seam.mjs`; `rigel-v2-native-prompt.test.mjs`; `.omo/evidence/20261005-task-20/t12-keyword-seam.md`",
   },
   "chat-params": {
     classification: "Adaptar",
@@ -52,15 +54,19 @@ export default {
   },
   "command-execute-before": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/command-execute-before.ts` aplica guards de comando (stop-continuation, /goal, ulw-execute), pero V2 no tiene mapeo verificado para `command.execute.before`; se adapta al modelo de comandos nativo de V2.",
-    futureEvidence: "task:20",
+      "`plugin/command-execute-before.ts` aplica guards de comando (stop-continuation, /goal, ulw-execute, auto-slash-command). V2 no expone `command.execute.before`; el camino de stop-continuation se adapta a la frontera `http.request` (`rigel-v2-native-request-steps.mjs` detecta `/stop-continuation` y marca la sesion detenida), mientras que el despacho de `/goal`, `ulw-execute` y auto-slash-command sigue pendiente.",
+    futureEvidence:
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   event: {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/event.ts` cablea el ciclo de vida de sesión, openclaw y fallback reactivo, pero V2 no tiene mapeo verificado para `event`; se adapta a la suscripción de eventos nativa que `rigel-v2-native.mjs` ya usa para el handoff de background.",
-    futureEvidence: "task:20",
+      "`plugin/event.ts` cablea el ciclo de vida de sesion, openclaw y el fallback reactivo. V2 no expone `event`; el runtime nativo se suscribe a los eventos nativos y ya adapta el handoff de background y la limpieza de `session.deleted` (`rigel-v2-background-manager.mjs`, `rigel-v2-native.mjs`), mientras que openclaw y el fallback reactivo siguen pendientes en la tarea de fallback.",
+    futureEvidence:
+      "`rigel-v2-background-manager.mjs`; `rigel-v2-native.mjs`; `rigel-v2-background-manager.test.mjs`",
   },
   "event-error-utils": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -167,21 +173,27 @@ export default {
   },
   "stop-continuation": {
     classification: "Migrar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/stop-continuation.ts` detiene keyword detector, guard de continuación, enforcer de todos y goal para una sesión; se porta a la superficie nativa V2 como parte del flujo de continuidad.",
-    futureEvidence: "task:20",
+      "`plugin/stop-continuation.ts` detiene keyword detector, guard de continuacion, enforcer de todos y goal para una sesion. En V2 el paso `stop-continuation-guard` de `rigel-v2-native-request-steps.mjs` marca la sesion detenida y elimina la continuacion encolada en la frontera `http.request`, con estado limpiado por sesion en `session.deleted`; el enforcer de todos no aplica (V2 no publica `todowrite`) y el apagado del goal via su despachador quedo fuera del alcance del cableado.",
+    futureEvidence:
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "system-transform": {
     classification: "Adaptar",
+    status: "Migrado parcialmente",
     rationale:
-      "`plugin/system-transform.ts` reconcilia el prompt de Sisyphus y restaura ultrawork a nivel de sistema; se adapta a la inyección de contexto en la frontera `http.request` de `rigel-v2-native-prompt.mjs`.",
-    futureEvidence: "task:20",
+      "`plugin/system-transform.ts` reconcilia el prompt de Sisyphus y restaura ultrawork a nivel de sistema. V2 no expone `experimental.chat.system.transform`; la restauracion de ultrawork se adapta a la inyeccion de contexto en la frontera `http.request` de `rigel-v2-native-prompt.mjs` (marcador de continuacion y restauracion tras compactacion), mientras que la reconciliacion del prompt de Sisyphus por modelo de runtime no se reimplemento en el runtime nativo.",
+    futureEvidence:
+      "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-prompt.test.mjs`",
   },
   "tool-definition": {
     classification: "Adaptar",
+    status: "Incompatible (con evidencia)",
     rationale:
-      "`plugin/tool-definition.ts` aplica el override de descripción de todos, pero V2 no tiene mapeo verificado para `tool.definition`; se adapta al registro de herramientas nativo de V2.",
-    futureEvidence: "task:20",
+      "`plugin/tool-definition.ts` aplica el override de descripcion de todos. V2.0.22 no expone `tool.definition` ni publica `todowrite`; la reescritura de `body.tools[].description` en `http.request` no llega al modelo (probado en T1) y `tool.transform` es add-only, de modo que un `editor.add` con el mismo nombre crea una entrada que el modelo nunca recibe. Ninguna ruta probada entrega la descripcion reescrita.",
+    futureEvidence:
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`; `.omo/evidence/20261005-task-20/t15-request-steps-verdict.md`",
   },
   "tool-execute-after": {
     classification: "Migrar",

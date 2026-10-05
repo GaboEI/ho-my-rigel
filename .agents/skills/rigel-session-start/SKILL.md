@@ -19,6 +19,27 @@ Also obey the root `AGENTS.md` and every more-specific `AGENTS.md` governing fil
 
 Do not delegate this reading. Do not rely on a summary from another agent or an earlier session. If a mandatory file is missing or unreadable, stop project work and report the missing path.
 
+## Mandatory V1 -> V2 migration reading (binding)
+
+Any work that designs, implements, or audits a V1 -> V2 migration surface MUST read the official OpenCode V2 guides before designing, implementing, or auditing, in this order:
+
+1. https://opencode.ai/v2/docs/migrate-v1/
+2. https://opencode.ai/v2/docs/build/plugins/migrate-v1
+3. When the surface requires it, the plugin context API and the server API:
+   - https://opencode.ai/v2/docs/build/plugins
+   - https://opencode.ai/v2/docs/api
+
+These are permanent mandatory reading, not one-task evidence. Do not delegate them.
+
+Rules that bind every migration decision:
+
+- The official documentation PRECEDES inferences, decompilation, or an earlier session's assumptions. When the docs contradict a prior inference, the docs win and the migration inventory/ledger must be updated to record the correction.
+- Live tests resolve real divergences: where the documentation is silent or ambiguous, an authorized live test on `opencode-v2-lab.service` is the arbiter, not a guess.
+- Every decision must map: V1 behavior -> official V2 API -> strategy -> observable test.
+- Do not blind-replace a proven surface, and do not keep duplicated logic when an official V2 surface provides complete equivalence; verify equivalence before either choice.
+
+This subsection adds a reading requirement only. It does not delete, weaken, or reorder the files above, and it does not relax the V1 boundary below.
+
 ## Binding boundary
 
 Treat `.omo/rules/protect-opencode-v1.md` as an absolute safety constraint:

@@ -16,9 +16,11 @@
 export default {
   Hyperplan: {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "La expansión de Hyperplan del keyword detector (sección de keyword detector del plan, hook `keyword-detector`) se adapta a la superficie de keywords de V2, que hoy solo reconoce Ultraworker/ultrawork/ulw; la expansión completa se cubre en la tarea 20.",
-    futureEvidence: "task:20",
+      "La expansion de Hyperplan del keyword detector se adapta a la superficie nativa de keywords de V2: `rigel-v2-keyword-core.mjs` reconoce `hyperplan` y el combo `hyperplan`+`ultrawork` con la negacion `interface.hpp`, y `rigel-v2-native-keyword-seam.mjs` inyecta el cuerpo V1 staged en la frontera `http.request`; la supresion del cuerpo standalone cuando dispara el combo se prueba en el drive staged (14/14).",
+    futureEvidence:
+      "`rigel-v2-keyword-core.mjs`; `rigel-v2-native-keyword-seam.mjs`; `.omo/evidence/20261005-task-20/t12-keyword-seam.md`",
   },
   "Team mode": {
     classification: "Migrar",

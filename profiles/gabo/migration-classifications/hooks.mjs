@@ -62,9 +62,11 @@ export default {
   },
   "delegate-task-retry": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El reintento V1 en `hooks/delegate-task-retry/hook.ts` reintenta delegaciones fallidas sobre el resultado de la herramienta; se migra al runtime nativo V2 en tool.execute.after con los mismos patrones de fallo.",
-    futureEvidence: "task:20",
+      "El reintento V1 en `hooks/delegate-task-retry/hook.ts` reintenta delegaciones fallidas sobre el resultado de la herramienta. El core puro `rigel-v2-delegate-retry-core.mjs` porta el clasificador de fallos y la decision de reintento, y `rigel-v2-native-flow-after.mjs` lo monta como regla `tool.execute.after` compuesta en `rigel-v2-native-flow-rules.mjs`; la secuencia observada del runtime incluye `delegate-task-retry` en la cadena after.",
+    futureEvidence:
+      "`rigel-v2-native-flow-after.mjs`; `rigel-v2-delegate-retry-core.mjs`; `rigel-v2-native-flow-after.test.mjs`; `rigel-v2-delegate-retry-oracle.test.mjs`",
   },
   "directory-agents-injector": {
     classification: "Migrar",
@@ -82,9 +84,11 @@ export default {
   },
   "fsync-skip-warning": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El aviso V1 en `hooks/fsync-skip-warning/index.ts` advierte cuando se omite fsync en una escritura atómica; se migra al runtime nativo V2 en tool.execute.after examinando el resultado de la escritura.",
-    futureEvidence: "task:20",
+      "El aviso V1 en `hooks/fsync-skip-warning/index.ts` advierte cuando se omite fsync en una escritura atomica. `rigel-v2-native-flow-after.mjs` monta las reglas `fsync-skip-warning:record-start` (before) y `fsync-skip-warning` (after) sobre el clasificador puro de `rigel-v2-flow-logic.mjs`, con un unico tracker inyectado por `createFlowRules`.",
+    futureEvidence:
+      "`rigel-v2-native-flow-after.mjs`; `rigel-v2-flow-logic.mjs`; `rigel-v2-native-flow-after.test.mjs`; `rigel-v2-flow-logic.test.mjs`",
   },
   goal: {
     classification: "Migrar",
@@ -113,6 +117,14 @@ export default {
     rationale:
       "V1 hook `hooks/json-error-recovery/hook.ts` appends a model-visible reminder when a tool result carries a JSON parse error. In V2 the host plugin `opencode.tool.input.repair` (decompiled from the v2.0.22 binary) normalizes tool arguments at execute.before (stringified objects/arrays are parsed, string numbers/booleans coerced), so the malformed-argument case never becomes a tool result and no observable event reaches the runtime. RAW lab evidence (opencode-v2-lab.service): over real sessions every tool call arrives as a parsed object; the model never emits string/malformed arguments (explicit attempts refused); and a JSON string injected by the runtime's execute.before was NOT repaired and the tool errored, so the native hook cannot be the observer and has no trigger. The V1-shaped extraction is retained only as a defensive after-result fallback.",
     futureEvidence: ".omo/evidence/20261004-phase4-task18-guards/json-input-recovery/",
+  },
+  "keyword-detector": {
+    classification: "Migrar",
+    status: "Migrado",
+    rationale:
+      "El detector V1 en `hooks/keyword-detector/` decide e inyecta las guias de `ultrawork`/`ulw`, team mode, `hyperplan` y el combo `hyperplan`+`ultrawork`. El core puro `rigel-v2-keyword-core.mjs` reproduce el orden de filtros, las regexes exactas (incluidas la negacion `interface.hpp` y la correccion de `ultraworker`), la interseccion de deshabilitados, la allowlist, la supresion del combo, el enrutado por fuente (planner/gpt/gemini/glm/default), el replay y la restauracion tras compactacion. `rigel-v2-native-keyword-seam.mjs` lo enlaza a la frontera verificada `http.request` de V2 sobre `body.messages[role=user].content`, con `rigel-v2-keyword-state.mjs` (tope 256 FIFO, clear en `session.deleted`) y los cuerpos V1 por tipo staged desde `rigel-v2-native-prompt.mjs`; el drive staged prueba la cadena completa.",
+    futureEvidence:
+      "`rigel-v2-keyword-core.mjs`; `rigel-v2-keyword-state.mjs`; `rigel-v2-native-keyword-seam.mjs`; `rigel-v2-native-prompt.mjs`; `rigel-v2-keyword-core.test.mjs`; `rigel-v2-keyword-state.test.mjs`; `rigel-v2-native-prompt.test.mjs`",
   },
   "legacy-plugin-toast": {
     classification: "Migrar",
@@ -152,9 +164,11 @@ export default {
   },
   "notepad-write-guard": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El guard V1 en `hooks/notepad-write-guard/index.ts` bloquea escrituras a rutas de notepad append-only; se migra al runtime nativo V2 como guard en tool.execute.before con las mismas rutas bloqueadas.",
-    futureEvidence: "task:20",
+      "El guard V1 en `hooks/notepad-write-guard/index.ts` bloquea escrituras a rutas de notepad append-only. `rigel-v2-native-flow-guards.mjs` monta la regla `notepad-write-guard` en `tool.execute.before` sobre la logica pura de rutas de `rigel-v2-flow-logic.mjs`, con la misma decision de bloqueo; la prueba de aislamiento del bastidor before la ejercita.",
+    futureEvidence:
+      "`rigel-v2-native-flow-guards.mjs`; `rigel-v2-flow-logic.mjs`; `rigel-v2-native-flow-guards.test.mjs`; `rigel-v2-flow-logic.test.mjs`",
   },
   "plan-format-validator": {
     classification: "Migrar",
@@ -172,15 +186,19 @@ export default {
   },
   "question-label-truncator": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El truncador V1 en `hooks/question-label-truncator/hook.ts` acorta etiquetas largas de la herramienta de pregunta; se migra al runtime nativo V2 en tool.execute.before con el mismo límite.",
-    futureEvidence: "task:20",
+      "El truncador V1 en `hooks/question-label-truncator/hook.ts` acorta etiquetas largas de la herramienta de pregunta. `rigel-v2-native-flow-guards.mjs` aplica el mismo limite en `tool.execute.before` sobre la logica pura de `rigel-v2-flow-logic.mjs`.",
+    futureEvidence:
+      "`rigel-v2-native-flow-guards.mjs`; `rigel-v2-flow-logic.mjs`; `rigel-v2-native-flow-guards.test.mjs`; `rigel-v2-flow-logic.test.mjs`",
   },
   "read-image-resizer": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El redimensionador V1 en `hooks/read-image-resizer/hook.ts` reduce las imágenes grandes que se leen; se migra al runtime nativo V2 en tool.execute.after reescribiendo el resultado con la imagen reducida.",
-    futureEvidence: "task:20",
+      "El redimensionador V1 real (`hooks/read-image-resizer/hook.ts`) se migra a la frontera V2 comprobada `session.hook(\"http.request\")` como `imageResizerStep` en `rigel-v2-native-request-steps.mjs`. El cuerpo saliente lleva las imagenes como data URL (`body.messages` chat, `body.input` responses); el gate V1 `providerID === \"anthropic\"` se conserva por defecto (`RIGEL_IMAGE_RESIZER_PROVIDERS` solo para QA viva) y `rigel-v2-native-image-resizer.mjs` decodifica, redimensiona y re-codifica con el `Bun.Image` del runtime (Bun 1.4.2 embebido en el binario V2.0.22) respetando los limites de 1568px y 5MB, con reintento de calidad para jpeg/webp. Los parsers y el calculo de dimensiones siguen anclados a los duenos V1.",
+    futureEvidence:
+      "`rigel-v2-native-image-resizer.mjs`; `rigel-v2-native-request-steps.mjs`; `rigel-v2-native-image-resizer.test.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "rules-injector": {
     classification: "Migrar",
@@ -197,15 +215,19 @@ export default {
   },
   "sisyphus-junior-notepad": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La inyección V1 en `hooks/sisyphus-junior-notepad/hook.ts` añade el notepad al prompt del subagente; se migra al runtime nativo V2 como contexto de delegación al crear la sesión hija.",
-    futureEvidence: "task:20",
+      "El hook V1 en `hooks/sisyphus-junior-notepad/hook.ts` inyecta el notepad al prompt del subagente. `rigel-v2-native-flow-guards.mjs` monta la regla en `tool.execute.before` sobre la decision pura de `rigel-v2-flow-logic.mjs`, reproduciendo la eleccion de inyeccion del notepad cuando la delegacion crea un hijo; la secuencia before observada del runtime la incluye.",
+    futureEvidence:
+      "`rigel-v2-native-flow-guards.mjs`; `rigel-v2-flow-logic.mjs`; `rigel-v2-native-flow-guards.test.mjs`; `rigel-v2-flow-logic.test.mjs`",
   },
   "stop-continuation-guard": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El guard V1 en `hooks/stop-continuation-guard/hook.ts` atiende el comando de parada y detiene la continuidad; se migra al modelo de comandos nativo de V2 con el mismo estado de parada por sessionID.",
-    futureEvidence: "task:20",
+      "El guard V1 en `hooks/stop-continuation-guard/hook.ts` atiende el comando de parada y detiene la continuidad. V2 no expone `command.execute.before`, asi que el paso `stop-continuation-guard` de `rigel-v2-native-request-steps.mjs` observa el ultimo mensaje de usuario en la frontera `http.request`, marca la sesion detenida y elimina cualquier continuacion encolada; el estado se limpia en `session.deleted`.",
+    futureEvidence:
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "tasks-todowrite-disabler": {
     classification: "Equivale a builtin V2",
@@ -233,15 +255,19 @@ export default {
   },
   "todo-description-override": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El override V1 en `hooks/todo-description-override/hook.ts` reescribe descripciones de todos; se migra al runtime nativo V2 sobre el registro de todos por sessionID en tool.execute.before y after.",
-    futureEvidence: "task:20",
+      "El override V1 (`hooks/todo-description-override/hook.ts`, hook `tool.definition`) se entrega en V2 registrando un `todowrite` real cuyo `description` ES el texto V1 `TODOWRITE_DESCRIPTION` (`rigel-v2-native-todo-description.mjs`, cableado en `rigel-v2-native.mjs`), respaldado por el store de todos por sesion del runtime. La definicion registrada es lo que el host convierte en el schema de tools del modelo, de modo que la descripcion V1 llega al modelo. El veredicto previo de que `tool.transform` era add-only era incorrecto: el editor expone add/get/update/list/namespace/remove, y `todowrite` no es un builtin de V2.",
+    futureEvidence:
+      "`rigel-v2-native-todo-description.mjs`; `rigel-v2-native-todo-description.test.mjs`; `rigel-v2-native.mjs`",
   },
   "tool-pair-validator": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El validador V1 en `hooks/tool-pair-validator/hook.ts` repara pares de llamada y resultado de herramienta desemparejados; se migra en la frontera http.request del runtime nativo V2, reparando los mensajes antes de enviarlos al proveedor.",
-    futureEvidence: "task:20",
+      "El validador V1 en `hooks/tool-pair-validator/hook.ts` repara pares de llamada y resultado de herramienta desemparejados. El paso `tool-pair-validator` de `rigel-v2-native-request-steps.mjs` repara ambos formatos (Chat Completions `body.messages` y OpenAI Responses `body.input`) insertando el resultado terminal con `INTERRUPTED_TOOL_ERROR`, de forma idempotente, en la unica frontera `http.request`.",
+    futureEvidence:
+      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "ulw-execute": {
     classification: "Migrar",

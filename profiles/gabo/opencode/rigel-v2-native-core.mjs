@@ -257,16 +257,17 @@ export function normalizeToolDefinition(definition) {
   }
 }
 
-export function taskResult({ sessionID, agent, background, result }) {
+export function taskResult({ sessionID, agent, background, result, taskId }) {
   const lifecycle = background
     ? "The subagent is working in the background."
     : "The subagent has been started."
+  const idSuffix = typeof taskId === "string" && taskId ? ` taskId: ${taskId};` : ""
   const returned = background
-    ? `${lifecycle} sessionID: ${sessionID}; agent: ${agent}.`
+    ? `${lifecycle}${idSuffix} sessionID: ${sessionID}; agent: ${agent}.`
     : `The subagent completed. sessionID: ${sessionID}; agent: ${agent}.\n\n<rigel-native-child-result>\n${result || "(The child returned no text.)"}\n</rigel-native-child-result>`
   return {
     content: returned,
-    metadata: { sessionID, agent, background },
+    metadata: { sessionID, agent, background, ...(typeof taskId === "string" && taskId ? { taskId } : {}) },
   }
 }
 

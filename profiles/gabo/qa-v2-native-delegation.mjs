@@ -93,7 +93,7 @@ try {
     const parentID = created.id ?? created.data?.id
     if (typeof parentID !== "string") throw new Error(`V2 did not return a parent session ID: ${JSON.stringify(created)}`)
     const userPrompt = explicitUltraworker
-      ? "Ultraworker: delegate the requested research using rigel_task, then report completion."
+      ? "Ultrawork: delegate the requested research using rigel_task, then report completion."
       : "Delegate the requested research using rigel_task, then report completion."
     await json(`${serverUrl}/api/session/${parentID}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: userPrompt, resume: true }) })
     await waitFor(async () => {

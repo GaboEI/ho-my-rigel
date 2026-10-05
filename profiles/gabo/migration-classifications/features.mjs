@@ -19,9 +19,11 @@
 export default {
   "background-agent": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El motor de ciclo de vida de tareas de `features/background-agent/` (cola FIFO por clave, sondeo de finalización, circuit breaker y despertar del padre con `parent-wake-notifier.ts`) se porta al runtime nativo V2 sobre eventos de sesión y un registro de tareas propio.",
-    futureEvidence: "task:20",
+      "El motor de ciclo de vida de tareas de `features/background-agent/` se porta al runtime nativo V2 sobre eventos de sesion y un registro propio. `rigel-v2-background-manager.mjs` compone la cola FIFO por clave y el reintento (`rigel-v2-background-queue.mjs`, `rigel-v2-background-retry.mjs`), el handoff no bloqueante (`rigel-v2-background-handoff.mjs`, tope MAX_WAKE_ATTEMPTS=3) y el marcador de continuacion en disco (`rigel-v2-background-marker.mjs`, `.omo/run-continuation/<parent>.json`, fuente `background-task`) sin ningun timer ni poller. `rigel-v2-native.mjs` encola el handoff (sin await) en el bucle de eventos y limpia los hijos en `session.deleted` mediante el registro de T11.",
+    futureEvidence:
+      "`rigel-v2-background-manager.mjs`; `rigel-v2-background-queue.mjs`; `rigel-v2-background-retry.mjs`; `rigel-v2-background-handoff.mjs`; `rigel-v2-background-marker.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-background-queue.test.mjs`; `rigel-v2-background-retry.test.mjs`",
   },
   "boulder-state": {
     classification: "Migrar",

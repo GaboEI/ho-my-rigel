@@ -1,8 +1,10 @@
 import {
+  delegateNamedAgent,
   delegateNamedAgentFromClients,
   listCallableAgentsFromClients,
   resolveNamedAgent,
   taskResult,
+  resumeDelegatedSession,
   resumeDelegatedSessionFromClients,
   completedChildText,
   backgroundHandoffPrompt,
@@ -39,10 +41,22 @@ import { createSkillMcpManager, createSkillMcpToolDefinition, registerSkillMcpSe
 import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
 import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
+import { createTodoDescriptionTool } from "./rigel-v2-native-todo-description.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
 import { createHashlineEditTool, createHashlineReadEnhancer } from "./rigel-v2-native-hashline.mjs"
 import { createNativeCategorySkillReminder } from "./rigel-v2-native-category-skill-reminder.mjs"
 import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
+import { runOrderedRules } from "./rigel-v2-native-hook-chain.mjs"
+import { createSessionStateRegistry } from "./rigel-v2-native-session-state.mjs"
+import { createKeywordState } from "./rigel-v2-keyword-state.mjs"
+import { createBackgroundManager } from "./rigel-v2-background-manager.mjs"
+import { createFileBackgroundState, createStorageBackgroundState } from "./rigel-v2-background-state.mjs"
+// T17: single flow-rule import point. `createFlowRules` rebuilds the ordered
+// before/after/request collections over the runtime's ONE fsync tracker; the
+// state factories come from their binder modules.
+import { createFlowRules } from "./rigel-v2-native-flow-rules.mjs"
+import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
+import { createStopContinuationState, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
 
 /**
  * Read the user's category overrides from the V2 setup context. V2 exposes the
@@ -56,6 +70,21 @@ export function readUserCategories(context) {
   const categories = config?.categories
   if (!categories || typeof categories !== "object" || Array.isArray(categories)) return undefined
   return categories
+}
+
+/**
+ * Read the user's keyword-detector overrides from the same merged plugin
+ * config. The V1 hook reads `keyword_detector.disabled_keywords` and
+ * `keyword_detector.enabled_expansions`; a missing or malformed value degrades
+ * to no override so a config read never fails setup closed.
+ */
+export function readKeywordDetectorConfig(context) {
+  const config = context?.config?.keyword_detector
+  if (!config || typeof config !== "object" || Array.isArray(config)) return {}
+  return {
+    disabledKeywords: Array.isArray(config.disabled_keywords) ? config.disabled_keywords : undefined,
+    enabledExpansions: Array.isArray(config.enabled_expansions) ? config.enabled_expansions : undefined,
+  }
 }
 
 /**
@@ -147,6 +176,17 @@ function recordNativeToolFamilies(event) {
   writeStateReceipt("native-tool-families-registered.json", event)
 }
 
+/**
+ * Report one isolated rule failure at a tool-hook boundary. `runOrderedRules`
+ * records the failure whether or not this callback runs; the callback exists so
+ * a degraded chain is visible in the runtime log instead of being swallowed
+ * while the rules after the failure still run.
+ */
+function reportRuleFailure(phase, failure) {
+  const message = failure?.error instanceof Error ? failure.error.message : String(failure?.error)
+  console.error(`[oh-my-rigel] Native V2 ${phase} rule failed; chain continues: rule=${failure?.name}; ${message}`)
+}
+
 export function createTaskPresentation() {
   return `Spawn one delegated task through the OpenCode V2 agent runtime.
 
@@ -168,11 +208,44 @@ const taskInput = {
     description: { type: "string", description: "Short task description." },
     prompt: { type: "string", description: "Full task for the child agent." },
     run_in_background: { type: "boolean", description: "Set true only for independent work. Default false waits and returns the child result." },
+    cancel: { type: "boolean", description: "Set true with task_id to cancel a queued or running background child instead of delegating. A queued cancel removes it before any child session is created." },
     load_skills: { type: "array", items: { type: "string" }, description: "Skills the child should load before working." },
   },
   required: ["prompt"],
   additionalProperties: false,
-  anyOf: [{ required: ["subagent_type"] }, { required: ["category"] }, { required: ["task_id"] }],
+}
+
+/** Build the `provider/id` admission key from a model ref object or string. */
+function modelKeyString(value) {
+  if (typeof value === "string") return value
+  if (value && typeof value === "object") {
+    const provider = value.providerID ?? value.provider
+    const id = value.id ?? value.modelID
+    if (typeof provider === "string" && typeof id === "string") return `${provider}/${id}`
+    if (typeof id === "string") return id
+  }
+  return ""
+}
+
+/**
+ * The honest pre-spawn admission key: the category's resolved model when the
+ * category route is taken, otherwise the agent's declared model from the
+ * generated manifest. Both are known BEFORE any child session exists, so the
+ * child is admitted under its real bucket and is never re-keyed after spawn.
+ */
+function preSpawnModelKey(category, agent, manifestRef) {
+  if (category?.model) return modelKeyString(category.model)
+  const agents = manifestRef?.agents ?? {}
+  const entry = agents[agent?.id] ?? agents[agent?.name]
+  return entry?.model ? modelKeyString(entry.model) : ""
+}
+
+/** The tool result for a background request that was queued instead of started. */
+function queuedTaskResult(decision, agentName) {
+  return {
+    content: `The background task was queued (taskId: ${decision.taskId}; key: ${decision.key}; limit: ${decision.limit}) and will start when a concurrency slot frees. It has NOT been created yet.`,
+    metadata: { taskId: decision.taskId, queued: true, key: decision.key, limit: decision.limit, agent: agentName },
+  }
 }
 
 function readSessionAgent(result) {
@@ -298,11 +371,32 @@ export default {
       const match = selected.injected?.[0]
       return match ? { name: match.name, body: match.body } : undefined
     }
-    const ultraworkFile = new URL("./prompts/ultrawork-default.md", import.meta.url)
-    const ultraworkPrompt = fs.existsSync(ultraworkFile) ? fs.readFileSync(ultraworkFile, "utf8") : ""
+    const readPromptFile = (name) => {
+      const file = new URL(`./prompts/${name}`, import.meta.url)
+      return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : ""
+    }
+    const ultraworkPrompt = readPromptFile("ultrawork-default.md")
     if (manifest.modes?.defaultUltrawork === true && !ultraworkPrompt.trim()) {
       throw new Error("Rigel V2 default Ultrawork is enabled but its native prompt is missing")
     }
+    // Task 12: keyword-detector seams. Ultrawork bodies route by the V1 source
+    // (planner/gpt/gemini/glm/default); team, hyperplan, and the combo banner
+    // are the V1 mode prompts. A missing staged file degrades to the default
+    // ultrawork body or to no directive, never to a fabricated one.
+    const ultraworkPrompts = {
+      default: ultraworkPrompt,
+      gpt: readPromptFile("ultrawork-gpt.md"),
+      gemini: readPromptFile("ultrawork-gemini.md"),
+      glm: readPromptFile("ultrawork-glm.md"),
+      planner: readPromptFile("ultrawork-planner.md"),
+    }
+    const keywordMessages = {
+      team: readPromptFile("team.md"),
+      hyperplan: readPromptFile("hyperplan.md"),
+      comboBanner: readPromptFile("ultrawork-combo-banner.md"),
+    }
+    const keywordState = createKeywordState()
+    const keywordConfig = readKeywordDetectorConfig(context)
     // V2 owns `task` after plugin transforms complete, so registering that
     // name here creates an editor entry the model never receives. A distinct
     // name is required for a real, callable Rigel delegation surface.
@@ -456,8 +550,125 @@ export default {
     const webFetchGuard = createNativeWebFetchRedirectGuard()
     const planFormatValidator = createNativePlanFormatValidator({ directory: location.directory })
     const prometheusMdOnly = createNativePrometheusMdOnly({ resolveAgent: sessionAgentResolver, directory: location.directory })
-    const backgroundChildren = new Map()
+    // T17: the flow pipelines (T13-T15 binders) share two state instances
+    // created once here and never per request or per session. `fsyncSkipState`
+    // is the single tracker the before start rule records into and the after
+    // warning rule drains from; `stopContinuationState` is the per-session stop
+    // flag the request stop guard reads and writes. `createFlowRules` rebuilds
+    // the ordered collections over that one tracker.
+    const fsyncSkipState = createFsyncSkipWarningState()
+    const stopContinuationState = createStopContinuationState()
+    const flowRules = createFlowRules({ fsyncSkipState })
     const abortBackgroundHandoffs = new AbortController()
+    // The background manager owns the tracked background children, the FIFO
+    // admission queue (T2 key/limit), the retry classifier, the on-disk
+    // continuation marker, and the NON-BLOCKING completion handoff. `runHandoff`
+    // is the only effect; the manager schedules it behind a microtask, so the V2
+    // event loop that observed a child completion never awaits a slow parent
+    // prompt (the head-of-line block the inline `await` used to cause).
+    const backgroundManager = createBackgroundManager({
+      directory: location.directory,
+      config: context?.config?.background_task,
+      abortSignal: abortBackgroundHandoffs.signal,
+      // Durable background state goes through the official V2 `ctx.storage`
+      // surface (JSON, scoped to the plugin id) when the host exposes it; a
+      // file-backed store keeps local tests and storage-less hosts working.
+      stateStore: context?.storage && typeof context.storage.get === "function"
+        ? createStorageBackgroundState({ storage: context.storage })
+        : createFileBackgroundState(location.directory),
+      // Admission-before-spawn: the manager decides whether a request may spend a
+      // concurrency slot and only then calls this to create/prompt the child. A
+      // queued request is never created; it starts here when a slot frees.
+      startChild: async (descriptor, onSession) => {
+        const clients = [context, context.client].filter(Boolean)
+        const run = async (client) => {
+          if (descriptor.route === "resume" && typeof descriptor.sessionID === "string") {
+            const resumed = await resumeDelegatedSession({ client, sessionID: descriptor.sessionID, prompt: `<rigel-task-id>${descriptor.taskId}</rigel-task-id>\n\n${descriptor.prompt}`, background: true })
+            onSession(resumed.sessionID)
+            return { sessionID: resumed.sessionID }
+          }
+          const delegated = await delegateNamedAgent({
+            client,
+            location,
+            agent: descriptor.agent,
+            prompt: `<rigel-task-id>${descriptor.taskId}</rigel-task-id>\n\n${descriptor.prompt}`,
+            background: true,
+            model: descriptor.modelRef,
+            parentSessionID: descriptor.parentSessionID,
+            onChildSession: (sessionID, child) => {
+              onSession(sessionID, child?.model)
+              childSessionIDs.add(sessionID)
+              if (descriptor.category) categoryChildSessions.set(sessionID, descriptor.category.name)
+              seedChildFallback(sessionID, child)
+            },
+          })
+          return { sessionID: delegated.sessionID }
+        }
+        const diagnostics = []
+        for (const client of clients) {
+          try {
+            return await run(client)
+          } catch (error) {
+            diagnostics.push(error instanceof Error ? error.message : String(error))
+          }
+        }
+        throw new Error(`OpenCode V2 background child could not be created: ${diagnostics.join("; ")}`)
+      },
+      abortChild: (sessionID) => {
+        if (typeof context?.session?.interrupt === "function") return context.session.interrupt({ sessionID })
+        if (typeof context?.session?.abort === "function") return context.session.abort({ sessionID })
+        return undefined
+      },
+      runHandoff: async ({ sessionID, status, child }) => {
+        let result = ""
+        if (status === "succeeded" && typeof context?.session?.context === "function") {
+          result = completedChildText(await context.session.context({ sessionID }))
+        }
+        await context.session.prompt({
+          sessionID: child.parentSessionID,
+          text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result }),
+          resume: true,
+        })
+        console.error(`[oh-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
+      },
+      onError: (error, info) => {
+        console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${info?.sessionID ?? "unknown"}; ${error instanceof Error ? error.message : String(error)}`)
+      },
+    })
+    // DEC-8: one dispose fan-out owns the session-scoped cleanup that the
+    // `session.deleted` handler used to hand-list. Each store registers here
+    // where it exists, so a new stateful surface cannot be forgotten, and a
+    // throwing clear is isolated instead of aborting the rest of teardown.
+    // The registry is deliberately dumb: it runs registered clears, nothing
+    // else. `directoryInstructions` and `categorySkillReminder` each own a
+    // per-session Map documented as cleared on session deletion, so they
+    // register here; omitting them leaked one entry per deleted session for the
+    // whole plugin lifetime. The raw `sessionFallback`, `categoryChildSessions`,
+    // `backgroundManager` and `childSessionIDs` collections are wrapped in the
+    // store shape the fan-out expects.
+    const sessionState = createSessionStateRegistry()
+    sessionState.registerStore(reminders)
+    sessionState.registerStore(rules)
+    sessionState.registerStore(writeGuard)
+    sessionState.registerStore(commentChecker)
+    sessionState.registerStore(webFetchGuard)
+    sessionState.registerStore(directoryInstructions)
+    sessionState.registerStore(categorySkillReminder)
+    sessionState.registerStore({ clear: (sessionID) => { sessionFallback.delete(sessionID) } })
+    sessionState.registerStore({ clear: (sessionID) => { categoryChildSessions.delete(sessionID) } })
+    sessionState.registerStore({ clear: (sessionID) => { backgroundManager.clearSession(sessionID) } })
+    sessionState.registerStore({ clear: (sessionID) => { childSessionIDs.delete(sessionID) } })
+    sessionState.registerStore({ clear: (sessionID) => skillMcpManager.disconnectSession(sessionID) })
+    // T17: a deleted session releases its stop-continuation flag and any
+    // pending fsync window. The fsync tracker is one runtime-wide correlation
+    // map keyed by call id, so `clear()` drops the pending starts and skips
+    // with the session whose deletion is being fanned out.
+    sessionState.registerStore({
+      clear: (sessionID) => {
+        stopContinuationState.clear(sessionID)
+        fsyncSkipState.clear()
+      },
+    })
     // Session/todo surface (Fase 3 T5b). V2 has no native session-todo API, so
     // the runtime owns a per-session registry over `ctx.storage`: the task tools
     // write it through `syncTodos`, and the session_* tools read real todos from
@@ -474,27 +685,6 @@ export default {
     // the V2 pty/storage/event domains) and disposed on teardown. It is `let`
     // because the transform callback runs after this declaration.
     let nativeToolRegistry
-    const handoffBackgroundChild = async (sessionID, status) => {
-      const child = backgroundChildren.get(sessionID)
-      if (!child) return
-      backgroundChildren.delete(sessionID)
-      let result = ""
-      try {
-        if (status === "succeeded" && typeof context?.session?.context === "function") {
-          result = completedChildText(await context.session.context({ sessionID }))
-        }
-        await context.session.prompt({
-          sessionID: child.parentSessionID,
-          text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result }),
-          resume: true,
-        })
-        console.error(`[oh-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
-      } catch (error) {
-        backgroundChildren.set(sessionID, child)
-        console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    // Task 19: V2 names a real compaction across two event vocabularies
     // (`session.compacted`, and the streamed `session.compaction.*` /
     // `session.next.compaction.*` families). Any of them clears the
     // file-read-scoped context so the next read re-injects.
@@ -510,18 +700,29 @@ export default {
         try {
           for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
             const sessionID = event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
+            // Event-driven wake retry. A parent-prompt failure leaves the wake
+            // pending; the next event re-queues it, so no timer or poller is
+            // needed. A no-op when nothing is pending.
+            backgroundManager.retryPendingWakes()
             if (event.type === "session.deleted" && typeof sessionID === "string") {
-              reminders.clear(sessionID)
-              rules.clear(sessionID)
-              writeGuard.clear(sessionID)
-              commentChecker.clear(sessionID)
-              webFetchGuard.clear(sessionID)
-              sessionFallback.delete(sessionID)
-              categoryChildSessions.delete(sessionID)
-              // Task 14: drop a session's embedded skill MCP clients when its
-              // session is deleted, so a per-session MCP process never outlives
-              // the session that spawned it.
-              await skillMcpManager.disconnectSession(sessionID)
+              // DEC-8: one fan-out, so `backgroundChildren` and
+              // `childSessionIDs` are cleared together with the stores and can
+              // no longer be omitted from a hand-maintained list. A throwing
+              // clear is isolated by the registry and never stops the rest.
+              await sessionState.disposeSession(sessionID)
+              // A deleted session may be a PARENT; its queued descriptors have no
+              // session id, so they must be withdrawn before any creation and its
+              // running children aborted.
+              backgroundManager.clearParent(sessionID)
+            }
+            // Task 12: the keyword state follows the V1 event contract inside
+            // this same loop. A real compaction flags the explicit ultrawork
+            // record for restoration on the next request; deleting a session
+            // clears both keyword stores. `handleEvent` ignores every other
+            // type, so no second subscription is needed.
+            if (typeof sessionID === "string") {
+              if (event.type === "session.next.compaction.started") keywordState.markNeedsRestoration(sessionID)
+              else keywordState.handleEvent({ type: event.type, sessionID })
             }
             // Task 19: a real V2 compaction clears the file-read-scoped rule and
             // directory context, so the next read re-injects instead of relying
@@ -543,12 +744,21 @@ export default {
             if (nativeToolRegistry && typeof nativeToolRegistry.handleEvent === "function") {
               await nativeToolRegistry.handleEvent(event)
             }
-            if (typeof sessionID !== "string" || !backgroundChildren.has(sessionID)) continue
+            // T17: flow event handlers land in this same loop. No binder
+            // contributes one today, so the frozen array is empty and the loop
+            // is inert; a future handler is awaited here instead of opening a
+            // second subscription.
+            for (const handler of flowRules.eventHandlers) {
+              if (typeof handler === "function") await handler(event)
+            }
+            if (typeof sessionID !== "string" || !backgroundManager.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
               : event.type === "session.execution.failed" ? "failed"
                 : event.type === "session.execution.interrupted" ? "interrupted"
                   : undefined
-            if (status) await handoffBackgroundChild(sessionID, status)
+            // ENQUEUE, never await: one slow handoff must not block the next
+            // event (compaction, reactive fallback, monitor) from being handled.
+            if (status) backgroundManager.enqueueHandoff(sessionID, status)
           }
         } catch (error) {
           if (!abortBackgroundHandoffs.signal.aborted) {
@@ -583,6 +793,18 @@ export default {
           // surface. Tool execution receives only turn metadata, not a second
           // API client. Do not assume the V1 `context.client` shape.
           const clients = [context, context.client, toolContext?.client]
+          // Cancellation runs before any skill work or spawn: a queued cancel
+          // withdraws the descriptor with ZERO session.create / session.prompt.
+          if (input.cancel === true && typeof input.task_id === "string" && input.task_id.trim()) {
+            const target = input.task_id.trim()
+            const result = backgroundManager.cancel(target)
+            return {
+              content: result.cancelled
+                ? `Cancelled background task ${target} (mode: ${result.mode}).`
+                : `No background task matched ${target} (mode: ${result.mode}).`,
+              metadata: { taskId: target, cancelled: result.cancelled, mode: result.mode },
+            }
+          }
           const requestedSkills = Array.isArray(input.load_skills)
             ? input.load_skills.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())
             : []
@@ -590,17 +812,31 @@ export default {
           // Unknown or disabled names are reported, never silently rewritten
           // into a fake "loaded" notice.
           const prompt = await applyRequestedSkills(input.prompt, requestedSkills, { resolveSkill: resolveSkillForChild })
+          const isBackground = input.run_in_background === true
+          const parentSessionID = toolContext?.sessionID
           if (input.task_id) {
-            const resumed = await resumeDelegatedSessionFromClients({
-              clients,
-              sessionID: input.task_id,
-              prompt,
-              background: input.run_in_background === true,
-            })
-            if (resumed.background && toolContext?.sessionID) {
-              backgroundChildren.set(resumed.sessionID, { parentSessionID: toolContext.sessionID, agent: resumed.agent })
+            if (!isBackground) {
+              const resumed = await resumeDelegatedSessionFromClients({ clients, sessionID: input.task_id, prompt, background: false })
+              return taskResult(resumed)
             }
-            return taskResult(resumed)
+            const decision = backgroundManager.admit({
+              parentSessionID,
+              route: "resume",
+              resumeSessionID: input.task_id,
+              agent: { name: "resumed" },
+              prompt,
+              modelKey: "",
+              loadSkills: requestedSkills,
+            })
+            if (decision.queued) return queuedTaskResult(decision, "resumed")
+            if (!decision.admitted) {
+              throw new Error(`A background task requires a parent session; none was available (${decision.reason ?? "unknown"}).`)
+            }
+            const started = await decision.ready
+            if (!started?.sessionID) {
+              throw new Error("The background child was admitted but did not start.")
+            }
+            return taskResult({ sessionID: started.sessionID, agent: "resumed", background: true, taskId: decision.taskId })
           }
           const agents = await listCallableAgentsFromClients(clients, location)
           const category = input.category
@@ -609,24 +845,46 @@ export default {
           const agent = category
             ? resolveNamedAgent(agents, "Sisyphus-Junior")
             : resolveNamedAgent(agents, input.subagent_type)
-          const delegated = await delegateNamedAgentFromClients({
-            clients,
-            location,
-            agent,
-            prompt: category ? categoryTaskPrompt(prompt, category) : prompt,
-            background: input.run_in_background === true,
-            model: category?.model,
-            parentSessionID: toolContext?.sessionID,
-            onChildSession: (sessionID, child) => {
-              childSessionIDs.add(sessionID)
-              if (category) categoryChildSessions.set(sessionID, category.name)
-              seedChildFallback(sessionID, child)
-            },
-          })
-          if (delegated.background && toolContext?.sessionID) {
-            backgroundChildren.set(delegated.sessionID, { parentSessionID: toolContext.sessionID, agent: delegated.agent })
+          const effectivePrompt = category ? categoryTaskPrompt(prompt, category) : prompt
+          if (!isBackground) {
+            const delegated = await delegateNamedAgentFromClients({
+              clients,
+              location,
+              agent,
+              prompt: effectivePrompt,
+              background: false,
+              model: category?.model,
+              parentSessionID,
+              onChildSession: (sessionID, child) => {
+                childSessionIDs.add(sessionID)
+                if (category) categoryChildSessions.set(sessionID, category.name)
+                seedChildFallback(sessionID, child)
+              },
+            })
+            return taskResult(delegated)
           }
-          return taskResult(delegated)
+          // Background: admit BEFORE any create/prompt. A queued request keeps an
+          // executable descriptor and starts NOTHING until a slot frees.
+          const decision = backgroundManager.admit({
+            parentSessionID,
+            route: category ? "category" : "subagent",
+            agent,
+            category,
+            subagentType: input.subagent_type,
+            model: category?.model,
+            modelKey: preSpawnModelKey(category, agent, manifest),
+            prompt: effectivePrompt,
+            loadSkills: requestedSkills,
+          })
+          if (decision.queued) return queuedTaskResult(decision, agent.name)
+          if (!decision.admitted) {
+            throw new Error(`A background task requires a parent session; none was available (${decision.reason ?? "unknown"}).`)
+          }
+          const started = await decision.ready
+          if (!started?.sessionID) {
+            throw new Error("The background child was admitted but did not start.")
+          }
+          return taskResult({ sessionID: started.sessionID, agent: agent.name, background: true, taskId: decision.taskId })
         },
       })
       if (process.env.RIGEL_NATIVE_ASSERT_TOOL_REGISTRATION === "1") {
@@ -651,7 +909,40 @@ export default {
       if (hashlineEditTool) {
         editor.add({ name: "hashline_edit", options: { codemode: false }, ...normalizeToolDefinition(hashlineEditTool) })
       }
+      // Real `todo-description-override` (T20): register the working `todowrite`
+      // tool whose description is the exact V1 TODOWRITE_DESCRIPTION, so the
+      // model receives the V1 todo-format contract in its tool schema. This is
+      // the V2 equivalent of V1's `tool.definition` rewrite; the tool is backed
+      // by the runtime's own per-session todo store. Registered in this single
+      // transform callback so it lands in the same tool set as the others.
+      editor.add(createTodoDescriptionTool({ store: sessionTodoStore }))
     })
+    // Ordered rule chains for the two V2 tool hooks. Each built-in rule keeps
+    // the exact position it had as an inline await, and the flow binders
+    // (T13/T14) are appended after every built-in rule. The declared order is
+    // frozen in `rigel-v2-native-flow-rules.mjs`: guards then the fsync start
+    // rule on the before chain, and the delegate-retry then fsync warning rules
+    // on the after chain. `runOrderedRules` isolates a throwing rule: the
+    // failure is recorded and reported by `reportRuleFailure`, and every rule
+    // after it still runs.
+    const nativeAfterRules = [
+      { name: "hashline-read-enhancer", run: (event) => hashline?.after(event) },
+      { name: "tool-result-reminders", run: (event) => reminders.after(event) },
+      { name: "category-skill-reminder", run: (event) => categorySkillReminder.after(event) },
+      { name: "recovery-reminder", run: (event) => applyNativeRecoveryReminder(event) },
+      { name: "rules-injector", run: (event) => rules.after(event) },
+      { name: "comment-checker", run: (event) => commentChecker.after(event) },
+      { name: "plan-format-validator", run: (event) => planFormatValidator.after(event) },
+      { name: "webfetch-redirect-guard", run: (event) => webFetchGuard.after(event) },
+      ...flowRules.afterRules,
+    ]
+    const nativeBeforeRules = [
+      { name: "prometheus-md-only", run: (event) => prometheusMdOnly.before(event) },
+      { name: "write-existing-file-guard", run: (event) => writeGuard.before(event) },
+      { name: "comment-checker", run: (event) => commentChecker.before(event) },
+      { name: "webfetch-redirect-guard", run: (event) => webFetchGuard.before(event) },
+      ...flowRules.beforeRules,
+    ]
     const directoryReadRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.after", async (input) => {
         directoryInstructions.after(input)
@@ -659,22 +950,12 @@ export default {
       : undefined
     const remindersRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.after", async (input) => {
-        await hashline?.after(input)
-        await reminders.after(input)
-        await categorySkillReminder.after(input)
-        applyNativeRecoveryReminder(input)
-        await rules.after(input)
-        await commentChecker.after(input)
-        planFormatValidator.after(input)
-        webFetchGuard.after(input)
+        return runOrderedRules(nativeAfterRules, input, { onError: (failure) => reportRuleFailure("execute.after", failure) })
       })
       : undefined
     const writeGuardRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => {
-        await prometheusMdOnly.before(input)
-        writeGuard.before(input)
-        commentChecker.before(input)
-        await webFetchGuard.before(input)
+        return runOrderedRules(nativeBeforeRules, input, { onError: (failure) => reportRuleFailure("execute.before", failure) })
       })
       : undefined
     const nonInteractiveRegistration = typeof context?.tool?.hook === "function"
@@ -686,7 +967,7 @@ export default {
     const permissionRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => permissionWiring.before(input))
       : undefined
-    const rosterRegistration = await context.session.hook("http.request", createNativeRequestHook({
+    const nativeRequestPipeline = createNativeRequestHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
       getDelegationRoster: () => listCallableAgentsFromClients(
@@ -700,6 +981,11 @@ export default {
         recordAgentTuning(event)
       },
       ultraworkPrompt,
+      ultraworkPrompts,
+      keywordMessages,
+      keywordState,
+      disabledKeywords: keywordConfig.disabledKeywords,
+      enabledExpansions: keywordConfig.enabledExpansions,
       defaultUltrawork: manifest.modes?.defaultUltrawork === true,
       getInitialDirectoryInstructions: ({ agent }) => /\bhephaestus\b/i.test(String(agent ?? ""))
         ? directoryInstructions.rootAgentsGuidance()
@@ -711,7 +997,32 @@ export default {
         && !agents.some((agent) => agent.name.toLocaleLowerCase() === String(input.agent ?? "").toLocaleLowerCase()),
       getCategorySkillReminder: (sessionID) => (sessionID ? categorySkillReminder.pending(sessionID) : ""),
       onCategorySkillReminderConsumed: (sessionID) => { categorySkillReminder.consume(sessionID) },
-    }))
+    })
+    // T17: ONE `http.request` registration owns the whole ordered request
+    // pipeline. The flow steps run first over the parsed provider body
+    // (tool-pair repair, then the stop-continuation guard), the mutated body is
+    // flushed back onto the request, and only then does the keyword/roster seam
+    // read the repaired body. V2 chains handlers sequentially, so a second
+    // registration would add a second writer for no benefit; this stays one
+    // handler, and a throwing step is isolated and reported instead of aborting
+    // the request.
+    const rosterRegistration = await context.session.hook("http.request", async (input) => {
+      let body
+      try { body = await input.request.clone().json() } catch { return nativeRequestPipeline(input) }
+      const shape = resolveRequestShape(body)
+      if (shape) {
+        await runRequestSteps({
+          body,
+          shape,
+          sessionID: input.sessionID,
+          stopState: stopContinuationState,
+          input,
+          onError: (failure) => reportRuleFailure("http.request", failure),
+        }, flowRules.requestSteps)
+        input.request = new Request(input.request, { body: JSON.stringify(body) })
+      }
+      return nativeRequestPipeline(input)
+    })
     console.error(`[oh-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     // Conditional native tool families (interactive_bash / task_* / goal_*).
     // Gates come from the materialized manifest; a disabled family is never
@@ -721,15 +1032,53 @@ export default {
       manifest,
       directory: location.directory,
     })
+    // Reconcile durable background state from a previous process: re-admit
+    // queued descriptors (they never started), re-track running children WITHOUT
+    // re-creating them, and re-queue undelivered wakes. A fresh manager (tests,
+    // no directory) has no state files and this is a no-op.
+    try {
+      await backgroundManager.restore({
+        // Reconcile the `starting` crash window: a child created but not yet
+        // persisted as running carries the taskId nonce in its first prompt, so
+        // it can be found and bound WITHOUT re-creating it. If no child exists,
+        // restore re-admits the descriptor once.
+        findStartedChild: async (task) => {
+          if (typeof context?.session?.list !== "function" || typeof context?.session?.context !== "function") return undefined
+          try {
+            const list = await context.session.list({ parentID: task.parentSessionID })
+            const sessions = Array.isArray(list?.data) ? list.data : Array.isArray(list) ? list : []
+            for (const session of sessions) {
+              const sessionID = session?.id ?? session?.sessionID
+              if (typeof sessionID !== "string" || sessionID.length === 0) continue
+              const transcript = await context.session.context({ sessionID })
+              if (JSON.stringify(transcript).includes(`<rigel-task-id>${task.taskId}</rigel-task-id>`)) return { sessionID }
+            }
+          } catch {
+            return undefined
+          }
+          return undefined
+        },
+      })
+    } catch (error) {
+      console.error(`[oh-my-rigel] Native V2 background restore failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     return async () => {
       abortBackgroundHandoffs.abort()
+      // The abort signal disposes the background manager; call it explicitly so
+      // teardown does not depend on the listener side effect.
+      await backgroundManager.dispose()
       directoryInstructions.clearAll()
-      reminders.clearAll()
-      rules.clearAll()
       categorySkillReminder.clearAll()
-      writeGuard.clearAll()
-      commentChecker.clearAll()
-      webFetchGuard.clearAll()
+      keywordState.clearAll()
+      // T17: release both flow states. `clearAll` drops every stopped session
+      // and `clear()` empties the fsync tracker's start map and skip window.
+      stopContinuationState.clearAll()
+      fsyncSkipState.clear()
+      // DEC-8: the registry owns every store registered at setup, so teardown
+      // cannot miss one. Stores with `clearAll` are cleared once; clear-only
+      // stores are cleared for every session the registry saw (via
+      // session.deleted or an explicit register).
+      await sessionState.clearAll()
       await skillMcpManager.disconnectAll()
       // Stop any live monitor PTY before the plugin tears down, so no watcher
       // process outlives the session.

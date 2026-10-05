@@ -47,13 +47,36 @@ for (const file of runtimeModules) {
   fs.copyFileSync(path.join(sourceOpen, file), destination)
 }
 fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native.mjs"), path.join(runtime, "index.js"))
-const ultraworkSource = fs.readFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), "utf8")
-// The original prompt targets OmO's V1 `task` tool. V2 reserves that name,
-// so the native runtime exposes `rigel_task`; translate only actual calls.
-fs.writeFileSync(path.join(runtime, "prompts/ultrawork-default.md"), ultraworkSource.replace(/\btask\(/g, "rigel_task("), { mode: 0o600 })
+// Task 12: stage the keyword-detector prompt bodies the native request seam
+// reads. The original prompts target OmO's V1 `task` tool, but V2 reserves that
+// name and the native runtime exposes `rigel_task`, so translate only actual
+// calls. Ultrawork bodies route by the V1 source (planner/gpt/gemini/glm/
+// default); team and hyperplan are the V1 mode prompts.
+const promptFiles = [
+  ["ultrawork-default.md", "packages/prompts-core/prompts/ultrawork/default.md"],
+  ["ultrawork-gpt.md", "packages/prompts-core/prompts/ultrawork/gpt.md"],
+  ["ultrawork-gemini.md", "packages/prompts-core/prompts/ultrawork/gemini.md"],
+  ["ultrawork-glm.md", "packages/prompts-core/prompts/ultrawork/glm.md"],
+  ["ultrawork-planner.md", "packages/prompts-core/prompts/ultrawork/planner.md"],
+  ["team.md", "packages/prompts-core/prompts/mode/team.md"],
+  ["hyperplan.md", "packages/prompts-core/prompts/mode/hyperplan.md"],
+]
+for (const [name, relative] of promptFiles) {
+  const source = fs.readFileSync(path.join(sourceRoot, relative), "utf8")
+  fs.writeFileSync(path.join(runtime, "prompts", name), source.replace(/\btask\(/g, "rigel_task("), { mode: 0o600 })
+}
+// The hyperplan-ultrawork combo banner lives in the V1 detector constants, not
+// in a prompt file. Extract it verbatim and fail loudly if the source shape
+// changes instead of deploying a combo mode with no banner.
+const keywordConstants = fs.readFileSync(path.join(sourceRoot, "packages/omo-opencode/src/hooks/keyword-detector/constants.ts"), "utf8")
+const comboBanner = keywordConstants.match(/const HYPERPLAN_ULTRAWORK_BANNER = `([\s\S]*?)`/)?.[1]
+if (typeof comboBanner !== "string" || !comboBanner.trim()) {
+  fail("no se pudo extraer el banner hyperplan-ultrawork del detector V1")
+}
+fs.writeFileSync(path.join(runtime, "prompts/ultrawork-combo-banner.md"), `${comboBanner}\n`, { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-for (const file of ["index.js", ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", "prompts/ultrawork-default.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
+for (const file of ["index.js", ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", ...promptFiles.map(([name]) => `prompts/${name}`), "prompts/ultrawork-combo-banner.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
 
 const candidate = structuredClone(before)
 const plugins = Array.isArray(candidate.plugin) ? candidate.plugin : []

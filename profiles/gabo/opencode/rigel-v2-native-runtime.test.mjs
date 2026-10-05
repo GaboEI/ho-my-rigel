@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test"
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import plugin from "./rigel-v2-native.mjs"
 import * as nativeRuntime from "./rigel-v2-native.mjs"
 import nativeManifest from "./rigel-v2-native-agent-manifest.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
+import { INTERRUPTED_TOOL_ERROR } from "./rigel-v2-flow-logic.mjs"
+import { CONTINUATION_PROMPT_MARKER } from "./rigel-v2-native-request-steps.mjs"
 
 // Deterministic event feed for the reactive-fallback tests. The generator
 // blocks until an event is pushed, and signals consumption only AFTER the
@@ -112,13 +114,31 @@ test("native runtime uses the V2 setup context, not context.client", async () =>
   const dispose = await plugin.setup(context)
   expect(definition.description).toContain("active V2 agent inventory")
   expect(definition.description).not.toContain("Available named specialists:")
-  const result = await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, {})
-  expect(result.metadata).toMatchObject({ sessionID: "ses_native", agent: "Explore" })
-  expect(calls).toEqual([
+  // Strict Responses-API tool-schema validation rejects a parameter whose root
+  // is an anyOf/oneOf union ("rigel_task: tool parameter root must be an object
+  // type"); the root must be a plain object schema. Live: grok-4.7/grok-4.6.
+  expect(definition.input.type).toBe("object")
+  expect(definition.input.anyOf).toBeUndefined()
+  expect(definition.input.oneOf).toBeUndefined()
+  // Background delegation now requires a parent session so admission can key and
+  // track the queued/active child. Without one it is rejected before any create.
+  await expect(definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, {})).rejects.toThrow("requires a parent session")
+  // inventory resolution is the only call so far; no child was created
+  expect(calls.filter((call) => call[0] === "create")).toEqual([])
+  const result = await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, { sessionID: "ses_parent" })
+  expect(result.metadata).toMatchObject({ sessionID: "ses_native", agent: "Explore", background: true })
+  expect(calls.slice(0, 3)).toEqual([
     ["agents", { directory: "/native-v2" }],
-    ["create", { agent: "explore", location: { directory: "/native-v2" } }],
-      ["prompt", { sessionID: "ses_native", text: "<rigel-native-child-task>\nRead only.", resume: true }],
+    ["agents", { directory: "/native-v2" }],
+    ["create", { agent: "explore", location: { directory: "/native-v2" }, parentID: "ses_parent" }],
   ])
+  expect(calls[3][0]).toBe("prompt")
+  expect(calls[3][1].sessionID).toBe("ses_native")
+  expect(calls[3][1].resume).toBe(true)
+  // The child prompt carries the taskId nonce used to reconcile the starting
+  // crash window without re-creating the child.
+  expect(calls[3][1].text).toContain("<rigel-task-id>")
+  expect(calls[3][1].text).toContain("Read only.")
   await dispose()
 })
 
@@ -393,7 +413,7 @@ test("native runtime seeds a category child so a pre-request failure still falls
     tool: { transform: async (callback) => {
       let definition
       callback({ add: (value) => { if (value?.name === "rigel_task") definition = value }, get: () => definition })
-      feed.definition = definition
+      if (definition) feed.definition = definition
       return { dispose() {} }
     } },
   }
@@ -612,39 +632,329 @@ test("native runtime permission wiring fails closed only for a governed call wit
   await expect(wiring.before({ tool: "todo_write", sessionID: "ses_1" })).resolves.toBeUndefined()
 })
 
-test("native runtime registers one additional execute.before hook and disposes it", async () => {
+// Task 11: the runtime composes two ordered tool-hook chains. The recording
+// fake observes the registrations in order, and driving a chain returns the
+// boundary report from `runOrderedRules`, so the observed hook and rule
+// sequences are the real ones instead of a bare handler count.
+function recordingHookContext(directory = "/native-v2") {
   const registrations = []
+  const record = (name, handler) => {
+    const registration = { name, handler, disposed: false, dispose() { registration.disposed = true } }
+    registrations.push(registration)
+    return registration
+  }
   const context = {
-    location: { directory: "/native-v2" },
+    location: { directory },
     agent: {
       list: async () => ({ data: [] }),
       transform: async (callback) => { callback({ update() {}, default() {} }); return { dispose() {} } },
       reload: async () => {},
     },
     model: { list: async () => ({ data: [] }) },
-    session: {
-      hook: async (name, handler) => {
-        const registration = { name, handler, disposed: false, dispose() { registration.disposed = true } }
-        registrations.push(registration)
-        return registration
-      },
-    },
+    session: { hook: async (name, handler) => record(name, handler) },
     tool: {
       transform: async (callback) => { callback({ add() {} }); return { dispose() {} } },
-      hook: async (name, handler) => {
-        const registration = { name, handler, disposed: false, dispose() { registration.disposed = true } }
-        registrations.push(registration)
-        return registration
-      },
+      hook: async (name, handler) => record(name, handler),
     },
   }
+  return { context, registrations }
+}
+
+test("native runtime registers its ordered tool hook chain and disposes every registration", async () => {
+  const workspace = mkdtempSync(join(tmpdir(), "rigel-native-hook-order-"))
+  try {
+    const { context, registrations } = recordingHookContext(workspace)
+    const dispose = await plugin.setup(context)
+
+    // Observed from the recording tool.hook/session.hook fake: two
+    // execute.after handlers (directory instructions, then the ordered result
+    // chain), three execute.before handlers (the ordered write-guard chain,
+    // the non-interactive env guard, the permission gate), and one
+    // http.request pipeline, in that exact order.
+    expect(registrations.map((registration) => registration.name)).toEqual([
+      "execute.after",
+      "execute.after",
+      "execute.before",
+      "execute.before",
+      "execute.before",
+      "http.request",
+    ])
+
+    // Driving the after chain returns the boundary report: every rule ran in
+    // the declared order and none was isolated. The T14 flow rules are appended
+    // after the eight built-in result transforms.
+    const afterChain = registrations.filter((registration) => registration.name === "execute.after")
+    const afterReport = await afterChain[1].handler({
+      status: "completed",
+      tool: "read",
+      sessionID: "ses_order",
+      input: { filePath: "notes.md" },
+      result: { content: "file text" },
+    })
+    expect(afterReport.executed).toEqual([
+      "hashline-read-enhancer",
+      "tool-result-reminders",
+      "category-skill-reminder",
+      "recovery-reminder",
+      "rules-injector",
+      "comment-checker",
+      "plan-format-validator",
+      "webfetch-redirect-guard",
+      "delegate-task-retry",
+      "fsync-skip-warning",
+    ])
+    expect(afterReport.failures).toEqual([])
+
+    // The before chain composes the four built-in rules followed by the T13
+    // guard rules and the T14 fsync start rule, in that declared order.
+    const beforeChain = registrations.filter((registration) => registration.name === "execute.before")
+    const beforeReport = await beforeChain[0].handler({
+      tool: "read",
+      sessionID: "ses_order",
+      id: "call_order",
+      input: { filePath: "notes.md" },
+    })
+    expect(beforeReport.executed).toEqual([
+      "prometheus-md-only",
+      "write-existing-file-guard",
+      "comment-checker",
+      "webfetch-redirect-guard",
+      "notepad-write-guard",
+      "question-label-truncator",
+      "sisyphus-junior-notepad",
+      "fsync-skip-warning:record-start",
+    ])
+    expect(beforeReport.failures).toEqual([])
+
+    await dispose()
+    expect(registrations.every((registration) => registration.disposed)).toBe(true)
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+test("native runtime isolates a throwing execute.before rule and keeps the chain running", async () => {
+  const workspace = mkdtempSync(join(tmpdir(), "rigel-native-hook-isolation-"))
+  const existing = join(workspace, "existing.txt")
+  writeFileSync(existing, "already here\n")
+  try {
+    const { context, registrations } = recordingHookContext(workspace)
+    const dispose = await plugin.setup(context)
+    const beforeChain = registrations.filter((registration) => registration.name === "execute.before")
+
+    // The second rule, the write-existing-file guard, throws for a write to an
+    // existing file. The chain must resolve anyway, record the failure, and
+    // still run the comment-checker and webfetch rules declared after it, plus
+    // every T13/T14 flow rule appended at the end.
+    const report = await beforeChain[0].handler({
+      tool: "write",
+      sessionID: "ses_guard",
+      id: "call_guard",
+      input: { filePath: existing, content: "// a comment\nconst value = 1\n" },
+    })
+
+    expect(report.failures.map((failure) => failure.name)).toEqual(["write-existing-file-guard"])
+    expect(report.failures[0].error).toBeInstanceOf(Error)
+    expect(report.executed).toEqual([
+      "prometheus-md-only",
+      "comment-checker",
+      "webfetch-redirect-guard",
+      "notepad-write-guard",
+      "question-label-truncator",
+      "sisyphus-junior-notepad",
+      "fsync-skip-warning:record-start",
+    ])
+
+    await dispose()
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+test("native runtime isolates a throwing flow rule and keeps the composed before chain running", async () => {
+  const workspace = mkdtempSync(join(tmpdir(), "rigel-native-flow-isolation-"))
+  try {
+    const { context, registrations } = recordingHookContext(workspace)
+    const dispose = await plugin.setup(context)
+    const beforeChain = registrations.filter((registration) => registration.name === "execute.before")
+
+    // notepad-write-guard is the first T13 flow rule and throws for a write
+    // into a notepad root. The four native rules before it already completed,
+    // and every flow rule declared after it must still run.
+    const report = await beforeChain[0].handler({
+      tool: "write",
+      sessionID: "ses_flow",
+      id: "call_flow",
+      input: { filePath: join(workspace, ".omo", "notepads", "plan.md"), content: "notes\n" },
+    })
+
+    expect(report.failures.map((failure) => failure.name)).toEqual(["notepad-write-guard"])
+    expect(report.failures[0].error).toBeInstanceOf(Error)
+    expect(report.executed).toEqual([
+      "prometheus-md-only",
+      "write-existing-file-guard",
+      "comment-checker",
+      "webfetch-redirect-guard",
+      "question-label-truncator",
+      "sisyphus-junior-notepad",
+      "fsync-skip-warning:record-start",
+    ])
+    await dispose()
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+test("native runtime composes the request steps into the single http.request handler", async () => {
+  const { context, registrations } = recordingHookContext()
   const dispose = await plugin.setup(context)
-  const beforeHooks = registrations.filter((registration) => registration.name === "execute.before")
-  // Two pre-existing guards (write-existing-file + non-interactive env) plus
-  // exactly one new permission gate.
-  expect(beforeHooks.length).toBe(3)
+
+  // The flow steps share the one existing registration; no second
+  // `http.request` handler is opened.
+  const requestHandlers = registrations.filter((registration) => registration.name === "http.request")
+  expect(requestHandlers).toHaveLength(1)
+
+  const input = {
+    sessionID: "ses_request",
+    agent: "sisyphus",
+    model: { providerID: "opencode-go", modelID: "gpt-6-luna-fast" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-6-luna-fast",
+        messages: [
+          { role: "assistant", content: null, tool_calls: [{ id: "call_orphan", type: "function", function: { name: "read", arguments: "{}" } }] },
+          { role: "user", content: CONTINUATION_PROMPT_MARKER },
+          { role: "user", content: "/stop-continuation" },
+        ],
+      }),
+    }),
+  }
+  await requestHandlers[0].handler(input)
+
+  const body = await input.request.clone().json()
+  // Step 1: the orphaned assistant tool call gains its terminal result.
+  const repaired = body.messages.find((message) => message.role === "tool")
+  expect(repaired).toMatchObject({ tool_call_id: "call_orphan", content: INTERRUPTED_TOOL_ERROR })
+  // Step 2: the stop command marks the session and the queued continuation is
+  // stripped from the same body, while the stop command itself stays.
+  expect(body.messages.some((message) => typeof message.content === "string"
+    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
+  expect(body.messages.some((message) => message.content === "/stop-continuation")).toBe(true)
   await dispose()
-  expect(beforeHooks.every((registration) => registration.disposed)).toBe(true)
+})
+
+test("native runtime clears the stop-continuation state when the session is deleted", async () => {
+  const feed = createEventFeed()
+  const context = reactiveFallbackContext(feed)
+  const dispose = await plugin.setup(context)
+
+  const request = (messages) => ({
+    sessionID: "ses_child",
+    agent: "explore",
+    model: { providerID: "opencode-go", modelID: "grok-4.7" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "grok-4.7", messages }),
+    }),
+  })
+
+  const stopped = request([
+    { role: "user", content: CONTINUATION_PROMPT_MARKER },
+    { role: "user", content: "/stop-continuation" },
+  ])
+  await feed.requestHook(stopped)
+  const stoppedBody = await stopped.request.clone().json()
+  expect(stoppedBody.messages.some((message) => typeof message.content === "string"
+    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
+
+  const deleted = feed.consumed()
+  feed.push({ type: "session.deleted", data: { sessionID: "ses_child" } })
+  await deleted
+
+  // The stop flag is gone, so a queued continuation is no longer stripped.
+  const resumed = request([{ role: "user", content: CONTINUATION_PROMPT_MARKER }])
+  await feed.requestHook(resumed)
+  const resumedBody = await resumed.request.clone().json()
+  expect(resumedBody.messages.some((message) => typeof message.content === "string"
+    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(true)
+  await dispose()
+})
+
+test("native runtime clears the flow state on dispose", async () => {
+  const { context, registrations } = recordingHookContext()
+  const dispose = await plugin.setup(context)
+  const handler = registrations.find((registration) => registration.name === "http.request").handler
+
+  const request = (messages) => ({
+    sessionID: "ses_dispose",
+    agent: "sisyphus",
+    model: { providerID: "opencode-go", modelID: "gpt-6-luna-fast" },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-6-luna-fast", messages }),
+    }),
+  })
+
+  const stopped = request([
+    { role: "user", content: CONTINUATION_PROMPT_MARKER },
+    { role: "user", content: "/stop-continuation" },
+  ])
+  await handler(stopped)
+  const stoppedBody = await stopped.request.clone().json()
+  expect(stoppedBody.messages.some((message) => typeof message.content === "string"
+    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
+
+  await dispose()
+
+  // The disposed runtime holds no stopped session, so the queued continuation
+  // survives the same handler.
+  const resumed = request([{ role: "user", content: CONTINUATION_PROMPT_MARKER }])
+  await handler(resumed)
+  const resumedBody = await resumed.request.clone().json()
+  expect(resumedBody.messages.some((message) => typeof message.content === "string"
+    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(true)
+})
+
+test("native runtime clears a deleted session's background child so no wake is delivered", async () => {
+  const prompts = []
+  const feed = createEventFeed()
+  let definition
+  const context = {
+    location: { directory: "/native-v2" },
+    agent: {
+      list: async () => ({ data: [{ id: "explore", name: "Explore", mode: "subagent" }] }),
+      transform: async () => ({ dispose() {} }),
+      reload: async () => {},
+    },
+    event: { subscribe: feed.subscribe },
+    session: {
+      hook: async (name, handler) => { if (name === "http.request") feed.requestHook = handler; return { dispose() {} } },
+      create: async () => ({ data: { id: "ses_child" } }),
+      context: async () => [{ type: "assistant", content: [{ type: "text", text: "EVIDENCE" }] }],
+      prompt: async (input) => { prompts.push(input); return { data: {} } },
+    },
+    tool: { transform: async (callback) => { callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } }); return { dispose() {} } } },
+  }
+  const dispose = await plugin.setup(context)
+  await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, { sessionID: "ses_parent" })
+
+  const deleted = feed.consumed()
+  feed.push({ type: "session.deleted", data: { sessionID: "ses_child" } })
+  await deleted
+
+  // If the registry had not cleared the deleted session's background child,
+  // this success would have prompted the parent with the child's result.
+  const succeeded = feed.consumed()
+  feed.push({ type: "session.execution.succeeded", data: { sessionID: "ses_child" } })
+  await succeeded
+
+  // The child's own task prompt is expected; the parent wake is not.
+  expect(prompts.filter((input) => input.sessionID === "ses_parent")).toEqual([])
+  await dispose()
 })
 
 // Task 19: the hashline edit tool is registered only when the materialized
@@ -756,4 +1066,15 @@ test("native runtime records the clear for the streamed compaction event name", 
     else process.env.XDG_STATE_HOME = previousStateHome
     rmSync(stateRoot, { recursive: true, force: true })
   }
+})
+
+test("native runtime reads keyword_detector disabled and enabled lists from the merged plugin config", () => {
+  // given / when / then
+  expect(nativeRuntime.readKeywordDetectorConfig({
+    config: { keyword_detector: { disabled_keywords: ["team"], enabled_expansions: ["ultrawork", "hyperplan"] } },
+  })).toEqual({ disabledKeywords: ["team"], enabledExpansions: ["ultrawork", "hyperplan"] })
+  expect(nativeRuntime.readKeywordDetectorConfig({})).toEqual({})
+  expect(nativeRuntime.readKeywordDetectorConfig({ config: { keyword_detector: Array.of("bad") } })).toEqual({})
+  expect(nativeRuntime.readKeywordDetectorConfig({ config: { keyword_detector: { disabled_keywords: "team" } } }))
+    .toEqual({ disabledKeywords: undefined, enabledExpansions: undefined })
 })

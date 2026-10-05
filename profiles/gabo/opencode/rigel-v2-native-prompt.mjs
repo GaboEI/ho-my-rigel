@@ -1,9 +1,16 @@
 import { DIRECTORY_AGENTS_MARKER, isDirectoryInstructionMessage } from "./rigel-v2-directory-instructions.mjs"
+import {
+  appendDirectiveToResponsesInput,
+  appendDirectiveToUserMessage,
+  chatUserParts,
+  createKeywordSeam,
+  currentUserMessageIndex,
+  responsesUserParts,
+} from "./rigel-v2-native-keyword-seam.mjs"
 
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
 const ULTRAWORK_MARKER = "<ultrawork-mode>"
-const ULTRAWORK_KEYWORD = /\b(?:ultraworker|ultrawork|ulw)\b/i
 const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, DIRECTORY_AGENTS_MARKER]
 
 function safeSingleLine(value, limit = 120) {
@@ -69,34 +76,10 @@ export function childTaskPrompt(prompt) {
   return `${CHILD_TASK_MARKER}\n${String(prompt)}`
 }
 
-function hasUltraworkKeyword(messages) {
-  return messages.some((message) => message?.role === "user"
-    && typeof message.content === "string"
-    && ULTRAWORK_KEYWORD.test(message.content))
-}
-
 function isUltraworkMessage(message) {
   return message?.role === "system"
     && typeof message.content === "string"
     && message.content.includes(ULTRAWORK_MARKER)
-}
-
-/**
- * Detect the ultrawork keyword in the Responses API body. User text lives in
- * `body.input`: either a bare string, or `{type:"message", role:"user",
- * content:[{type:"input_text", text}]}` items produced by the V2 request
- * builder. Mirrors hasUltraworkKeyword for the Chat Completions shape.
- */
-function responsesHasUltraworkKeyword(body) {
-  if (typeof body?.input === "string") return ULTRAWORK_KEYWORD.test(body.input)
-  if (!Array.isArray(body?.input)) return false
-  return body.input.some((item) => {
-    if (item?.type !== "message" || item?.role !== "user") return false
-    const content = item.content
-    if (typeof content === "string") return ULTRAWORK_KEYWORD.test(content)
-    if (!Array.isArray(content)) return false
-    return content.some((part) => typeof part?.text === "string" && ULTRAWORK_KEYWORD.test(part.text))
-  })
 }
 
 /**
@@ -123,18 +106,44 @@ function mergeInstructions(instructions, injections) {
   return base ? `${base}\n\n${appended}` : appended
 }
 
+/**
+ * Provider/shape-aware translation of an Anthropic-style `thinking` config into
+ * the reasoning effort the OpenAI Responses body actually accepts. The Responses
+ * body rejects a `thinking` field (`Unknown parameter: 'thinking'`; live:
+ * gpt-6-luna, muse-spark), so an enabled thinking budget is carried as
+ * `reasoning.effort`, which preserves the observable effect (the model reasons)
+ * without leaking an unsupported key. Budget bands mirror the Claude
+ * thinking-budget scale used by the V1 owner (`agents/types.ts`
+ * CLAUDE_THINKING_BUDGET_TOKENS = 32000).
+ */
+export function reasoningEffortFromThinking(thinking) {
+  if (!thinking || typeof thinking !== "object" || Array.isArray(thinking)) return undefined
+  if (thinking.type !== "enabled") return undefined
+  const budget = thinking.budgetTokens
+  if (typeof budget !== "number" || !Number.isFinite(budget)) return "high"
+  if (budget >= 32000) return "high"
+  if (budget >= 16000) return "medium"
+  return "low"
+}
+
 function applyAgentTuning(body, tuning, shape) {
   if (!tuning || typeof tuning !== "object" || Array.isArray(tuning)) return undefined
   const payload = {}
   if (tuning.temperature !== undefined) payload.temperature = tuning.temperature
   if (tuning.top_p !== undefined) payload.top_p = tuning.top_p
-  if (tuning.thinking !== undefined) payload.thinking = tuning.thinking
   const effort = tuning.reasoning ?? tuning.reasoningEffort
   if (shape === "responses") {
     if (tuning.maxTokens !== undefined) payload.max_output_tokens = tuning.maxTokens
-    if (effort !== undefined) payload.reasoning = { ...(body.reasoning && typeof body.reasoning === "object" ? body.reasoning : {}), effort }
+    // `thinking` cannot be forwarded verbatim on this shape; carry its effect as
+    // `reasoning.effort`. An explicit reasoning/reasoningEffort always wins and
+    // is never overridden or duplicated by the thinking-derived fallback.
+    const responsesEffort = effort ?? reasoningEffortFromThinking(tuning.thinking)
+    if (responsesEffort !== undefined) payload.reasoning = { ...(body.reasoning && typeof body.reasoning === "object" ? body.reasoning : {}), effort: responsesEffort }
     if (tuning.textVerbosity !== undefined) payload.text = { ...(body.text && typeof body.text === "object" ? body.text : {}), verbosity: tuning.textVerbosity }
   } else {
+    // Chat Completions accepts the Anthropic-style `thinking` field verbatim
+    // (proven live on the opencode-go chat gateway).
+    if (tuning.thinking !== undefined) payload.thinking = tuning.thinking
     if (tuning.maxTokens !== undefined) payload.max_tokens = tuning.maxTokens
     if (effort !== undefined) payload.reasoning_effort = effort
     if (tuning.textVerbosity !== undefined) payload.text_verbosity = tuning.textVerbosity
@@ -157,6 +166,11 @@ function applyAgentTuning(body, tuning, shape) {
  * model on that provider. The callback runs for every session, before the
  * root/child guard, so a delegated child whose primary model is unavailable
  * also falls back.
+ *
+ * Task 12: the same boundary runs the keyword decision (`decideKeywordInjection`)
+ * and appends team/hyperplan/combo/ultrawork guidance to the current-turn user
+ * content (T1 proved that target is honored). The session-scoped keyword state
+ * is injected so the runtime can feed it `session.compacted` / `session.deleted`.
  */
 export function createNativeRequestHook({
   getDelegationRoster,
@@ -167,6 +181,11 @@ export function createNativeRequestHook({
   getAgentRequestBody,
   onAgentTuningApplied,
   ultraworkPrompt = "",
+  ultraworkPrompts,
+  keywordMessages,
+  keywordState: keywordStateOption,
+  disabledKeywords,
+  enabledExpansions,
   defaultUltrawork = false,
   getInitialDirectoryInstructions,
   getCategorySkillReminder,
@@ -175,7 +194,19 @@ export function createNativeRequestHook({
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
   }
-  const ultraworkSessions = new Set()
+  // Task 12: the unbounded session Set is replaced by the V1 state port (cap
+  // 256 FIFO, clear on session.deleted, restoration on compaction). The native
+  // runtime also owns this instance and feeds it the event stream; the seam
+  // binds the decision core and the current-turn injection target.
+  const keywordSeam = createKeywordSeam({
+    ultraworkPrompt,
+    ultraworkPrompts,
+    keywordMessages,
+    keywordState: keywordStateOption,
+    disabledKeywords,
+    enabledExpansions,
+    defaultUltrawork,
+  })
   return async (input) => {
     // `http.request` is shared by primary, title, compaction, and child
     // requests. Its `kind` is not a stable primary-session discriminator in
@@ -184,9 +215,10 @@ export function createNativeRequestHook({
     try { body = await input.request.clone().json() } catch { return }
     // Two provider body shapes reach this boundary. Chat Completions carries
     // `messages` (array of {role, content}); the OpenAI Responses API carries
-    // `input` (array of typed items) plus a single `instructions` string. The
-    // live V2 lab sends the Responses shape, so a `messages`-only guard would
-    // silently disable both the roster injection and the model fallback.
+    // `input` (array of typed items) plus a single `instructions` string. T1
+    // proved the live V2 lab sends Chat Completions; the Responses branch is
+    // kept working defensively so a Responses provider still gets the roster,
+    // the model fallback, and the keyword directive.
     const isChatShape = Array.isArray(body?.messages)
     const isResponsesShape = !isChatShape && Array.isArray(body?.input)
     if (!isChatShape && !isResponsesShape) return
@@ -239,14 +271,22 @@ export function createNativeRequestHook({
     // directory injector, not injected here; only the Hephaestus root-AGENTS
     // guidance remains a system-level injection.
     if (!isRoot) return
-    const explicitUltrawork = isChatShape ? hasUltraworkKeyword(body.messages) : responsesHasUltraworkKeyword(body)
-    if (sessionID && (defaultUltrawork || explicitUltrawork)) ultraworkSessions.add(sessionID)
-    const ultraworkActive = defaultUltrawork || explicitUltrawork || Boolean(sessionID && ultraworkSessions.has(sessionID))
+    const agentName = typeof input.agent === "string" ? input.agent : undefined
+    const modelID = typeof body.model === "string" && body.model.trim()
+      ? body.model
+      : (typeof input.model?.modelID === "string" ? input.model.modelID : undefined)
+    // T1 proved the honored injection target is the current-turn user content
+    // (Chat Completions); the Responses shape mirrors it defensively.
+    const keywordParts = isChatShape ? chatUserParts(body.messages) : responsesUserParts(body)
+    const { decision, directive } = keywordSeam.decide({ parts: keywordParts, sessionID, agent: agentName, modelID })
+    // The core owns the decision; this V1-pattern probe confirms the raw body
+    // before a persistent ultrawork record is created, so `ultraworker` never
+    // seeds one.
+    const explicitConfirmed = keywordSeam.confirmExplicit({ decision, body, isChatShape })
     const roster = formatDelegationRoster(agents, categories)
     onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
     const injections = []
     if (initialDirectoryGuidance) injections.push(initialDirectoryGuidance)
-    if (ultraworkActive && ultraworkPrompt.trim()) injections.push(ultraworkPrompt)
     if (roster) injections.push(roster)
     // V1's category-skill reminder is injected once per session at the system
     // boundary. It is consumed on the same pass so a repeated request never
@@ -257,18 +297,31 @@ export function createNativeRequestHook({
     if (categorySkillReminder) injections.push(categorySkillReminder)
     if (isChatShape) {
       const messages = body.messages.filter((message) => !isRosterMessage(message) && !isUltraworkMessage(message) && !isDirectoryInstructionMessage(message))
+      if (directive) {
+        const userIndex = currentUserMessageIndex(messages)
+        if (userIndex < 0 || !appendDirectiveToUserMessage(messages[userIndex], directive)) injections.push(directive)
+      }
       if (injections.length > 0) {
         const insertionIndex = messages.findIndex((message) => message?.role !== "system")
         messages.splice(insertionIndex < 0 ? messages.length : insertionIndex, 0, ...injections.map((content) => ({ role: "system", content })))
       }
       body.messages = messages
     } else {
-      // Responses: the roster, the Hephaestus root-AGENTS guidance, the ultrawork
-      // directive, and the category-skill reminder are all system-level text, so
-      // they merge into `instructions`. `input` is left untouched.
+      // Responses: everything except a writable user input part is system-level
+      // text and merges into `instructions`. `input` is only touched when the
+      // keyword directive can be appended to its newest user item.
+      const directiveApplied = directive ? appendDirectiveToResponsesInput(body, directive) : false
+      if (directive && !directiveApplied) injections.push(directive)
       body.instructions = mergeInstructions(body.instructions, injections)
     }
     input.request = new Request(input.request, { body: JSON.stringify(body) })
+    // V1 persists the explicit record only when guidance was durably added; the
+    // marker also refreshes a live record after a compact replay.
+    keywordSeam.commit({
+      decision,
+      sessionID,
+      shouldPersist: decision.explicitPersistence && explicitConfirmed && directive.length > 0,
+    })
     if (categorySkillReminder) onCategorySkillReminderConsumed?.(sessionID)
   }
 }
