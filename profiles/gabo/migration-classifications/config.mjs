@@ -21,18 +21,18 @@ export default {
     classification: "Migrar",
     rationale:
       "`prunePluginView` de `packages/omo-opencode/src/config/prune-plugin-view.ts` descarta en runtime los valores inválidos de una vista con una advertencia por clave, apoyándose en `@oh-my-opencode/omo-config-core`. Se migra al cargador nativo V2 para conservar la degradación parcial, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode.",
-    futureEvidence: "contract:qa-v2-config-contract.mjs",
+    futureEvidence: "task:task:38",
   },
   schema: {
     classification: "Migrar",
     rationale:
       "El esquema Zod de `packages/omo-opencode/src/config/schema/` es el contrato de claves y defaults que el runtime nativo V2 debe leer desde `omo.jsonc`. Se migra como contrato de configuración, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode.",
-    futureEvidence: "contract:qa-v2-config-contract.mjs",
+    futureEvidence: "task:task:38",
   },
   validate: {
     classification: "Migrar",
     rationale:
       "`validatePluginConfig` de `packages/omo-opencode/src/config/validate.ts` carga la cadena `omo.jsonc`, fusiona vistas, protege campos de usuario y migra claves legadas en runtime. Se migra al cargador nativo V2, respetando el nonGoal de `profiles/gabo/integration-manifest.json` de no instalar en la configuración activa de OpenCode.",
-    futureEvidence: "contract:qa-v2-config-contract.mjs",
+    futureEvidence: "task:task:38",
   },
 }

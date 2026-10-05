@@ -31,13 +31,13 @@ export default {
     classification: "Equivale a builtin V2",
     rationale:
       "El builtin `glob` de V2 cubre la búsqueda por patrón de `tools/glob/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo.",
-    futureEvidence: "contract:qa-v2-builtin-parity.mjs",
+    futureEvidence: "task:37",
   },
   grep: {
     classification: "Equivale a builtin V2",
     rationale:
       "El builtin `grep` de V2 cubre la búsqueda por contenido de `tools/grep/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo.",
-    futureEvidence: "contract:qa-v2-builtin-parity.mjs",
+    futureEvidence: "task:37",
   },
   "hashline-edit": {
     classification: "Migrar",

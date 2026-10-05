@@ -26,13 +26,13 @@ export default {
     classification: "Adaptar",
     rationale:
       "La limpieza de estado Codex Light de `packages/omo-opencode/src/cli/cleanup.ts` se adapta o se reduce, porque el CLI de OpenCode no desinstala artefactos gestionados por el plugin.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "cleanup-command": {
     classification: "Adaptar",
     rationale:
       "El cableado del comando cleanup/uninstall de `packages/omo-opencode/src/cli/cleanup-command.ts` se adapta dentro del subconjunto reducido del CLI, documentando que OpenCode no tiene un comando equivalente.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "cli-installer": {
     classification: "Adaptar",
@@ -44,25 +44,25 @@ export default {
     classification: "Interno de build (sin superficie de runtime)",
     rationale:
       "El programa Commander de `packages/omo-opencode/src/cli/cli-program.ts` es el cableado de entrada del CLI y no aporta comportamiento de runtime propio al espejo V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "codex-ulw-loop": {
     classification: "Adaptar",
     rationale:
       "El comando ulw-loop de Codex Light en `packages/omo-opencode/src/cli/codex-ulw-loop.ts` se adapta o se reduce, porque pertenece a la edición Codex y no al runtime nativo de OpenCode V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "config-manager": {
     classification: "Adaptar",
     rationale:
       "Las utilidades de configuración de `packages/omo-opencode/src/cli/config-manager/` (registro de plugin, JSONC, versiones) se adaptan al esquema unificado de V2, que resuelve la configuración de otra forma.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "config-migrate": {
     classification: "Adaptar",
     rationale:
       "La migración de configuración legada de `packages/omo-opencode/src/cli/config-migrate.ts` se adapta al motor de migración de la configuración unificada de V2, sin comando equivalente en OpenCode.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   doctor: {
     classification: "Migrar",
@@ -100,31 +100,31 @@ export default {
     classification: "Adaptar",
     rationale:
       "El aprovisionamiento del binario sg de `packages/omo-opencode/src/cli/install-ast-grep-sg.ts` se adapta al instalador nativo, porque en V2 ast-grep se sirve como skill y no requiere este paso separado.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "install-codex": {
     classification: "Adaptar",
     rationale:
       "La instalación de la edición Codex Light de `packages/omo-opencode/src/cli/install-codex/` se adapta o se reduce, porque pertenece al harness Codex y queda fuera del espejo nativo de OpenCode V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "install-native": {
     classification: "Adaptar",
     rationale:
       "El instalador de OmO Native de `packages/omo-opencode/src/cli/install-native/` se adapta o se reduce, porque instala otro runtime distinto del espejo nativo de OpenCode V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "install-native-dev": {
     classification: "Interno de build (sin superficie de runtime)",
     rationale:
       "El envoltorio de instalación nativa de desarrollo de `packages/omo-opencode/src/cli/install-native-dev/index.ts` solo reenvía al instalador de senpi y no aporta comportamiento de runtime propio.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "install-validators": {
     classification: "Interno de build (sin superficie de runtime)",
     rationale:
       "Las validaciones de plataforma y opciones de `packages/omo-opencode/src/cli/install-validators.ts` son comprobaciones de build del instalador, sin superficie de runtime propia en V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "mcp-oauth": {
     classification: "Adaptar",
@@ -137,7 +137,7 @@ export default {
     classification: "Adaptar",
     rationale:
       "La verificación de versión mínima de `packages/omo-opencode/src/cli/minimum-opencode-version.ts` se adapta al binario V2 y a su versión mínima verificada.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "model-fallback": {
     classification: "Adaptar",
@@ -164,13 +164,13 @@ export default {
     classification: "Interno de build (sin superficie de runtime)",
     rationale:
       "La bandera de plataforma nativa de desarrollo de `packages/omo-opencode/src/cli/native-dev-platform-flag.ts` solo decide opciones del instalador y no expone comportamiento de runtime.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "native-edition-hint": {
     classification: "Adaptar",
     rationale:
       "El aviso de la edición OmO Native de `packages/omo-opencode/src/cli/native-edition-hint.ts` se adapta al instalador nativo, porque promociona un runtime distinto del espejo V2.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "openai-only-model-catalog": {
     classification: "Adaptar",
@@ -197,25 +197,25 @@ export default {
     classification: "Adaptar",
     rationale:
       "El refresco de la caché de capacidades de modelos de `packages/omo-opencode/src/cli/refresh-model-capabilities.ts` se adapta al runtime nativo, que resuelve las capacidades por otra vía.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   run: {
     classification: "Equivale a builtin V2",
     rationale:
       "El lanzador de sesión no interactiva de `packages/omo-opencode/src/cli/run/runner.ts` queda cubierto por el comando nativo `opencode run`; la continuidad V1 se rastrea en el modo continuations de la tarea 22.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "runtime-commands": {
     classification: "Adaptar",
     rationale:
       "El registro de comandos de runtime de `packages/omo-opencode/src/cli/runtime-commands.ts` se adapta al subconjunto reducido del CLI nativo, conservando solo los comandos con equivalente.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "star-request": {
     classification: "Adaptar",
     rationale:
       "La solicitud de estrella en GitHub de `packages/omo-opencode/src/cli/star-request.ts` se adapta o se reduce, porque es una cortesía del instalador sin equivalente en el CLI de OpenCode.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
   "tui-install-prompts": {
     classification: "Adaptar",
@@ -233,6 +233,6 @@ export default {
     classification: "Adaptar",
     rationale:
       "El barrido de worktrees obsoletos de `packages/omo-opencode/src/cli/worktree-sweep/worktree-sweep.ts` se adapta al flujo de PR del espejo, ya que el CLI de OpenCode no barre worktrees.",
-    futureEvidence: "contract:qa-v2-cli-reduction.mjs",
+    futureEvidence: "task:38",
   },
 }

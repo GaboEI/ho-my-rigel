@@ -40,10 +40,10 @@ export default {
       "`rigel-v2-auto-slash-command-bridge.mjs`; `rigel-v2-auto-slash-command-bridge.test.mjs`; `rigel-v2-native.mjs` (hook prompt); `live-qa/wave3-auto-slash.md`",
   },
   "auto-update-checker": {
-    classification: "Migrar",
-    status: "Incompatible (con evidencia)",
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
     rationale:
-      "El chequeo V1 instala o consulta actualizaciones y publica toasts de versión. La API oficial de plugins V2 publica transformaciones, hooks, sesiones, herramientas y eventos, pero no una API de actualización ni de toast; no existe una superficie V2 segura para reproducir ese efecto del host.",
+      "REFUTADO por la documentacion oficial V2 (verificacion del Juez 2026-10-05): el efecto es alcanzable con superficies oficiales (`ctx.app.version`, `plugin.check`/`plugin.update` y `context.ui.toast.show`/`context.attention.notify` en companion CLI plugins), asi que la etiqueta previa de incompatibilidad queda refutada. El efecto V1 (aviso de version nueva en el arranque) se adapta: chequeo diario con cache en storage + aviso por `context.system`. Dueno: T31 del plan maestro.",
     futureEvidence: "OpenCode V2 Plugins API: Overview/API/Hooks, sin servicio de actualización ni toast; incompatibilidad explícita, no un puntero a tarea cerrada.",
   },
   "category-skill-reminder": {
@@ -149,9 +149,10 @@ export default {
   },
   "monitor-status-injector": {
     classification: "Migrar",
+    status: "Pendiente de ejecución",
     rationale:
-      "El inyector V1 en `hooks/monitor-status-injector/hook.ts` añade el estado del monitor a los mensajes; se migra inyectando el bloque en la frontera http.request del runtime nativo V2, condicionado al gate monitor.enabled que está apagado por defecto.",
-    futureEvidence: "gate:monitor.enabled",
+      "El inyector V1 en `hooks/monitor-status-injector/hook.ts` añade el estado del monitor vigilado al turno. Sin implementacion nativa hoy (sin modulo ni estado). Dueno: T32 del plan maestro; estrategia: inyector sobre `context.messages` con el patron ya probado de los inyectores team (`rigel-v2-team-gating.mjs`), bajo el gate `monitor.enabled`.",
+    futureEvidence: "dueno: T32; gate:monitor.enabled",
   },
   "native-edition-nudge": {
     classification: "Migrar",
@@ -159,6 +160,43 @@ export default {
       "El nudge V1 en `hooks/native-edition-nudge/hook.ts` decide y muestra un aviso de una sola vez hacia la edición nativa; se migra al arranque del runtime nativo V2 con estado persistente y toast de inicio.",
     futureEvidence: "task:25",
   },
+
+  "bash-file-read-guard": {
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
+    rationale:
+      "El guard V1 (`hooks/bash-file-read-guard.ts`) avisa cuando un comando bash simple usa cat/head/tail para leer un archivo, prefiriendo la tool Read. Verificado: las reglas `tool.execute.before` nativas (`rigel-v2-native-tool-before.mjs`) no lo incluyen. Dueno: T38 del plan maestro (regla before con el mensaje V1 y los tres patrones).",
+    futureEvidence: "dueno: T38; `rigel-v2-native-tool-before.mjs`; V1 `hooks/bash-file-read-guard.ts:6-20`",
+  },
+  "empty-task-response-detector": {
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
+    rationale:
+      "El detector V1 (`hooks/empty-task-response-detector.ts`) advierte cuando una invocacion de task termina sin respuesta. Verificado: el resultado de `rigel_task` nativo no aplica este aviso. Dueno: T38 del plan maestro (regla after sobre rigel_task con el mensaje V1).",
+    futureEvidence: "dueno: T38; `rigel-v2-native.mjs` (resultado de rigel_task); V1 `hooks/empty-task-response-detector.ts:5-19`",
+  },
+  "tool-output-truncator": {
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
+    rationale:
+      "El truncador V1 (`hooks/tool-output-truncator.ts`) recorta la salida de grep/glob/lsp_diagnostics/interactive_bash/skill_mcp/webfetch sobre un limite de tokens (50k general, 10k webfetch). Verificado: el runtime nativo solo trunca lecturas de directorio (`rigel-v2-directory-instructions.mjs`); la salida de tools no se trunca. Dueno: T38 del plan maestro (regla after con el truncador dinamico V1).",
+    futureEvidence: "dueno: T38; `rigel-v2-directory-instructions.mjs` (truncador inline existente, solo directorio); V1 `hooks/tool-output-truncator.ts:5-24`",
+  },
+  "session-notification": {
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
+    rationale:
+      "La notificacion V1 (`hooks/session-notification/`) avisa al usuario fuera del contexto del modelo (fin de sesion, input-needed, sonido por plataforma). Dueno: T33 del plan maestro; estrategia decision de mantenedor (espejo total): companion CLI plugin de V2 con `context.ui.toast.show`/`context.attention.notify`.",
+    futureEvidence: "dueno: T33; superficie V2 oficial: companion CLI plugin",
+  },
+  "preemptive-compaction": {
+    classification: "Adaptar",
+    status: "Pendiente de ejecución",
+    rationale:
+      "La compactacion preventiva V1 (`hooks/preemptive-compaction/`, gate experimental apagado por defecto) compacta antes del limite de contexto. Dueno: T34 del plan maestro; estrategia decision de mantenedor (espejo total): hooks `context`/`compaction` + `session.compact` (patron ya probado del context-limit recovery en `rigel-v2-native-phase4-events.mjs`).",
+    futureEvidence: "dueno: T34; `rigel-v2-native-phase4-events.mjs` (patron session.compact)",
+  },
+
   "no-hephaestus-non-gpt": {
     classification: "Migrar",
     status: "Migrado",

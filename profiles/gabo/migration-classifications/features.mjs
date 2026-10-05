@@ -41,7 +41,7 @@ export default {
     classification: "Migrar",
     rationale:
       "Las plantillas de comandos de `features/builtin-commands/` (refactor, init-deep, handoff, ulw-loop) se migran al modelo de comandos de V2 conservando los mismos disparadores y cuerpos.",
-    futureEvidence: "contract:qa-v2-builtin-commands-contract.mjs",
+    futureEvidence: "dueno: T35 del plan maestro (registrar `refactor`, `remove-ai-slops`, `handoff` e `hyperplan` como comandos nativos y crear el contrato de comandos builtin); resto de comandos ya registrados via `ctx.command.transform` en `rigel-v2-native.mjs`",
   },
   "claude-code-agent-loader": {
     classification: "Migrar",
@@ -53,7 +53,7 @@ export default {
     classification: "Migrar",
     rationale:
       "La carga de comandos desde `.opencode/commands/` y plugins de Claude Code de `features/claude-code-command-loader/` sobre `packages/claude-code-compat-core/` se migra al modelo de comandos de V2 junto con builtin-commands.",
-    futureEvidence: "contract:qa-v2-builtin-commands-contract.mjs",
+    futureEvidence: "task:task:35",
   },
   "claude-code-mcp-loader": {
     classification: "Migrar",
@@ -85,7 +85,7 @@ export default {
     classification: "Interno de build (sin superficie de runtime)",
     rationale:
       "El inyector de mensajes de sistema de `features/hook-message-injector/` es un helper de soporte consumido por otros hooks y no expone comportamiento propio; viaja con los hooks que lo usan.",
-    futureEvidence: "contract:qa-v2-hook-message-injector-contract.mjs",
+    futureEvidence: "task:task:29",
   },
   "mcp-oauth": {
     classification: "Migrar",
@@ -105,7 +105,7 @@ export default {
     classification: "Migrar",
     rationale:
       "El aviso de TUI de `features/native-edition-nudge/` que ofrece instalar la edición nativa se migra con su diálogo, acciones y estado de snooze al runtime nativo V2.",
-    futureEvidence: "contract:qa-v2-native-edition-nudge-contract.mjs",
+    futureEvidence: "task:task:35",
   },
   "opencode-runtime-skills": {
     classification: "Migrar",
@@ -125,7 +125,7 @@ export default {
     classification: "Migrar",
     rationale:
       "La inyección del proveedor OpenGateway de `features/opengateway-provider/`, activada solo con credencial real y con el catálogo empaquetado, se migra al modelo de configuración de proveedores de V2.",
-    futureEvidence: "contract:qa-v2-opengateway-provider-contract.mjs",
+    futureEvidence: "task:task:24",
   },
   "run-continuation-state": {
     classification: "Migrar",
@@ -145,7 +145,7 @@ export default {
     classification: "Migrar",
     rationale:
       "El gestor de notificaciones de progreso de tareas de `features/task-toast-manager/` se migra a los avisos de la TUI de V2 conservando el seguimiento de estado y la información de fallback de modelo.",
-    futureEvidence: "contract:qa-v2-task-toast-contract.mjs",
+    futureEvidence: "task:task:33",
   },
   "team-mode": {
     classification: "Migrar",

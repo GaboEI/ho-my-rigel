@@ -64,8 +64,8 @@ export default {
     classification: "Adaptar",
     status: "Migrado parcialmente",
     rationale:
-      "`plugin/event.ts` cablea el ciclo de vida de sesion, openclaw y el fallback reactivo. V2 no expone `event`; el runtime nativo se suscribe a los eventos nativos y adapta el handoff de background, la limpieza de `session.deleted` y el fallback reactivo (`applyReactiveFallback` en `rigel-v2-native.mjs` + `rigel-v2-native-model-chains.mjs`). Gap exacto: el dispatch openclaw no tiene puerto (sin consumidor en este perfil). Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
-    futureEvidence: "`rigel-v2-background-manager.mjs`; `rigel-v2-native.mjs`; `rigel-v2-native-model-chains.mjs`; destino openclaw: Fase 5",
+      "`plugin/event.ts` cablea el ciclo de vida de sesion, openclaw y el fallback reactivo. V2 no expone `event`; el runtime nativo se suscribe a los eventos nativos y adapta el handoff de background, la limpieza de `session.deleted` y el fallback reactivo (`applyReactiveFallback` en `rigel-v2-native.mjs` + `rigel-v2-native-model-chains.mjs`). Gap exacto: el dispatch openclaw no tiene puerto (sin consumidor en este perfil). Divergencia de eventos: la actividad por `message.updated`/`message.removed` no se consume en el event loop nativo (el polling de tmux-viz solo ve los eventos reenviados); decision de espejo pendiente en T36. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
+    futureEvidence: "`rigel-v2-background-manager.mjs`; `rigel-v2-native.mjs`; `rigel-v2-native-model-chains.mjs`; destino openclaw: Fase 5; divergencia message.updated/message.removed (no consumidos en el event loop nativo): decision de espejo pendiente, dueno T36",
   },
   "event-error-utils": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -199,9 +199,9 @@ export default {
   },
   "tool-definition": {
     classification: "Adaptar",
-    status: "Incompatible (con evidencia)",
+    status: "Pendiente de ejecución",
     rationale:
-      "`plugin/tool-definition.ts` aplica el override de descripcion de todos. V2.0.22 no expone `tool.definition` ni publica `todowrite`; la reescritura de `body.tools[].description` en `http.request` no llega al modelo (probado en T1) y `tool.transform` es add-only, de modo que un `editor.add` con el mismo nombre crea una entrada que el modelo nunca recibe. Ninguna ruta probada entrega la descripcion reescrita.",
+      "REFUTADO por la documentacion oficial V2 (verificacion del Juez 2026-10-05): `ctx.tool.transform` expone un `ToolEditor` con `update`/`add`/`remove`, asi que el override de descripcion no necesita el seam `tool.definition` de V1 ni la via `http.request` (que no llego al modelo, probado en T1). El efecto (todo-description-override) se adapta aplicando el override en el registro nativo de las definiciones que el runtime crea. Dueno: T31 del plan maestro.",
     futureEvidence:
       "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`; `.omo/evidence/20261005-task-20/t15-request-steps-verdict.md`",
   },

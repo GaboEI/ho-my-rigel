@@ -263,7 +263,7 @@ function classificationRows(items, classMap, overrides = {}, unwired = new Set()
   return items.map((item) => renderRow(item, classMap, overrides, unwired)).join("\n")
 }
 
-const hooks = directoriesWithIndex(hooksRoot)
+const hooks = [...directoriesWithIndex(hooksRoot), ...STANDALONE_HOOKS]
 const tools = directoriesWithIndex(toolsRoot)
 const modes = ["default Ultrawork", "keyword Ultrawork / ULW", "Hyperplan", "Team mode", "Goal", "continuations", "background-task handoff"]
 const known = [
