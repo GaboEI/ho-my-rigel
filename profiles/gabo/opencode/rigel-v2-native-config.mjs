@@ -55,7 +55,7 @@ export const NATIVE_GOAL_DEFAULTS = Object.freeze({
 // top level of an omo.jsonc layer is stripped by the real loader, so it must not
 // reach the plugin view here either.
 const LAYER_KEYS = new Set([
-  "formatOnMutation", "gateway", "$schema", "categories", "agents", "git_master",
+  "formatOnMutation", "gateway", "$schema", "categories", "agents", "git_master", "disabled_mcps", "mcp_env_allowlist",
   "task", "teams", "models", "model_profiles", "model_profile", "memory",
   "telemetry", "computer", "disabled_skills", "[opencode]", "[native]", "[senpi]",
   "[codex]", "[omo]", "profiles", "_migrations", "legacy_migrations",
@@ -68,13 +68,13 @@ const NON_PLUGIN_FIELDS = new Set(["legacy_migrations", "models", "task", "teams
 const PROFILE_KEYS = new Set(["categories", "disabled_skills", "[opencode]", "[native]", "[senpi]", "[codex]"])
 
 const TARGET_KEYS = new Set([
-  "monitor", "goal", "experimental", "disabled_tools", "disabled_agents",
+  "monitor", "goal", "experimental", "team_mode", "skills", "disabled_tools", "disabled_agents", "disabled_mcps",
   "disabled_skills", "categories", "ralph_loop", "hashline_edit",
 ])
 
 const MAX_PROJECT_CONFIG_DIRECTORY_DEPTH = 256
 
-const STRING_ARRAY_KEYS = new Set(["disabled_tools", "disabled_agents", "disabled_skills"])
+const STRING_ARRAY_KEYS = new Set(["disabled_tools", "disabled_agents", "disabled_skills", "disabled_mcps", "mcp_env_allowlist"])
 
 const DEFAULT_READ_FILE_SYSTEM = {
   existsSync,
@@ -406,6 +406,10 @@ function validateExperimental(value, path, diagnostics) {
     if (typeof value.task_system === "boolean") parsed.task_system = value.task_system
     else warn(diagnostics, `config: ${path}: experimental.task_system ignored (invalid value)`)
   }
+  if ("max_tools" in value) {
+    if (intInRange(value.max_tools, 1, 1000)) parsed.max_tools = value.max_tools
+    else warn(diagnostics, `config: ${path}: experimental.max_tools ignored (invalid value)`)
+  }
   // V1 migrates experimental.hashline_edit up to the root key; keep the legacy
   // placement readable so an older profile still enables the hashline surface.
   if ("hashline_edit" in value) {
@@ -413,6 +417,27 @@ function validateExperimental(value, path, diagnostics) {
     else warn(diagnostics, `config: ${path}: experimental.hashline_edit ignored (invalid value)`)
   }
   return parsed
+}
+
+function validateTeamMode(value, path, diagnostics) {
+  if (!isPlainRecord(value)) {
+    warn(diagnostics, `config: ${path}: team_mode ignored (invalid value)`)
+    return undefined
+  }
+  const validated = {}
+  if ("enabled" in value && typeof value.enabled !== "boolean") {
+    warn(diagnostics, `config: ${path}: team_mode.enabled ignored (invalid value)`)
+  } else if ("enabled" in value) {
+    validated.enabled = value.enabled
+  }
+  // tmux visualization gate (rewritten feature): a boolean that rides with the
+  // team_mode block so the generator can materialize it into the manifest.
+  if ("tmux_visualization" in value && typeof value.tmux_visualization !== "boolean") {
+    warn(diagnostics, `config: ${path}: team_mode.tmux_visualization ignored (invalid value)`)
+  } else if ("tmux_visualization" in value) {
+    validated.tmux_visualization = value.tmux_visualization
+  }
+  return validated
 }
 
 const CATEGORY_STRING_FIELDS = ["description", "model", "variant", "prompt_append"]
@@ -521,6 +546,12 @@ function parseConfigView(view, diagnostics) {
     } else if (key === "experimental") {
       const section = validateExperimental(value, view.path, diagnostics)
       if (section !== undefined) parsed.experimental = section
+    } else if (key === "team_mode") {
+      const section = validateTeamMode(value, view.path, diagnostics)
+      if (section !== undefined) parsed.team_mode = section
+    } else if (key === "skills") {
+      if (isPlainRecord(value)) parsed.skills = sanitizeValue(value)
+      else warn(diagnostics, `config: ${view.path}: skills ignored (invalid value)`)
     } else if (key === "hashline_edit") {
       if (typeof value === "boolean") parsed.hashline_edit = value
       else warn(diagnostics, `config: ${view.path}: hashline_edit ignored (invalid value)`)
@@ -545,6 +576,7 @@ function mergeConfigViews(base, override) {
     disabled_tools: mergeUniqueStrings(base.disabled_tools, override.disabled_tools),
     disabled_agents: mergeUniqueStrings(base.disabled_agents, override.disabled_agents),
     disabled_skills: mergeUniqueStrings(base.disabled_skills, override.disabled_skills),
+    disabled_mcps: mergeUniqueStrings(base.disabled_mcps, override.disabled_mcps),
     categories: deepMerge(base.categories, override.categories),
   }
 }
@@ -661,6 +693,8 @@ function deepFreeze(value) {
  *   goal: { enabled: boolean, auto_start: boolean, default_max_iterations: number },
  *   experimental: { task_system: boolean },
  *   disabled: { tools: string[], agents: string[], skills: string[] },
+ *   disabled_mcps: string[],
+ *   mcp_env_allowlist: string[],
  *   categories: Record<string, unknown>,
  *   diagnostics: string[],
  *   sources: { path: string, scope: string, loaded: boolean }[],
@@ -675,6 +709,7 @@ export function resolveNativePluginConfig(options = {}) {
   const candidates = resolveLayerPaths({ cwd: directory, env, fileSystem })
   const sources = []
   const layers = []
+  let userMcpEnvAllowlist = []
 
   for (const candidate of candidates) {
     if (!fileSystem.existsSync(candidate.path)) {
@@ -693,7 +728,12 @@ export function resolveNativePluginConfig(options = {}) {
       sources.push({ path: candidate.path, scope: candidate.scope, loaded: false })
       continue
     }
-    layers.push({ config: layer, path: candidate.path })
+    layers.push({ config: layer, path: candidate.path, scope: candidate.scope })
+    // V1 security rule: the MCP env allowlist is user-layer only, so a project
+    // layer can never extend it. Union comes only from user-scope layers.
+    if (Array.isArray(layer.mcp_env_allowlist) && candidate.scope === "user") {
+      userMcpEnvAllowlist = [...new Set([...userMcpEnvAllowlist, ...layer.mcp_env_allowlist])]
+    }
     sources.push({ path: candidate.path, scope: candidate.scope, loaded: true })
   }
 
@@ -736,7 +776,11 @@ export function resolveNativePluginConfig(options = {}) {
   const view = {
     monitor,
     goal,
-    experimental: { task_system: config.experimental?.task_system ?? false },
+    experimental: {
+      task_system: config.experimental?.task_system ?? false,
+      max_tools: config.experimental?.max_tools,
+    },
+    team_mode: config.team_mode,
     // Root hashline_edit is authoritative; the legacy experimental placement is
     // folded in when the root key is absent, mirroring V1's config migration.
     hashline_edit: config.hashline_edit === true || config.experimental?.hashline_edit === true,
@@ -745,6 +789,9 @@ export function resolveNativePluginConfig(options = {}) {
       agents: config.disabled_agents ?? [],
       skills: config.disabled_skills ?? [],
     },
+    disabled_mcps: config.disabled_mcps ?? [],
+    // User-layer only (V1 parity): never merged from project layers.
+    mcp_env_allowlist: userMcpEnvAllowlist,
     categories: config.categories ?? {},
     diagnostics,
     sources,
@@ -756,7 +803,7 @@ export function resolveNativePluginConfig(options = {}) {
 // Reads materialized gates from the generated agent manifest so a tool
 // family is registered only when its gate is enabled. Distinct from
 // resolveNativePluginConfig (which reads omo.jsonc directly).
-const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "interactive_bash", "hashline_edit"])
+const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "team_mode", "interactive_bash", "hashline_edit"])
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -802,6 +849,27 @@ export function readNativeDisabled(manifest) {
 }
 
 /**
+ * Read the materialized `experimental.max_tools` cap. Returns undefined when
+ * unset (no trimming) or when the manifest carries a non-integer value, so the
+ * trimming caller can treat "unset" and "invalid" the same way: no cap.
+ */
+export function readNativeTmuxVisualization(manifest) {
+  return manifest?.metadata?.global?.tmuxVisualization === true
+}
+
+export function readNativeMcpPolicy(manifest) {
+  const raw = manifest?.metadata?.global?.mcp
+  const source = isPlainObject(raw) ? raw : {}
+  const normalize = (value) => Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
+  return { disabled: normalize(source.disabled), envAllowlist: normalize(source.envAllowlist) }
+}
+
+export function readNativeMaxTools(manifest) {
+  const value = manifest?.metadata?.global?.maxTools
+  return Number.isInteger(value) && value >= 1 ? value : undefined
+}
+
+/**
  * Convenience predicate for a single gate. Kept separate from
  * `readNativeGates` so a caller that only needs one gate does not allocate the
  * whole record, and so the "unknown gate is off" rule lives in one place.
@@ -828,6 +896,7 @@ export function deriveNativeGates(view) {
     monitor: view?.monitor?.enabled === true,
     goal: view?.goal?.enabled === true,
     task_system: view?.experimental?.task_system === true,
+    team_mode: view?.team_mode?.enabled === true,
     interactive_bash: !disabledTools.includes("interactive_bash"),
     hashline_edit: view?.hashline_edit === true,
   }

@@ -73,6 +73,17 @@ export function parseGoal(value) {
   }
 }
 
+export function parseGoalCommand(rawPrompt) {
+  const prompt = typeof rawPrompt === "string" ? rawPrompt.trim() : ""
+  if (prompt === "" || prompt.toLowerCase() === "show") return { kind: "show" }
+  switch (prompt.toLowerCase()) {
+    case "pause": return { kind: "setStatus", status: "paused" }
+    case "resume": return { kind: "setStatus", status: "active" }
+    case "clear": return { kind: "clear" }
+    default: return { kind: "setObjective", objective: prompt }
+  }
+}
+
 function parseGoalFile(value) {
   if (!isPlainObject(value) || value.version !== GOAL_STORE_VERSION) return null
   if (value.goal === null) return null

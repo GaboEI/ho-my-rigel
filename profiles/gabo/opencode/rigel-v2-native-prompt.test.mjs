@@ -1,7 +1,70 @@
 import { expect, test } from "bun:test"
 import { callableAgents } from "./rigel-v2-native-core.mjs"
 import { createKeywordState } from "./rigel-v2-keyword-state.mjs"
-import { createNativeRequestHook, formatDelegationRoster, reasoningEffortFromThinking } from "./rigel-v2-native-prompt.mjs"
+import { createNativeContextHook, createNativeModelRequestHook, createNativeRequestHook, formatDelegationRoster, reasoningEffortFromThinking } from "./rigel-v2-native-prompt.mjs"
+import { createNativeContextCollector, createNativeContextMessageConsumer } from "./rigel-v2-context-collector.mjs"
+
+test("context hook adds root roster to system and agent tuning to options", async () => {
+  const hook = createNativeContextHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    getAgentRequestBody: () => ({ temperature: 0.1, maxTokens: 4096 }),
+  })
+  const event = {
+    sessionID: "ses_root",
+    agent: "Sisyphus - ultraworker",
+    model: { providerID: "openai", modelID: "gpt-6" },
+    system: [{ type: "text", text: "base" }],
+    messages: [{ role: "user", content: "delegate this" }],
+    options: {},
+  }
+  await hook(event)
+  expect(event.system).toContainEqual(expect.objectContaining({ text: expect.stringContaining("<rigel-native-delegation-roster>") }))
+  expect(event.options).toMatchObject({ temperature: 0.1, max_tokens: 4096 })
+})
+
+test("context collector orders, replaces, consumes, and injects only into the last real user message", async () => {
+  const collector = createNativeContextCollector()
+  collector.register("ses_root", { source: "custom", id: "shared", content: "old", priority: "low" })
+  collector.register("ses_root", { source: "custom", id: "shared", content: "high", priority: "high" })
+  collector.register("ses_root", { source: "rules-injector", id: "rule", content: "critical", priority: "critical" })
+  const pending = collector.getPending("ses_root")
+  expect(pending.merged).toBe("critical\n\n---\n\nhigh")
+  const consume = createNativeContextMessageConsumer(collector)
+  const event = {
+    sessionID: "ses_root",
+    messages: [
+      { role: "user", content: "synthetic", synthetic: true },
+      { role: "user", content: "real" },
+    ],
+  }
+  expect(await consume(event)).toBe(true)
+  expect(event.messages[0].content).toBe("synthetic")
+  expect(event.messages[1].content).toBe("critical\n\n---\n\nhigh\n\n---\n\nreal")
+  expect(collector.hasPending("ses_root")).toBe(false)
+  collector.register("ses_root", { source: "custom", id: "no-text", content: "pending" })
+  expect(await consume({ sessionID: "ses_root", messages: [{ role: "assistant", content: "no user" }] })).toBe(false)
+  expect(collector.hasPending("ses_root")).toBe(true)
+  expect(collector.consume("ses_root").hasContent).toBe(true)
+})
+
+test("model request hook applies internal initiator headers and same-provider fallback", async () => {
+  const hook = createNativeModelRequestHook({
+    getHeaders: () => ({ "x-initiator": "agent" }),
+    resolveModel: async (input) => {
+      expect(input).toEqual({ sessionID: "ses_root", agent: "explore", model: "primary", sameProviderAs: "openai" })
+      return { providerID: "openai", id: "fallback" }
+    },
+  })
+  const event = {
+    sessionID: "ses_root",
+    agent: "explore",
+    model: { providerID: "openai", modelID: "primary" },
+    headers: {},
+  }
+  await hook(event)
+  expect(event.headers).toEqual({ "x-initiator": "agent" })
+  expect(event.model).toMatchObject({ providerID: "openai", modelID: "fallback", id: "fallback" })
+})
 
 test("delegation roster renders each category's description and caller guidance", () => {
   const roster = formatDelegationRoster(

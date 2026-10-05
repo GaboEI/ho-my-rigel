@@ -13,7 +13,7 @@
  */
 
 import { agentChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
-import { mergePermissionRules, translateV1Permissions } from "./rigel-v2-native-permissions.mjs"
+import { frontierToolSchemaPermission, mergePermissionRules, translateV1Permissions } from "./rigel-v2-native-permissions.mjs"
 import { evaluateHephaestusGate, isHephaestusAgentId } from "./rigel-v2-native-hephaestus.mjs"
 import { sortAgentsByCanonicalOrder } from "./rigel-v2-native-agent-order.mjs"
 
@@ -132,10 +132,11 @@ export function applyLegacyAgentDefinition(agent, id, definition, globalRules = 
   // manifest rules merge over that baseline, then the global static overlay,
   // then the agent overlay, so the last declaration wins.
   const translated = translateV1Permissions(source.permissions ?? source.permission ?? {})
+  const frontier = translateV1Permissions(frontierToolSchemaPermission(model))
   const baseline = Array.isArray(agent.permissions) ? agent.permissions : []
-  const merged = mergePermissionRules([baseline, globalRules, translated.rules])
+  const merged = mergePermissionRules([baseline, globalRules, translated.rules, frontier.rules])
   if (merged.length > 0 || Array.isArray(agent.permissions)) agent.permissions = merged
-  return { rules: agent.permissions ?? [], toolGates: translated.toolGates }
+  return { rules: agent.permissions ?? [], toolGates: [...translated.toolGates, ...frontier.toolGates] }
 }
 
 function chainHeadRef(chain) {

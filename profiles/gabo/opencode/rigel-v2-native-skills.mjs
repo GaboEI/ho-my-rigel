@@ -418,7 +418,20 @@ function dedupeSkills(skills) {
   return Array.from(merged.values())
 }
 
-export function discoverSkills({ directory, home = os.homedir(), env = process.env } = {}) {
+function configuredSkillDirs(config, directory) {
+  const sources = config?.skills?.sources
+  if (!Array.isArray(sources)) return []
+  const dirs = []
+  for (const source of sources) {
+    const rawPath = typeof source === "string" ? source : source?.path
+    if (typeof rawPath !== "string" || !rawPath.trim()) continue
+    const resolved = path.isAbsolute(rawPath) ? rawPath : path.resolve(directory, rawPath)
+    if (directoryExists(resolved)) dirs.push(resolved)
+  }
+  return dirs
+}
+
+export function discoverSkills({ directory, home = os.homedir(), env = process.env, config } = {}) {
   const start = directory || process.cwd()
   const homeDir = home || os.homedir()
   const opencodeProjectDirs = findAncestorDirs(start, [[".opencode", "skills"], [".opencode", "skill"]])
@@ -433,6 +446,7 @@ export function discoverSkills({ directory, home = os.homedir(), env = process.e
     ...discoverScope(opencodeGlobals, "opencode"),
     ...discoverScope(claudeProjectDirs, "project"),
     ...discoverScope(agentsProjectDirs, "project"),
+    ...discoverScope(configuredSkillDirs(config, start), "config"),
     ...discoverScope(userDirs, "user"),
   ])
 }
@@ -551,9 +565,9 @@ function addNativeSkill(collection, skill) {
 // Host-registered names win over ours, matching OmO's "existing entry wins"
 // precedence. Returns the discovered list so delegation can inject real bodies
 // without re-reading the disk.
-export async function registerNativeSkills(context, { directory, home, env, disabledSkills } = {}) {
+export async function registerNativeSkills(context, { directory, home, env, disabledSkills, config } = {}) {
   const target = directory ?? context?.location?.directory ?? process.cwd()
-  let skills = discoverSkills({ directory: target, home, env })
+  let skills = discoverSkills({ directory: target, home, env, config: config ?? context?.config })
   if (disabledSkills && disabledSkills.size > 0) skills = skills.filter((skill) => !isDisabledSkillAlias(skill, disabledSkills))
   const registered = []
   const skillDomain = context?.skill
@@ -570,4 +584,64 @@ export async function registerNativeSkills(context, { directory, home, env, disa
     return { skills, registered, dispose: registration?.dispose }
   }
   return { skills, registered, dispose: undefined }
+}
+
+// Runtime host-skill source (V1 parity: `plugin/runtime-skill-resolver.ts`).
+// Skills that other plugins add to the host's merged skill catalog through
+// config hooks are invisible to the on-disk discovery above. V2 exposes the
+// merged catalog on `ctx.skill.list()`, read lazily at skill_mcp call time and
+// cached with single-flight dedupe; on any failure the base skills are
+// returned unchanged. Base skills keep precedence on name collisions: they
+// were fully discovered with bodies and MCP config on disk.
+export async function readRuntimeHostSkills(context) {
+  if (typeof context?.skill?.list !== "function") return undefined
+  const entries = await context.skill.list()
+  const hostSkills = []
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const name = typeof entry?.name === "string" && entry.name.trim() ? entry.name : entry?.id
+    if (typeof name !== "string" || !name.trim()) continue
+    const skillPath = typeof entry?.path === "string" ? entry.path : ""
+    if (skillPath && isFile(skillPath)) {
+      const parsed = toSkillFromFile({ skillPath, resolvedPath: skillPath, defaultName: name, scope: "runtime-host" })
+      if (parsed) {
+        hostSkills.push(parsed)
+        continue
+      }
+    }
+    hostSkills.push({
+      name: name.trim(),
+      path: skillPath,
+      resolvedPath: skillPath,
+      scope: "runtime-host",
+      description: typeof entry?.description === "string" ? entry.description : "",
+      rawBody: typeof entry?.content === "string" ? entry.content : "",
+      resolvedBody: typeof entry?.content === "string" ? entry.content : "",
+    })
+  }
+  return hostSkills
+}
+
+export function createRuntimeHostSkillSource({ context, baseSkills, disabledSkills } = {}) {
+  let inflight
+  const resolve = async () => {
+    try {
+      const hostSkills = await readRuntimeHostSkills(context)
+      if (!hostSkills || hostSkills.length === 0) return baseSkills
+      const seen = new Set(baseSkills.map((skill) => skill.name.toLowerCase()))
+      const merged = [...baseSkills]
+      for (const skill of hostSkills) {
+        const key = skill.name.toLowerCase()
+        if (seen.has(key) || isDisabledSkillAlias(skill, disabledSkills)) continue
+        seen.add(key)
+        merged.push(skill)
+      }
+      return merged
+    } catch {
+      return baseSkills
+    }
+  }
+  return () => {
+    if (!inflight) inflight = resolve()
+    return inflight
+  }
 }

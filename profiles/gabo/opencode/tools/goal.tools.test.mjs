@@ -10,6 +10,7 @@ import {
   InvalidObjectiveError,
   MAX_OBJECTIVE_LENGTH,
   sessionIDFromEvent,
+  parseGoalCommand,
   validateObjective,
 } from "./goal.tools.mjs"
 
@@ -39,6 +40,18 @@ describe("goal objective validation", () => {
     expect(() => validateObjective("   ")).toThrow(InvalidObjectiveError)
     expect(() => validateObjective("x".repeat(MAX_OBJECTIVE_LENGTH + 1))).toThrow(/exceeds maximum length/)
     expect(validateObjective("x".repeat(MAX_OBJECTIVE_LENGTH))).toHaveLength(MAX_OBJECTIVE_LENGTH)
+  })
+})
+
+describe("goal slash command parsing", () => {
+  test("maps V1-compatible verbs and objectives", () => {
+    // given / when / then
+    expect(parseGoalCommand("")).toEqual({ kind: "show" })
+    expect(parseGoalCommand("show")).toEqual({ kind: "show" })
+    expect(parseGoalCommand("pause")).toEqual({ kind: "setStatus", status: "paused" })
+    expect(parseGoalCommand("resume")).toEqual({ kind: "setStatus", status: "active" })
+    expect(parseGoalCommand("clear")).toEqual({ kind: "clear" })
+    expect(parseGoalCommand("  Ship Wave 1  ")).toEqual({ kind: "setObjective", objective: "Ship Wave 1" })
   })
 })
 

@@ -78,7 +78,7 @@ describe("#given the manifest materializer and the runtime gate reader", () => {
     const conditional = buildConditionalToolDefinitions({ gates, taskStore: {}, goalStore: {} })
     const families = createNativeToolFamilies({ clients: [fakeContext()], location: { directory: "/work" }, manifest, context: fakeContext(), pluginConfig: {} })
     // then
-    expect(gates).toEqual({ ...GATE_OFF, interactive_bash: true })
+    expect(gates).toEqual({ ...GATE_OFF, team_mode: false, interactive_bash: true })
     expect(conditional.names).toEqual([])
     expect(families.tools.monitor_start).toBeUndefined()
   })

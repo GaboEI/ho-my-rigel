@@ -1,12 +1,8 @@
 /**
- * Ordered `http.request` body-rewrite steps for Oh My Rigel's native OpenCode V2
- * runtime.
+ * Ordered native OpenCode V2 request steps for Oh My Rigel's runtime.
  *
- * V2 registers ONE `session.hook("http.request")` handler and chains handlers
- * sequentially (T1 proved a later handler sees an earlier handler's mutation).
- * This module does NOT register a handler: it exports an ordered list of pure
- * body-rewrite steps that the single existing request hook composes, so the
- * runtime keeps one pipeline and one registration.
+ * Only image resizing operates on the provider HTTP request. Tool-pair repair
+ * belongs to `context.messages` and stop-continuation belongs to `prompt`.
  *
  * Each step is a `{ name, run }` object. `run` receives one shared context
  * `{ body, shape, sessionID, stopState, input }` and mutates `body` in place.
@@ -130,7 +126,7 @@ export function repairResponsesToolPairs(input) {
   return repaired
 }
 
-/** `http.request` step: repair unpaired tool calls in the outgoing body. */
+/** `context` step: repair unpaired tool calls in model-visible messages. */
 export const toolPairValidatorStep = {
   name: "tool-pair-validator",
   run: ({ body, shape } = {}) => {
@@ -159,22 +155,42 @@ export const CONTINUATION_PROMPT_MARKER = "Continue working toward the active th
 
 /**
  * Per-session stop state. V2 has no `command.execute.before` seam (DEC-6), so
- * the stop command is observed at the request boundary and the state is exposed
+ * the stop command is observed at prompt admission and the state is exposed
  * for the runtime: `stop` marks a session stopped, `isStopped` is the guard the
  * continuation dispatcher reads, `clear` releases it (session.deleted), and
  * `clearAll` releases every stopped session (plugin dispose).
+ *
+ * `onStop` / `onClear` are optional transition callbacks. `onStop(sessionID)`
+ * fires only on the not-stopped -> stopped edge (repeated `stop` calls are
+ * idempotent); `onClear(sessionID)` fires only when the session actually was
+ * stopped. Both are fire-and-forget: an async callback's rejection is swallowed
+ * and a synchronously throwing callback never breaks the caller.
  */
-export function createStopContinuationState() {
+export function createStopContinuationState({ onStop, onClear } = {}) {
   const stoppedSessions = new Set()
+  const fire = (callback, sessionID) => {
+    if (typeof callback !== "function") return
+    try {
+      const pending = callback(sessionID)
+      if (pending && typeof pending.then === "function") pending.catch(() => {})
+    } catch (error) {
+      void error
+    }
+  }
   return {
     stop(sessionID) {
-      if (typeof sessionID === "string" && sessionID.length > 0) stoppedSessions.add(sessionID)
+      if (typeof sessionID !== "string" || sessionID.length === 0) return
+      if (stoppedSessions.has(sessionID)) return
+      stoppedSessions.add(sessionID)
+      fire(onStop, sessionID)
     },
     isStopped(sessionID) {
       return typeof sessionID === "string" && stoppedSessions.has(sessionID)
     },
     clear(sessionID) {
-      stoppedSessions.delete(sessionID)
+      if (typeof sessionID !== "string" || sessionID.length === 0) return
+      if (!stoppedSessions.delete(sessionID)) return
+      fire(onClear, sessionID)
     },
     clearAll() {
       stoppedSessions.clear()
@@ -242,9 +258,8 @@ export function stripContinuationInjection(body, shape) {
 }
 
 /**
- * `http.request` step: observe `/stop-continuation` on the current turn, set the
- * session's stopped state, and block any continuation injection already in the
- * body. Returns `{ stopped, blocked }`.
+ * `prompt` step: observe `/stop-continuation` on the admitted prompt and block
+ * a continuation injection before it becomes a durable message.
  */
 export const stopContinuationStep = {
   name: "stop-continuation-guard",
@@ -261,6 +276,19 @@ export const stopContinuationStep = {
     }
     return { stopped: true, blocked: stripContinuationInjection(body, resolvedShape) }
   },
+}
+
+export function applyPromptAdmission(event, stopState) {
+  if (!event?.prompt || typeof event.prompt.text !== "string" || !stopState) {
+    return { stopped: false, blocked: false }
+  }
+  const sessionID = typeof event.sessionID === "string" ? event.sessionID : undefined
+  if (STOP_CONTINUATION_PATTERN.test(event.prompt.text)) stopState.stop(sessionID)
+  if (!stopState.isStopped(sessionID) || !event.prompt.text.includes(CONTINUATION_PROMPT_MARKER)) {
+    return { stopped: stopState.isStopped(sessionID), blocked: false }
+  }
+  event.prompt.text = event.prompt.text.replace(CONTINUATION_PROMPT_MARKER, "").trim()
+  return { stopped: true, blocked: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -453,12 +481,10 @@ export const imageResizerStep = createImageResizerStep()
 // ---------------------------------------------------------------------------
 
 /**
- * The ordered `http.request` rewrite steps. Order is part of the contract:
- * repair the body first, apply the stop guard, then resize images. The runtime
- * composes this list into its single existing request hook; it never registers a
- * second one.
+ * The ordered HTTP rewrite steps. Image resizing is the only native provider
+ * transport mutation left at this boundary.
  */
-export const requestSteps = Object.freeze([toolPairValidatorStep, stopContinuationStep, imageResizerStep])
+export const requestSteps = Object.freeze([imageResizerStep])
 
 /**
  * Run the ordered steps over one shared context with failure isolation. Returns

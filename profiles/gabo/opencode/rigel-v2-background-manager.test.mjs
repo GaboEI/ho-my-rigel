@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -9,7 +9,10 @@ import {
   writeBackgroundMarker,
 } from "./rigel-v2-background-manager.mjs"
 import { createFileBackgroundState } from "./rigel-v2-background-state.mjs"
+import { runMutation } from "./test-support/mutation-harness.mjs"
 import plugin from "./rigel-v2-native.mjs"
+
+const OPENCODE_DIR = import.meta.dir
 
 // Admission happens BEFORE any child is created. A queued request stores an
 // executable descriptor and starts NOTHING until a slot frees, so the
@@ -663,5 +666,115 @@ describe("#given a starting crash window", () => {
     expect(summary.starting).toBe(1)
     expect(creates).toBe(1)
     await manager.dispose()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Descendant cancellation (/stop-continuation parity)
+// ---------------------------------------------------------------------------
+
+describe("#given a session with transitive background descendants", () => {
+  test("#when cancelDescendants runs #then only that session's cancellable descendants are cancelled and persisted", async () => {
+    // given: p -> c1 (running) -> g1 (running, via c1's session id), c2 (queued),
+    // plus an unrelated parent's running child u1.
+    const directory = createTestDirectory()
+    const aborted = []
+    const manager = createBackgroundManager({
+      directory,
+      stateStore: createFileBackgroundState(directory),
+      config: { defaultConcurrency: 1 },
+      startChild: async (descriptor, onSession) => {
+        const sessionID = `ses_${descriptor.taskId}`
+        onSession(sessionID)
+        return { sessionID }
+      },
+      runHandoff: async () => {},
+      abortChild: (sessionID) => { aborted.push(sessionID) },
+    })
+    const c1 = manager.admit({ taskId: "c1", parentSessionID: "p", agent: { name: "x" }, prompt: "a", modelKey: "m" })
+    await c1.ready
+    manager.admit({ taskId: "c2", parentSessionID: "p", agent: { name: "x" }, prompt: "b", modelKey: "m" })
+    const g1 = manager.admit({ taskId: "g1", parentSessionID: "ses_c1", agent: { name: "x" }, prompt: "c", modelKey: "m2" })
+    await g1.ready
+    const u1 = manager.admit({ taskId: "u1", parentSessionID: "other", agent: { name: "x" }, prompt: "d", modelKey: "m3" })
+    await u1.ready
+    expect(manager.getTask("c2").status).toBe("queued")
+
+    // when
+    const results = manager.cancelDescendants("p", { source: "stop-continuation", reason: "r", skipNotification: true })
+    await manager.flush()
+
+    // then: the running child, the queued child, and the transitive grandchild
+    // are all cancelled; the unrelated parent's child is untouched.
+    expect(results.map((result) => result.taskId).sort()).toEqual(["c1", "c2", "g1"])
+    expect(results.every((result) => result.cancelled === true)).toBe(true)
+    expect(results.find((result) => result.taskId === "c1").mode).toBe("running")
+    expect(results.find((result) => result.taskId === "c2").mode).toBe("queued")
+    expect(results.find((result) => result.taskId === "g1").mode).toBe("running")
+    expect(manager.getTask("c1")).toBeUndefined()
+    expect(manager.getTask("c2")).toBeUndefined()
+    expect(manager.getTask("g1")).toBeUndefined()
+    expect(manager.getTask("u1")).toBeDefined()
+    expect(aborted.sort()).toEqual(["ses_c1", "ses_g1"])
+
+    // and the cancellation is durable: p holds no tasks while the unrelated
+    // parent keeps its child.
+    const pState = await createFileBackgroundState(directory).read("p")
+    const otherState = await createFileBackgroundState(directory).read("other")
+    expect((pState?.tasks ?? []).map((task) => task.taskId)).toEqual([])
+    expect((otherState?.tasks ?? []).map((task) => task.taskId)).toEqual(["u1"])
+    await manager.dispose()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Named-RED mutation harness
+// ---------------------------------------------------------------------------
+
+describe("Rigel V2 background manager named-RED mutation harness", () => {
+  test("#given cancelDescendants drops its status filter #when the contract runs #then it turns RED and restores byte-identically", async () => {
+    // given: an isolated copy of the module tree, so the mutated file's relative
+    // imports still resolve and the tracked source is never touched.
+    const root = mkdtempSync(join(tmpdir(), "rigel-bg-mutant-"))
+    const directory = join(root, "opencode")
+    cpSync(OPENCODE_DIR, directory, { recursive: true })
+    const target = join(directory, "rigel-v2-background-manager.mjs")
+    const before = readFileSync(target)
+
+    // when
+    const receipt = await runMutation({
+      file: target,
+      mutate: (source) => source.replace(
+        '      record.status === "queued" || record.status === "starting" || record.status === "running"\n',
+        "      false\n",
+      ),
+      contract: {
+        name: "cancelDescendants cancels queued/starting/running descendants",
+        run: async ({ load }) => {
+          const module = await load()
+          const manager = module.createBackgroundManager({
+            config: { defaultConcurrency: 1 },
+            startChild: async (descriptor, onSession) => { onSession(`ses_${descriptor.taskId}`); return { sessionID: `ses_${descriptor.taskId}` } },
+            runHandoff: async () => {},
+            abortChild: () => {},
+          })
+          const running = manager.admit({ taskId: "c1", parentSessionID: "p", agent: { name: "x" }, prompt: "a", modelKey: "m" })
+          await running.ready
+          const results = manager.cancelDescendants("p", {})
+          if (results.length !== 1 || results[0].taskId !== "c1" || results[0].cancelled !== true) {
+            throw new Error(`expected the running descendant to be cancelled, got ${JSON.stringify(results)}`)
+          }
+          manager.dispose()
+        },
+      },
+    })
+
+    // then
+    expect(receipt.contract).toBe("cancelDescendants cancels queued/starting/running descendants")
+    expect(receipt.red).toBe(true)
+    expect(receipt.redError).toContain("expected the running descendant to be cancelled")
+    expect(receipt.beforeHash).toBe(receipt.afterHash)
+    expect(readFileSync(target).equals(before)).toBe(true)
+    rmSync(root, { recursive: true, force: true })
   })
 })

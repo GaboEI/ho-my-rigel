@@ -10,7 +10,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { deriveNativeGates, readNativeDisabled, resolveNativePluginConfig } from "./rigel-v2-native-config.mjs"
+import { deriveNativeGates, readNativeDisabled, readNativeMcpPolicy, resolveNativePluginConfig
+} from "./rigel-v2-native-config.mjs"
 
 const created = []
 
@@ -297,21 +298,21 @@ describe("#given a resolved native plugin config view", () => {
     // when
     const offGates = deriveNativeGates(off)
     // then
-    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, interactive_bash: true, hashline_edit: false })
+    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, team_mode: false, interactive_bash: true, hashline_edit: false })
 
     // given
-    const on = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: [] } }
+    const on = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, team_mode: { enabled: true }, disabled: { tools: [] } }
     // when
     const onGates = deriveNativeGates(on)
     // then
-    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: true, hashline_edit: false })
+    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: true, interactive_bash: true, hashline_edit: false })
 
     // given
     const disabled = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: ["interactive_bash"] } }
     // when
     const disabledGates = deriveNativeGates(disabled)
     // then
-    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, interactive_bash: false, hashline_edit: false })
+    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: false, interactive_bash: false, hashline_edit: false })
   })
 
   test("#when the view is malformed #then every config gate degrades closed", () => {
@@ -339,5 +340,40 @@ describe("#given a materialized manifest", () => {
     // given / when / then
     expect(readNativeDisabled(undefined)).toEqual({ tools: [], agents: [], skills: [] })
     expect(readNativeDisabled({ metadata: { global: {} } })).toEqual({ tools: [], agents: [], skills: [] })
+  })
+})
+
+
+describe("#given the tier-2 MCP policy", () => {
+  test("#when the manifest carries the mcp block #then readNativeMcpPolicy normalizes it", () => {
+    // given
+    const manifest = { metadata: { global: { mcp: { disabled: ["context7", 3], envAllowlist: ["QA_MCP_TOKEN"] } } } }
+    // when
+    const policy = readNativeMcpPolicy(manifest)
+    // then
+    expect(policy).toEqual({ disabled: ["context7"], envAllowlist: ["QA_MCP_TOKEN"] })
+    expect(readNativeMcpPolicy(undefined)).toEqual({ disabled: [], envAllowlist: [] })
+  })
+
+  test("#when a project layer extends mcp_env_allowlist #then only the user layer allowlist survives", () => {
+    // given
+    const fs = require("node:fs")
+    const os = require("node:os")
+    const path = require("node:path")
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-allowlist-"))
+    const project = path.join(home, "proj")
+    fs.mkdirSync(path.join(project, ".omo"), { recursive: true })
+    fs.mkdirSync(path.join(home, ".omo"), { recursive: true })
+    fs.writeFileSync(path.join(home, ".omo", "omo.jsonc"), JSON.stringify({ mcp_env_allowlist: ["USER_VAR"] }))
+    fs.writeFileSync(path.join(project, ".omo", "omo.jsonc"), JSON.stringify({ mcp_env_allowlist: ["PROJECT_VAR"], disabled_mcps: ["context7"] }))
+    try {
+      // when
+      const view = resolveNativePluginConfig({ directory: project, env: { ...process.env, HOME: home }, fileSystem: { existsSync: (p) => fs.existsSync(p), readFileSync: (p) => fs.readFileSync(p, "utf8") } })
+      // then: the user-only security rule holds; disabled_mcps unions normally
+      expect(view.mcp_env_allowlist).toEqual(["USER_VAR"])
+      expect(view.disabled_mcps).toEqual(["context7"])
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+    }
   })
 })

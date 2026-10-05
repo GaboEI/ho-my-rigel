@@ -6,6 +6,7 @@ import {
 import { readNativeGates } from "./rigel-v2-native-config.mjs"
 import { TASK_TOOL_NAMES } from "./tools/task.tools.mjs"
 import { GOAL_TOOL_NAMES } from "./tools/goal.tools.mjs"
+import { TEAM_TOOL_NAMES } from "./tools/team.tools.mjs"
 
 function memoryStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -53,7 +54,7 @@ function fakeContext({ storage, pty, onSubscription } = {}) {
   }
 }
 
-const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false, hashline_edit: false }
+const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false, team_mode: false, hashline_edit: false }
 
 describe("gate reader", () => {
   test("defaults every gate to false and only accepts explicit true", () => {
@@ -78,6 +79,8 @@ describe("conditional tool definitions", () => {
     expect(goal.names).toEqual(GOAL_TOOL_NAMES)
     const bash = buildConditionalToolDefinitions({ gates: { ...GATE_OFF, interactive_bash: true }, tmuxPath: "/usr/bin/tmux", ptyRunner: { run: async () => {} } })
     expect(bash.names).toEqual(["interactive_bash"])
+    const team = buildConditionalToolDefinitions({ gates: { ...GATE_OFF, team_mode: true }, teamStorage: memoryStorage() })
+    expect(team.names).toEqual(TEAM_TOOL_NAMES)
   })
 
   test("registers interactive_bash through a terminal factory with no tmux", () => {
@@ -116,6 +119,17 @@ describe("registration on the V2 host", () => {
     expect(result.registered).toHaveLength(4)
     await result.dispose()
     expect(fake.transformDisposed()).toBe(true)
+  })
+
+  test("registers team tools only when the manifest team_mode gate is enabled", async () => {
+    const fake = fakeContext({ storage: memoryStorage() })
+    const result = await registerConditionalNativeTools({
+      context: fake.context,
+      manifest: { metadata: { global: { gates: { team_mode: true } } } },
+      log: () => {},
+    })
+    expect(fake.added.sort()).toEqual([...TEAM_TOOL_NAMES].sort())
+    await result.dispose()
   })
 
   test("derives the task list id from the setup directory, not the service cwd", async () => {
@@ -198,6 +212,8 @@ describe("registration on the V2 host", () => {
     })
     expect(fake.added.sort()).toEqual([...GOAL_TOOL_NAMES].sort())
     expect(subscriptions).toBe(1)
+    await result.definitions.create_goal.execute({ objective: "Ship Wave 1" }, { sessionID: "ses_goal" })
+    expect((await result.goalController.getGoal("ses_goal")).objective).toBe("Ship Wave 1")
     await result.dispose()
   })
 

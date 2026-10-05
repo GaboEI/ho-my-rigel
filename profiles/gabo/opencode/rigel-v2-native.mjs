@@ -20,7 +20,7 @@ import {
 import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { createNativeRequestHook } from "./rigel-v2-native-prompt.mjs"
+import { createNativeContextHook, createNativeModelRequestHook } from "./rigel-v2-native-prompt.mjs"
 import { agentChain, categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
@@ -33,13 +33,15 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { readNativeDisabled, readNativeGates } from "./rigel-v2-native-config.mjs"
+import { readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpPolicy } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
-import { registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
+import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
 import { createSkillMcpManager, createSkillMcpToolDefinition, registerSkillMcpServers } from "./rigel-v2-native-skill-mcp.mjs"
+import { createSlashcommandTool } from "./tools/slashcommand.tools.mjs"
 import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
+import { formatGoalResponse, parseGoalCommand } from "./tools/goal.tools.mjs"
 import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
 import { createTodoDescriptionTool } from "./rigel-v2-native-todo-description.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
@@ -50,13 +52,26 @@ import { runOrderedRules } from "./rigel-v2-native-hook-chain.mjs"
 import { createSessionStateRegistry } from "./rigel-v2-native-session-state.mjs"
 import { createKeywordState } from "./rigel-v2-keyword-state.mjs"
 import { createBackgroundManager } from "./rigel-v2-background-manager.mjs"
+import { writeStopMarker } from "./rigel-v2-background-marker.mjs"
 import { createFileBackgroundState, createStorageBackgroundState } from "./rigel-v2-background-state.mjs"
 // T17: single flow-rule import point. `createFlowRules` rebuilds the ordered
 // before/after/request collections over the runtime's ONE fsync tracker; the
 // state factories come from their binder modules.
 import { createFlowRules } from "./rigel-v2-native-flow-rules.mjs"
 import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
-import { createStopContinuationState, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
+import { applyPromptAdmission, createStopContinuationState, repairChatToolPairs, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
+import { createNativeAutoSlashCommandHook } from "./rigel-v2-auto-slash-command-bridge.mjs"
+import { OMO_INTERNAL_INITIATOR_MARKER } from "./rigel-v2-keyword-core.mjs"
+import { createNativeContextCollector, createNativeContextMessageConsumer } from "./rigel-v2-context-collector.mjs"
+import { createNativeClaudeCodeHooks } from "./rigel-v2-claude-code-hooks.mjs"
+import { createUlwExecuteCommand } from "./rigel-v2-ulw-execute.mjs"
+import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
+import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
+import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
+import { registerClaudeCodeMcps } from "./rigel-v2-claude-code-mcp.mjs"
+import { createNativeToolBeforeRules } from "./rigel-v2-native-tool-before.mjs"
+import { createTmuxVizManager } from "./rigel-v2-tmux-viz-manager.mjs"
+import { readNativeTmuxVisualization } from "./rigel-v2-native-config.mjs"
 
 /**
  * Read the user's category overrides from the V2 setup context. V2 exposes the
@@ -361,8 +376,26 @@ export default {
         env: context?.options?.skillsEnv,
       })
       : { skills: [], registered: [], dispose: undefined }
+    // Runtime host-skill source (V1 runtime-skill-resolver parity): skills that
+    // other plugins add through config hooks are merged at skill_mcp call
+    // time from the host's merged catalog (`ctx.skill.list()`), cached
+    // single-flight, with the on-disk set as the failure fallback.
+    const resolveRuntimeSkills = createRuntimeHostSkillSource({
+      context,
+      baseSkills: skillRegistry.skills,
+      disabledSkills: readNativeDisabled(manifest).skills,
+    })
     const skillMcpManager = createSkillMcpManager()
     const skillMcpRegistration = await registerSkillMcpServers(context, skillRegistry.skills)
+    // Tier-2 Claude Code MCP loader (correction H5): project/user .mcp.json
+    // declarations through ctx.mcp.transform, with the V1 env-allowlist rule.
+    const claudeMcpRegistration = await registerClaudeCodeMcps(context, {
+      directory: location.directory,
+      home: context?.options?.skillsHome,
+      claudeConfigDir: context?.options?.skillsEnv?.CLAUDE_CONFIG_DIR,
+      disabledMcps: readNativeMcpPolicy(manifest).disabled,
+      allowlist: readNativeMcpPolicy(manifest).envAllowlist,
+    })
     // Real skill-body injection for delegated children: resolve each requested
     // name through the discovered registry and inject the body. Disabled or
     // target-restricted names resolve to nothing and are reported, never faked.
@@ -550,15 +583,56 @@ export default {
     const webFetchGuard = createNativeWebFetchRedirectGuard()
     const planFormatValidator = createNativePlanFormatValidator({ directory: location.directory })
     const prometheusMdOnly = createNativePrometheusMdOnly({ resolveAgent: sessionAgentResolver, directory: location.directory })
-    // T17: the flow pipelines (T13-T15 binders) share two state instances
-    // created once here and never per request or per session. `fsyncSkipState`
-    // is the single tracker the before start rule records into and the after
-    // warning rule drains from; `stopContinuationState` is the per-session stop
-    // flag the request stop guard reads and writes. `createFlowRules` rebuilds
-    // the ordered collections over that one tracker.
+    // T17: the flow pipelines (T13-T15 binders) share the one fsync tracker
+    // created once here and never per request or per session; it is the single
+    // tracker the before start rule records into and the after warning rule
+    // drains from. `createFlowRules` rebuilds the ordered collections over it.
     const fsyncSkipState = createFsyncSkipWarningState()
-    const stopContinuationState = createStopContinuationState()
     const flowRules = createFlowRules({ fsyncSkipState })
+    // Team mode (Phase-4 Ola 6): when the materialized `team_mode` gate is on
+    // and the V2 storage domain exists, the four native team event handlers
+    // (idle wake hint, member status, member error, lead orphan) join the same
+    // shared event loop instead of opening a second subscription. Handlers are
+    // error-isolated inside the module, so one failure never aborts the loop.
+    const teamEventHandlers = nativeGates.team_mode === true && typeof context?.storage?.set === "function"
+      ? createNativeTeamEventHandlers({ storage: context.storage, session: context.session })
+      : []
+    // Team gating (execute.before rule) and the mailbox/status context
+    // injectors live on the same team_mode gate as the event handlers.
+    const teamGatingRule = teamEventHandlers.length > 0
+      ? createNativeTeamGatingRule({ storage: context.storage })
+      : undefined
+    const teamMailboxInjector = teamEventHandlers.length > 0
+      ? createNativeTeamMailboxInjector({ storage: context.storage })
+      : undefined
+    const teamStatusInjector = teamEventHandlers.length > 0
+      ? createNativeTeamStatusInjector({ storage: context.storage })
+      : undefined
+    // tmux visualization (rewritten feature, gated on team_mode.tmux_visualization):
+    // one agent pane per delegated session. Degraded environments (no tmux,
+    // not inside tmux) are logged once and the manager stays inert.
+    let tmuxVizManager
+    if (nativeGates.team_mode === true && readNativeTmuxVisualization(manifest)) {
+      tmuxVizManager = createTmuxVizManager({
+        config: context?.config?.team_mode ?? {},
+        env: context?.options?.tmuxVizEnv ?? process.env,
+        serverUrl: typeof context?.serverUrl === "string" ? context.serverUrl : undefined,
+        directory: location.directory,
+        fetchSessionStatus: async () => {
+          if (typeof context?.session?.status !== "function") return null
+          const response = await context.session.status()
+          const rows = response?.data ?? response
+          const map = new Map()
+          for (const row of Array.isArray(rows) ? rows : []) {
+            if (row?.sessionID) map.set(row.sessionID, row.status ?? row.type)
+          }
+          return map
+        },
+      })
+      if (!tmuxVizManager.enabled) {
+        console.error(`[oh-my-rigel] tmux-viz degraded: ${tmuxVizManager.degradedReason}`)
+      }
+    }
     const abortBackgroundHandoffs = new AbortController()
     // The background manager owns the tracked background children, the FIFO
     // admission queue (T2 key/limit), the retry classifier, the on-disk
@@ -635,6 +709,35 @@ export default {
         console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${info?.sessionID ?? "unknown"}; ${error instanceof Error ? error.message : String(error)}`)
       },
     })
+    const contextLimitRecovery = createNativeContextLimitRecovery({ session: context.session })
+    const idleGate = createNativeIdleGate()
+    const idleContinuations = createNativeIdleContinuations({
+      session: context.session,
+      backgroundManager,
+      resolveAgent: sessionAgentResolver,
+    })
+    // T20 phase-4 parity: `stopContinuationState` now closes over the background
+    // manager, so the FIRST `/stop-continuation` for a session cancels its
+    // tracked queued/starting/running descendant children (without clearing the
+    // parent's durable state) and writes the shared `sources.stop` marker
+    // `stopped`; releasing the stop (clear) writes `idle`. The transition guard
+    // lives in `createStopContinuationState`, so repeated stops and non-stopped
+    // clears never re-fire. `clearAll` on dispose stays a pure in-memory release.
+    let goalController
+    const stopContinuationState = createStopContinuationState({
+      onStop: async (sessionID) => {
+        backgroundManager.cancelDescendants(sessionID, {
+          source: "stop-continuation",
+          reason: "Continuation stopped via /stop-continuation",
+          skipNotification: true,
+        })
+        writeStopMarker(location.directory, sessionID, "stopped")
+        await goalController?.clearGoal(sessionID)
+      },
+      onClear: (sessionID) => {
+        writeStopMarker(location.directory, sessionID, "idle")
+      },
+    })
     // DEC-8: one dispose fan-out owns the session-scoped cleanup that the
     // `session.deleted` handler used to hand-list. Each store registers here
     // where it exists, so a new stateful surface cannot be forgotten, and a
@@ -659,6 +762,9 @@ export default {
     sessionState.registerStore({ clear: (sessionID) => { backgroundManager.clearSession(sessionID) } })
     sessionState.registerStore({ clear: (sessionID) => { childSessionIDs.delete(sessionID) } })
     sessionState.registerStore({ clear: (sessionID) => skillMcpManager.disconnectSession(sessionID) })
+    sessionState.registerStore({ clear: (sessionID) => contextLimitRecovery.clear(sessionID) })
+    sessionState.registerStore({ clear: (sessionID) => idleGate.clear(sessionID) })
+    sessionState.registerStore({ clear: (sessionID) => idleContinuations.clear(sessionID) })
     // T17: a deleted session releases its stop-continuation flag and any
     // pending fsync window. The fsync tracker is one runtime-wide correlation
     // map keyed by call id, so `clear()` drops the pending starts and skips
@@ -685,6 +791,10 @@ export default {
     // the V2 pty/storage/event domains) and disposed on teardown. It is `let`
     // because the transform callback runs after this declaration.
     let nativeToolRegistry
+    let claudeCodeHooks
+    // Tool names registered by the main tool.transform (session/look_at/monitor
+    // families), captured for the max_tools total-surface cap.
+    let coreFamilyToolNames = []
     // (`session.compacted`, and the streamed `session.compaction.*` /
     // `session.next.compaction.*` families). Any of them clears the
     // file-read-scoped context so the next read re-injects.
@@ -700,6 +810,8 @@ export default {
         try {
           for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
             const sessionID = event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
+            await claudeCodeHooks?.handleEvent?.({ ...event, sessionID })
+            await contextLimitRecovery.handle({ ...event, sessionID })
             // Event-driven wake retry. A parent-prompt failure leaves the wake
             // pending; the next event re-queues it, so no timer or poller is
             // needed. A no-op when nothing is pending.
@@ -723,6 +835,8 @@ export default {
             if (typeof sessionID === "string") {
               if (event.type === "session.next.compaction.started") keywordState.markNeedsRestoration(sessionID)
               else keywordState.handleEvent({ type: event.type, sessionID })
+              const idle = idleGate.accept({ ...event, sessionID })
+              if (idle) await idleContinuations.handle(idle)
             }
             // Task 19: a real V2 compaction clears the file-read-scoped rule and
             // directory context, so the next read re-injects instead of relying
@@ -751,6 +865,15 @@ export default {
             for (const handler of flowRules.eventHandlers) {
               if (typeof handler === "function") await handler(event)
             }
+            // Team event handlers (idle wake hint / member status / member
+            // error / lead orphan). Empty unless the team_mode gate is on.
+            for (const handler of teamEventHandlers) {
+              if (typeof handler === "function") await handler(event)
+            }
+            // tmux visualization: pane activity, child-session spawn and cleanup.
+            tmuxVizManager?.onEvent(event)
+            if (event.type === "session.created") await tmuxVizManager?.onSessionCreated(event)
+            if (event.type === "session.deleted" && typeof sessionID === "string") await tmuxVizManager?.onSessionDeleted({ sessionID })
             if (typeof sessionID !== "string" || !backgroundManager.has(sessionID)) continue
             const status = event.type === "session.execution.succeeded" ? "succeeded"
               : event.type === "session.execution.failed" ? "failed"
@@ -776,7 +899,7 @@ export default {
       if (skillRegistry.skills.length > 0) {
         editor.add(createSkillMcpToolDefinition({
           manager: skillMcpManager,
-          getSkills: async () => skillRegistry.skills,
+          getSkills: async () => await resolveRuntimeSkills(),
         }))
       }
       editor.add({
@@ -903,6 +1026,7 @@ export default {
         pluginConfig: context?.config,
       })
       nativeToolRegistry = families.registry
+      coreFamilyToolNames = Object.keys(families.tools)
       for (const [name, definition] of Object.entries(families.tools)) {
         editor.add({ name, options: { codemode: false }, ...definition })
       }
@@ -916,6 +1040,12 @@ export default {
       // by the runtime's own per-session todo store. Registered in this single
       // transform callback so it lands in the same tool set as the others.
       editor.add(createTodoDescriptionTool({ store: sessionTodoStore }))
+      // slashcommand (Ola 6): the model-facing command discovery. V2 owns the
+      // command catalog, so the native tool reads ctx.command.list() instead of
+      // walking project directories like V1.
+      if (typeof context?.command?.list === "function") {
+        editor.add(createSlashcommandTool({ listCommands: () => context.command.list() }))
+      }
     })
     // Ordered rule chains for the two V2 tool hooks. Each built-in rule keeps
     // the exact position it had as an inline await, and the flow binders
@@ -941,7 +1071,9 @@ export default {
       { name: "write-existing-file-guard", run: (event) => writeGuard.before(event) },
       { name: "comment-checker", run: (event) => commentChecker.before(event) },
       { name: "webfetch-redirect-guard", run: (event) => webFetchGuard.before(event) },
+      ...createNativeToolBeforeRules({ backgroundManager }),
       ...flowRules.beforeRules,
+      ...(teamGatingRule ? [teamGatingRule] : []),
     ]
     const directoryReadRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.after", async (input) => {
@@ -967,7 +1099,7 @@ export default {
     const permissionRegistration = typeof context?.tool?.hook === "function"
       ? await context.tool.hook("execute.before", async (input) => permissionWiring.before(input))
       : undefined
-    const nativeRequestPipeline = createNativeRequestHook({
+    const nativeContextPipeline = createNativeContextHook({
       // Read on every provider request. This uses exactly the inventory that
       // task() resolves at execution time, not a startup-time copy.
       getDelegationRoster: () => listCallableAgentsFromClients(
@@ -998,40 +1130,125 @@ export default {
       getCategorySkillReminder: (sessionID) => (sessionID ? categorySkillReminder.pending(sessionID) : ""),
       onCategorySkillReminderConsumed: (sessionID) => { categorySkillReminder.consume(sessionID) },
     })
-    // T17: ONE `http.request` registration owns the whole ordered request
-    // pipeline. The flow steps run first over the parsed provider body
-    // (tool-pair repair, then the stop-continuation guard), the mutated body is
-    // flushed back onto the request, and only then does the keyword/roster seam
-    // read the repaired body. V2 chains handlers sequentially, so a second
-    // registration would add a second writer for no benefit; this stays one
-    // handler, and a throwing step is isolated and reported instead of aborting
-    // the request.
-    const rosterRegistration = await context.session.hook("http.request", async (input) => {
+    const contextCollector = createNativeContextCollector()
+    const consumePendingContext = createNativeContextMessageConsumer(contextCollector)
+    claudeCodeHooks = createNativeClaudeCodeHooks({ context, collector: contextCollector, directory: location.directory })
+    const disposeClaudeCodeHooks = await claudeCodeHooks.install()
+    const nativeModelRequestPipeline = createNativeModelRequestHook({
+      resolveModel: resolveNativeModel,
+      getHeaders: (event) => {
+        const message = event?.message
+        const text = typeof message?.text === "string"
+          ? message.text
+          : (typeof message?.content === "string" ? message.content : "")
+        return message?.role === "user" && text.includes(OMO_INTERNAL_INITIATOR_MARKER)
+          ? { "x-initiator": "agent" }
+          : undefined
+      },
+    })
+    // Prompt admission owns embedded slash-command expansion. Top-level slash
+    // commands are expanded by the host before this hook is needed.
+    const autoSlashCommand = createNativeAutoSlashCommandHook({
+      skills: skillRegistry.skills,
+      listCommands: () => context?.command?.list?.(),
+    })
+    const autoSlashCommandRegistration = typeof context?.session?.hook === "function"
+      ? await context.session.hook("prompt", async (event) => {
+        try {
+          applyPromptAdmission(event, stopContinuationState)
+          await autoSlashCommand.before(event)
+        } catch (error) {
+          console.error(`[oh-my-rigel] Native V2 embedded slash-command hook failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      })
+      : undefined
+    const contextRegistration = await context.session.hook("context", async (event) => {
+      repairChatToolPairs(event.messages)
+      await consumePendingContext(event)
+      await nativeContextPipeline(event)
+      await teamMailboxInjector?.(event)
+      await teamStatusInjector?.(event)
+    })
+    const modelRequestRegistration = await context.session.hook("model.request", nativeModelRequestPipeline)
+    // Native HTTP is reserved for the image transport mutation. Context,
+    // admission, semantic options, headers, and fallback all use V2 hooks.
+    const imageRequestRegistration = await context.session.hook("http.request", async (input) => {
       let body
-      try { body = await input.request.clone().json() } catch { return nativeRequestPipeline(input) }
+      try { body = await input.request.clone().json() } catch { return }
       const shape = resolveRequestShape(body)
       if (shape) {
         await runRequestSteps({
           body,
           shape,
           sessionID: input.sessionID,
-          stopState: stopContinuationState,
           input,
           onError: (failure) => reportRuleFailure("http.request", failure),
         }, flowRules.requestSteps)
         input.request = new Request(input.request, { body: JSON.stringify(body) })
       }
-      return nativeRequestPipeline(input)
     })
     console.error(`[oh-my-rigel] Native OpenCode V2 runtime active: named delegation enabled; registeredAgents=${registeredAgents.join(",")}; agentDomain=${Object.keys(context.agent ?? {}).sort().join(",")}; sessionDomain=${Object.keys(context.session ?? {}).sort().join(",")}`)
     // Conditional native tool families (interactive_bash / task_* / goal_*).
     // Gates come from the materialized manifest; a disabled family is never
     // registered.
+    // max_tools trimming: the names the core transform registered (session/look_at/
+    // monitor families, rigel_task, skill_mcp, hashline_edit, todowrite) count
+    // toward the cap, so the conditional families trim against the real total.
+    const coreToolNames = [
+      ...(skillRegistry.skills.length > 0 ? ["skill_mcp"] : []),
+      taskName,
+      ...(hashlineEditTool ? ["hashline_edit"] : []),
+      "todowrite",
+      ...(typeof context?.command?.list === "function" ? ["slashcommand"] : []),
+      ...coreFamilyToolNames,
+    ]
     const conditionalTools = await registerConditionalNativeTools({
       context,
       manifest,
       directory: location.directory,
+      maxTools: readNativeMaxTools(manifest),
+      existingToolNames: coreToolNames,
     })
+    goalController = conditionalTools.goalController
+    let goalCommandRegistration
+    if (goalController && typeof context?.command?.transform === "function") {
+      goalCommandRegistration = await context.command.transform((editor) => editor.add({
+        name: "goal",
+        description: "Set, pause, resume, clear, or show the current session goal.",
+        execute: async ({ sessionID, prompt, delivery }) => {
+          void delivery
+          if (typeof sessionID !== "string" || !sessionID) return formatGoalResponse(null)
+          // The V2 command executor receives a PromptInput object, not a raw
+          // string; the slash-command arguments live on `text`.
+          const goalText = typeof prompt === "string" ? prompt : prompt?.text ?? ""
+          const parsed = parseGoalCommand(goalText)
+          switch (parsed.kind) {
+            case "setObjective":
+              return formatGoalResponse(await goalController.setGoal(sessionID, parsed.objective))
+            case "setStatus":
+              return formatGoalResponse(parsed.status === "paused"
+                ? await goalController.pauseGoal(sessionID)
+                : await goalController.resumeGoal(sessionID))
+            case "clear":
+              await goalController.clearGoal(sessionID)
+              return formatGoalResponse(null)
+            case "show":
+              return formatGoalResponse(await goalController.getGoal(sessionID))
+          }
+        },
+      }))
+    }
+    let ulwExecuteCommandRegistration
+    if (typeof context?.command?.transform === "function") {
+      ulwExecuteCommandRegistration = await context.command.transform((editor) => editor.add(
+        createUlwExecuteCommand({
+          context,
+          directory: location.directory,
+          registeredAgents,
+          stopContinuationState,
+        }),
+      ))
+    }
     // Reconcile durable background state from a previous process: re-admit
     // queued descriptors (they never started), re-track running children WITHOUT
     // re-creating them, and re-queue undelivered wakes. A fresh manager (tests,
@@ -1088,7 +1305,11 @@ export default {
         }
       }
       await conditionalTools?.dispose?.()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), rosterRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription])
+      await goalCommandRegistration?.dispose?.()
+      await ulwExecuteCommandRegistration?.dispose?.()
+      autoSlashCommand.clear()
+      disposeClaudeCodeHooks()
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
     }
   },
 }

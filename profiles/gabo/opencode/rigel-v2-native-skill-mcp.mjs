@@ -13,6 +13,7 @@
 // stays in the manager so sessions never share an MCP client.
 
 import { spawn } from "node:child_process"
+import { createOAuthHttpMcpClient, isOAuthConfigured } from "./rigel-v2-skill-mcp-oauth.mjs"
 
 export const SKILL_MCP_TOOL_NAME = "skill_mcp"
 export const SKILL_MCP_DESCRIPTION = "Invoke MCP server operations from skill-embedded MCPs. Requires mcp_name plus exactly one of: tool_name, resource_name, or prompt_name."
@@ -89,6 +90,19 @@ export function translateSkillMcpConfig(config) {
   if (type === "http" && typeof config?.url === "string" && config.url.trim()) {
     const translated = { type: "remote", url: config.url }
     if (config.headers && Object.keys(config.headers).length > 0) translated.headers = { ...config.headers }
+    if (config.oauth === false) translated.oauth = false
+    else if (config.oauth && typeof config.oauth === "object") {
+      const scopes = Array.isArray(config.oauth.scopes)
+        ? config.oauth.scopes.filter((scope) => typeof scope === "string" && scope.trim()).join(" ")
+        : typeof config.oauth.scope === "string" ? config.oauth.scope : undefined
+      translated.oauth = {
+        ...(typeof config.oauth.clientId === "string" ? { clientId: config.oauth.clientId } : {}),
+        ...(typeof config.oauth.clientSecret === "string" ? { clientSecret: config.oauth.clientSecret } : {}),
+        ...(scopes ? { scope: scopes } : {}),
+        ...(Number.isInteger(config.oauth.callbackPort) ? { callbackPort: config.oauth.callbackPort } : {}),
+        ...(typeof config.oauth.redirectUri === "string" ? { redirectUri: config.oauth.redirectUri } : {}),
+      }
+    }
     if (config.disabled === true) translated.enabled = false
     return translated
   }
@@ -276,7 +290,15 @@ export function createSkillMcpManager({ createClient, fetchImpl } = {}) {
     const resolved = withCdpEndpoint(config, options)
     const type = getConnectionType(config)
     if (type === "stdio") return createStdioMcpClient({ command: resolved.command, args: resolved.args ?? [], env: resolved.env, cwd: resolved.cwd })
-    if (type === "http") return createHttpMcpClient({ url: resolved.url, headers: resolved.headers, fetchImpl })
+    if (type === "http") {
+      // OAuth-configured HTTP servers get the full manager-side OAuth client
+      // (PKCE + DCR + step-up); plain HTTP servers keep the unauthenticated
+      // client. V1 parity: `skill-mcp-manager/oauth-handler.ts`.
+      if (isOAuthConfigured(resolved)) {
+        return createOAuthHttpMcpClient({ url: resolved.url, oauth: resolved.oauth, headers: resolved.headers, fetchImpl, storage: resolved.oauthStorage })
+      }
+      return createHttpMcpClient({ url: resolved.url, headers: resolved.headers, fetchImpl })
+    }
     throw rpcError("Unsupported MCP server configuration")
   })
 

@@ -24,7 +24,7 @@ describe("#given the frozen flow-rule registry", () => {
       "fsync-skip-warning:record-start",
     ])
     expect(afterRules.map((rule) => rule.name)).toEqual(["delegate-task-retry", "fsync-skip-warning"])
-    expect(requestSteps.map((step) => step.name)).toEqual(["tool-pair-validator", "stop-continuation-guard", "image-resizer"])
+    expect(requestSteps.map((step) => step.name)).toEqual(["image-resizer"])
     expect(Object.isFrozen(beforeRules)).toBe(true)
     expect(Object.isFrozen(afterRules)).toBe(true)
     expect(Object.isFrozen(requestSteps)).toBe(true)

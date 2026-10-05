@@ -309,6 +309,23 @@ test("expands the V1 read-only wildcard so every non-read V2 action is denied", 
   expect(agent.permissions.filter((rule) => rule.action !== "read").every((rule) => rule.effect === "deny")).toBe(true)
 })
 
+test("denies grep and glob for frontier models while leaving standard models unchanged", () => {
+  const frontier = { request: { headers: {}, body: {} }, permissions: [] }
+  const standard = { request: { headers: {}, body: {} }, permissions: [] }
+  applyLegacyAgentDefinition(frontier, "frontier", {
+    name: "Frontier",
+    model: "openai/gpt-5.6-terra",
+  })
+  applyLegacyAgentDefinition(standard, "standard", {
+    name: "Standard",
+    model: "kimi/k2",
+  })
+  expect(frontier.permissions).toContainEqual({ action: "grep", resource: "*", effect: "deny" })
+  expect(frontier.permissions).toContainEqual({ action: "glob", resource: "*", effect: "deny" })
+  expect(standard.permissions).not.toContainEqual({ action: "grep", resource: "*", effect: "deny" })
+  expect(standard.permissions).not.toContainEqual({ action: "glob", resource: "*", effect: "deny" })
+})
+
 test("registerNativeAgents registers canonical core agents first from a shuffled manifest", async () => {
   const updateOrder = []
   const editor = {

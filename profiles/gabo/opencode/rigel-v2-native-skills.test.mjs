@@ -5,6 +5,7 @@ import path from "node:path"
 import {
   SCOPE_PRIORITY,
   collectDisabledSkillAliases,
+  createRuntimeHostSkillSource,
   discoverSkills,
   findPartialSkillMatches,
   formatSkillInjection,
@@ -12,6 +13,7 @@ import {
   isSkillAllowedForTargetAgent,
   matchSkillByName,
   parseFrontmatter,
+  readRuntimeHostSkills,
   registerNativeSkills,
   selectSkillsForChild,
 } from "./rigel-v2-native-skills.mjs"
@@ -98,6 +100,19 @@ describe("#given skills in multiple scope directories", () => {
     expect(matchSkillByName(skills, "thing")).toBeUndefined()
     expect(matchSkillByName(skills, "beta/thing").rawBody).toBe("B")
     expect(matchSkillByName(skills, "/alpha/thing").rawBody).toBe("A")
+  })
+
+  test("#when configured skill sources declare a directory #then its skills join discovery below project scope", () => {
+    const root = makeRoot()
+    const configured = path.join(root, "configured-skills")
+    writeSkill(configured, "from-config", "configured", { frontmatter: "name: configured", body: "CONFIGURED_BODY" })
+    const skills = discoverSkills({
+      directory: root,
+      home: makeRoot(),
+      env: { HOME: makeRoot(), XDG_CONFIG_HOME: path.join(root, "empty") },
+      config: { skills: { sources: [{ path: "configured-skills" }] } },
+    })
+    expect(matchSkillByName(skills, "configured")).toMatchObject({ scope: "config", rawBody: "CONFIGURED_BODY" })
   })
 })
 
@@ -213,5 +228,73 @@ describe("#given the V2 native skill surface", () => {
     }
     await registerNativeSkills(context, { directory: projectDir, home: root, env: { HOME: root, XDG_CONFIG_HOME: path.join(root, "empty") } })
     expect(sources).toEqual([{ type: "embedded", skill: { id: "beta", name: "beta", description: "Beta", path: path.join(projectDir, ".agents/skills/beta", "SKILL.md"), content: "BETA_BODY" } }])
+  })
+})
+
+describe("#given the runtime host-skill source", () => {
+  test("#when the host catalog lists a skill added by another plugin #then it is merged after the base skills with parsed frontmatter", async () => {
+    // given
+    const root = makeRoot()
+    const projectDir = path.join(root, "work")
+    const base = writeSkill(projectDir, ".agents/skills/alpha", "alpha", { frontmatter: "name: alpha\ndescription: Alpha skill", body: "ALPHA_BODY" })
+    // another plugin added this skill through a config hook: it exists on disk
+    // but under a directory our discovery never walks
+    const external = writeSkill(root, "external-skills/omega", "omega", { frontmatter: "name: omega\ndescription: Omega skill\nmcp:\n  omega-api:\n    type: http\n    url: https://omega.example.com", body: "OMEGA_BODY" })
+    const context = { skill: { list: async () => [
+      { id: "alpha", name: "alpha", path: path.join(base, "SKILL.md") },
+      { id: "omega", name: "omega", path: path.join(external, "SKILL.md") },
+    ] } }
+    const baseSkills = discoverSkills({ directory: projectDir, home: root, env: { HOME: root, XDG_CONFIG_HOME: path.join(root, "empty") } })
+    const resolveSkills = createRuntimeHostSkillSource({ context, baseSkills })
+    // when
+    const merged = await resolveSkills()
+    // then
+    expect(merged.map((skill) => skill.name)).toEqual(["alpha", "omega"])
+    expect(merged[1].scope).toBe("runtime-host")
+    expect(merged[1].mcpConfig?.["omega-api"]).toMatchObject({ url: "https://omega.example.com" })
+  })
+
+  test("#when the host catalog repeats a base name #then the on-disk base skill keeps precedence", async () => {
+    // given
+    const root = makeRoot()
+    const projectDir = path.join(root, "work")
+    const base = writeSkill(projectDir, ".agents/skills/alpha", "alpha", { frontmatter: "name: alpha\ndescription: Alpha skill", body: "ALPHA_BODY" })
+    const context = { skill: { list: async () => [{ id: "alpha", name: "alpha", content: "HOST_COPY" }] } }
+    const resolveSkills = createRuntimeHostSkillSource({ context, baseSkills: discoverSkills({ directory: projectDir, home: root, env: { HOME: root, XDG_CONFIG_HOME: path.join(root, "empty") } }) })
+    // when
+    const merged = await resolveSkills()
+    // then
+    expect(merged).toHaveLength(1)
+    expect(merged[0].rawBody).toBe("ALPHA_BODY")
+    void base
+  })
+
+  test("#when a host skill is disabled or pathless #then inline content is used and disabled names are dropped", async () => {
+    // given
+    const context = { skill: { list: async () => [
+      { id: "inline", name: "inline", description: "Inline skill", content: "INLINE_BODY" },
+      { id: "gone", name: "gone", content: "SHOULD_NOT_LOAD" },
+    ] } }
+    const resolveSkills = createRuntimeHostSkillSource({ context, baseSkills: [], disabledSkills: new Set(["gone"]) })
+    // when
+    const merged = await resolveSkills()
+    // then
+    expect(merged.map((skill) => skill.name)).toEqual(["inline"])
+    expect(merged[0].rawBody).toBe("INLINE_BODY")
+  })
+
+  test("#when the host list is absent or the read fails #then the base skills are returned unchanged", async () => {
+    // given: no skill domain at all
+    const fallback = createRuntimeHostSkillSource({ context: {}, baseSkills: [{ name: "alpha" }] })
+    // when
+    expect(await fallback()).toEqual([{ name: "alpha" }])
+    // given: the domain throws
+    const failing = createRuntimeHostSkillSource({ context: { skill: { list: async () => { throw new Error("catalog gone") } } }, baseSkills: [{ name: "alpha" }] })
+    // then
+    expect(await failing()).toEqual([{ name: "alpha" }])
+  })
+
+  test("#when readRuntimeHostSkills runs without a list domain #then it reports undefined so callers fall back", async () => {
+    expect(await readRuntimeHostSkills({})).toBeUndefined()
   })
 })

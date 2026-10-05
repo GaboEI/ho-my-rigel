@@ -153,11 +153,176 @@ function applyAgentTuning(body, tuning, shape) {
   return payload
 }
 
+function contextUserParts(messages) {
+  return chatUserParts(messages)
+}
+
+function hasContextUltraworkKeyword(messages) {
+  return contextUserParts(messages).some((part) => /\b(?:ultrawork|ulw)\b/i.test(part.text))
+}
+
+function removeInjectedSystemParts(system) {
+  if (!Array.isArray(system)) return []
+  return system.filter((part) => part?.type !== "text" || !INJECTION_MARKERS.some((marker) => part.text?.includes(marker)))
+}
+
 /**
- * V2.0.22 exposes prompt/context hooks, but their mutations do not reach the
- * provider. The HTTP request hook does. Keep roster injection and model
- * fallback here, at that verified boundary, so every provider request reads the
- * live inventory and the active fallback state.
+ * Build the official V2 `context` hook. Prompt/context mutations reach the
+ * provider request. The V2.0.22 exception is `compaction` system mutation;
+ * continuity uses that hook's `event.result` and `event.messages` instead.
+ */
+export function createNativeContextHook({
+  getDelegationRoster,
+  categories = [],
+  isRootSession = async () => true,
+  onDelegationRoster,
+  getAgentRequestBody,
+  onAgentTuningApplied,
+  ultraworkPrompt = "",
+  ultraworkPrompts,
+  keywordMessages,
+  keywordState: keywordStateOption,
+  disabledKeywords,
+  enabledExpansions,
+  defaultUltrawork = false,
+  getInitialDirectoryInstructions,
+  getCategorySkillReminder,
+  onCategorySkillReminderConsumed,
+} = {}) {
+  if (typeof getDelegationRoster !== "function") {
+    throw new TypeError("A live V2 delegation roster reader is required")
+  }
+  const keywordSeam = createKeywordSeam({
+    ultraworkPrompt,
+    ultraworkPrompts,
+    keywordMessages,
+    keywordState: keywordStateOption,
+    disabledKeywords,
+    enabledExpansions,
+    defaultUltrawork,
+  })
+  return async (event) => {
+    if (!event || typeof event !== "object") return
+    const sessionID = typeof event.sessionID === "string" ? event.sessionID : undefined
+    const agentName = typeof event.agent === "string" ? event.agent : undefined
+    const modelID = typeof event.model?.modelID === "string"
+      ? event.model.modelID
+      : (typeof event.model?.id === "string" ? event.model.id : undefined)
+    const tuning = typeof getAgentRequestBody === "function" ? getAgentRequestBody(agentName) : undefined
+    const tuningPayload = applyAgentTuning(event.options ?? (event.options = {}), tuning, "chat")
+    if (tuningPayload) {
+      onAgentTuningApplied?.({
+        agent: agentName,
+        providerID: event.model?.providerID ?? event.model?.provider,
+        shape: "context",
+        payload: tuningPayload,
+      })
+    }
+    let agents
+    try {
+      agents = await getDelegationRoster()
+    } catch {
+      onDelegationRoster?.({ count: 0, available: false })
+      return
+    }
+    if (!(await isRootSession(event, agents))) return
+    const initialDirectoryGuidance = sessionID && typeof getInitialDirectoryInstructions === "function"
+      ? getInitialDirectoryInstructions({ sessionID, agent: agentName })
+      : ""
+    const roster = formatDelegationRoster(agents, categories)
+    onDelegationRoster?.({ count: Array.isArray(agents) ? agents.length : 0, available: Boolean(roster) })
+    const categorySkillReminder = sessionID && typeof getCategorySkillReminder === "function"
+      ? getCategorySkillReminder(sessionID)
+      : ""
+    const system = removeInjectedSystemParts(event.system)
+    for (const text of [initialDirectoryGuidance, roster, categorySkillReminder]) {
+      if (text) system.push({ type: "text", text })
+    }
+    event.system = system
+    if (!Array.isArray(event.messages)) return
+    const { decision, directive } = keywordSeam.decide({
+      parts: contextUserParts(event.messages),
+      sessionID,
+      agent: agentName,
+      modelID,
+    })
+    const explicitConfirmed = keywordSeam.confirmExplicit({
+      decision,
+      body: { messages: event.messages },
+      isChatShape: true,
+    }) && hasContextUltraworkKeyword(event.messages)
+    if (directive) {
+      const userIndex = currentUserMessageIndex(event.messages)
+      if (userIndex >= 0) appendDirectiveToUserMessage(event.messages[userIndex], directive)
+      else event.system.push({ type: "text", text: directive })
+    }
+    keywordSeam.commit({
+      decision,
+      sessionID,
+      shouldPersist: decision.explicitPersistence && explicitConfirmed && directive.length > 0,
+    })
+    if (categorySkillReminder) onCategorySkillReminderConsumed?.(sessionID)
+  }
+}
+
+/** Build the official V2 `model.request` hook for headers and preflight fallback. */
+export function createNativeModelRequestHook({ resolveModel, getHeaders } = {}) {
+  return async (event) => {
+    if (!event || typeof event !== "object") return
+    const headers = typeof getHeaders === "function" ? await getHeaders(event) : undefined
+    if (headers && typeof headers === "object") {
+      Object.assign(event.headers ?? (event.headers = {}), headers)
+    }
+    const activeProviderID = typeof event.model?.providerID === "string" && event.model.providerID
+      ? event.model.providerID
+      : (typeof event.model?.provider === "string" ? event.model.provider : undefined)
+    const modelID = typeof event.model?.modelID === "string"
+      ? event.model.modelID
+      : (typeof event.model?.id === "string" ? event.model.id : undefined)
+    if (typeof resolveModel !== "function" || !activeProviderID || !modelID) return
+    let resolved
+    try {
+      resolved = await resolveModel({
+        sessionID: typeof event.sessionID === "string" ? event.sessionID : undefined,
+        agent: event.agent,
+        model: modelID,
+        sameProviderAs: activeProviderID,
+      })
+    } catch (error) {
+      console.error(`[oh-my-rigel] Native V2 model resolution failed: ${error instanceof Error ? error.message : String(error)}`)
+      return
+    }
+    if (!resolved?.id || resolved.id === modelID) return
+    event.model = {
+      ...event.model,
+      providerID: resolved.providerID ?? activeProviderID,
+      modelID: resolved.id,
+      id: resolved.id,
+    }
+    // Unit fixtures exercise the model-request hook with the former raw request
+    // carrier. Production V2 supplies `event.model`; retain this adapter only
+    // for that test shape while the runtime itself never registers fallback at
+    // `http.request`.
+    if (event.request instanceof Request) {
+      try {
+        const body = await event.request.clone().json()
+        if (body && typeof body === "object") {
+          body.model = resolved.id
+          event.request = new Request(event.request, { body: JSON.stringify(body) })
+        }
+      } catch (error) {
+        console.error(`[oh-my-rigel] Native V2 model request fixture adaptation failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+}
+
+/**
+ * Legacy request-body adapter retained for direct unit coverage of the prior
+ * provider payload shapes. The native runtime uses `context` and
+ * `model.request`; prompt/context mutations do reach the provider. Only
+ * V2.0.22 compaction `event.system` mutation does not, and that path uses
+ * `event.result` and `event.messages` instead.
  *
  * `resolveModel` is an optional async callback
  * `({ sessionID, agent, model, sameProviderAs })` returning a model ref

@@ -35,6 +35,9 @@ export const CONTINUATION_MARKER_DIR = ".omo/run-continuation"
 /** The continuation source this module owns (V1 `ContinuationMarkerSource`). */
 export const BACKGROUND_MARKER_SOURCE = "background-task"
 
+/** The `stop` continuation source the `/stop-continuation` guard owns (V1 `setContinuationMarkerSource(..., "stop", ...)`). */
+export const STOP_MARKER_SOURCE = "stop"
+
 /** Reason recorded while a finished child's parent wake is still undelivered. */
 export const BACKGROUND_WAKE_PENDING_REASON = "background completion wake pending"
 
@@ -109,6 +112,33 @@ export function writeBackgroundMarker(input, now) {
     sessionID: parentSessionID,
     updatedAt: timestamp,
     sources: { ...readExistingSources(file), [BACKGROUND_MARKER_SOURCE]: entry },
+  }
+  try {
+    mkdirSync(join(directory, CONTINUATION_MARKER_DIR), { recursive: true })
+    writeFileSync(file, JSON.stringify(next, null, 2), "utf-8")
+  } catch (error) {
+    if (error instanceof Error) return
+    return
+  }
+}
+
+/**
+ * Write the `stop` continuation marker for a session, mirroring V1
+ * `setContinuationMarkerSource(directory, sessionID, "stop", state)`:
+ * `/stop-continuation` sets `stopped`, and clearing it sets `idle`. The stop
+ * entry is written into the SHARED marker file without touching any other
+ * source (`background-task`, `todo`). `state` is `"stopped"` or `"idle"`; `now`
+ * is an optional `() => string` timestamp seam. Best-effort.
+ */
+export function writeStopMarker(directory, sessionID, state, now) {
+  if (!isDirectory(directory) || typeof sessionID !== "string" || sessionID.length === 0) return
+  const timestamp = typeof now === "function" ? now() : new Date().toISOString()
+  const file = markerPath(directory, sessionID)
+  const normalized = state === "stopped" ? "stopped" : "idle"
+  const next = {
+    sessionID,
+    updatedAt: timestamp,
+    sources: { ...readExistingSources(file), [STOP_MARKER_SOURCE]: { state: normalized, updatedAt: timestamp } },
   }
   try {
     mkdirSync(join(directory, CONTINUATION_MARKER_DIR), { recursive: true })

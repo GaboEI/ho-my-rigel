@@ -37,6 +37,8 @@ import {
 } from "./tools/goal.tools.mjs"
 import { readNativeGates } from "./rigel-v2-native-config.mjs"
 import { normalizeToolDefinition } from "./rigel-v2-native-core.mjs"
+import { trimToolNamesToCap } from "./rigel-v2-native-tool-trimming.mjs"
+import { createTeamTools, TEAM_TOOL_NAMES } from "./tools/team.tools.mjs"
 
 // F1 landed: the config adapter (`rigel-v2-native-config.mjs`) owns JSONC parsing
 // and `generate-v2-agents.mjs` materializes the resolved gates into
@@ -63,6 +65,8 @@ export function buildConditionalToolDefinitions({
   taskStore,
   taskLock,
   goalStore,
+  goalController,
+  teamStorage,
   syncTodos,
   getSessionID,
   onUnavailable = () => {},
@@ -101,7 +105,7 @@ export function buildConditionalToolDefinitions({
 
   if (gates.goal === true) {
     if (goalStore) {
-      const controller = createGoalController({ store: goalStore })
+      const controller = goalController ?? createGoalController({ store: goalStore })
       const tools = createGoalTools({ controller, getSessionID })
       for (const name of GOAL_TOOL_NAMES) {
         definitions[name] = tools[name]
@@ -109,6 +113,18 @@ export function buildConditionalToolDefinitions({
       }
     } else {
       onUnavailable("goal", "V2 storage domain is unavailable")
+    }
+  }
+
+  if (gates.team_mode === true) {
+    if (teamStorage) {
+      const tools = createTeamTools({ storage: teamStorage, getSessionID })
+      for (const name of TEAM_TOOL_NAMES) {
+        definitions[name] = tools[name]
+        names.push(name)
+      }
+    } else {
+      onUnavailable("team_mode", "V2 storage domain is unavailable")
     }
   }
 
@@ -141,6 +157,8 @@ export async function registerConditionalNativeTools({
   goalStore,
   syncTodos,
   getSessionID,
+  maxTools,
+  existingToolNames = [],
   onRegistered,
   log = console.error,
 } = {}) {
@@ -180,6 +198,11 @@ export async function registerConditionalNativeTools({
     ? createV2GoalStore({ storage })
     : undefined)
 
+  // V2 renders the storage-backed goal state, so the shared controller replaces
+  // V1's file-based TUI mirror without adding another persistence path.
+  const goalController = resolved.goal === true && resolvedGoalStore
+    ? createGoalController({ store: resolvedGoalStore })
+    : undefined
   const { definitions, names } = buildConditionalToolDefinitions({
     gates: resolved,
     tmuxPath: resolvedTmuxPath,
@@ -188,31 +211,43 @@ export async function registerConditionalNativeTools({
     taskStore: store,
     taskLock: taskLock ?? createTaskLock(),
     goalStore: resolvedGoalStore,
+    teamStorage: storage,
+    goalController,
     syncTodos,
     getSessionID,
     onUnavailable,
   })
 
+  // experimental.max_tools trimming (V1 tool-registry-trimming parity): the
+  // cap applies to the plugin's TOTAL surface, so the names the core runtime
+  // already registered count too. Lowest-priority names drop first; the goal
+  // continuation below still runs against the shared controller even when its
+  // create_goal tool was trimmed away, matching "state survives, surface trims".
+  const trimmed = trimToolNamesToCap(names, maxTools, { existingNames: existingToolNames })
+  if (trimmed.removed.length > 0) {
+    log(`[oh-my-rigel] Native V2 max_tools=${maxTools}: trimmed ${trimmed.removed.length} tools (${trimmed.removed.join(", ")})`)
+  }
+  const registeredNames = trimmed.kept
+
   // Observability seam for live QA: report the resolved gates and the families
   // that actually registered, so a run can prove gates on/off without a model.
-  onRegistered?.({ gates: resolved, registered: names, unavailable, tmux: resolvedTmuxPath ?? null })
+  onRegistered?.({ gates: resolved, registered: registeredNames, trimmed: trimmed.removed, unavailable, tmux: resolvedTmuxPath ?? null })
 
   let registration
-  if (names.length > 0 && typeof context?.tool?.transform === "function") {
+  if (registeredNames.length > 0 && typeof context?.tool?.transform === "function") {
     registration = await context.tool.transform((editor) => {
-      for (const name of names) editor.add(normalizeToolDefinition(definitions[name]))
+      for (const name of registeredNames) editor.add(normalizeToolDefinition(definitions[name]))
     })
   }
 
   let eventSubscription
   const disposers = []
   if (resolved.goal === true && definitions.create_goal && resolvedGoalStore) {
-    const controller = createGoalController({ store: resolvedGoalStore })
     const dispatch = async ({ sessionID, text }) => {
       if (typeof context?.session?.prompt !== "function") return
       await context.session.prompt({ sessionID, text, delivery: "queue" })
     }
-    const continuation = createGoalContinuation({ controller, dispatch })
+    const continuation = createGoalContinuation({ controller: goalController, dispatch })
     const abort = new AbortController()
     if (typeof context?.event?.subscribe === "function") {
       eventSubscription = (async () => {
@@ -230,12 +265,13 @@ export async function registerConditionalNativeTools({
     }
   }
 
-  log(`[oh-my-rigel] Native V2 conditional tools: gates=${JSON.stringify(resolved)}; registered=${names.join(",") || "none"}; tmux=${resolvedTmuxPath ?? "none"}${unavailable.length ? `; unavailable=${unavailable.map((entry) => entry.family).join(",")}` : ""}`)
+  log(`[oh-my-rigel] Native V2 conditional tools: gates=${JSON.stringify(resolved)}; registered=${registeredNames.join(",") || "none"}; tmux=${resolvedTmuxPath ?? "none"}${unavailable.length ? `; unavailable=${unavailable.map((entry) => entry.family).join(",")}` : ""}`)
 
   return {
     gates: resolved,
-    registered: names,
+    registered: registeredNames,
     definitions,
+    goalController,
     unavailable,
     async dispose() {
       for (const dispose of disposers) {

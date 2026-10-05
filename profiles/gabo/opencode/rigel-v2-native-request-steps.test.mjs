@@ -9,6 +9,9 @@
  */
 
 import { describe, expect, test } from "bun:test"
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 import {
   CONTINUATION_PROMPT_MARKER,
@@ -27,6 +30,9 @@ import {
 } from "./rigel-v2-native-request-steps.mjs"
 
 import { INTERRUPTED_TOOL_ERROR } from "./rigel-v2-flow-logic.mjs"
+import { runMutation } from "./test-support/mutation-harness.mjs"
+
+const OPENCODE_DIR = import.meta.dir
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -267,26 +273,21 @@ describe("#given the stop-continuation guard", () => {
 // ---------------------------------------------------------------------------
 
 describe("#given the ordered request steps", () => {
-  test("#then the order is tool-pair-validator then stop-continuation-guard", () => {
+  test("#then HTTP owns only the image transport step", () => {
     // given / when / then
-    expect(requestSteps.map((step) => step.name)).toEqual(["tool-pair-validator", "stop-continuation-guard", "image-resizer"])
+    expect(requestSteps.map((step) => step.name)).toEqual(["image-resizer"])
     expect(Object.isFrozen(requestSteps)).toBe(true)
   })
 
-  test("#when runRequestSteps drives the pipeline #then both steps execute in order", async () => {
+  test("#when runRequestSteps drives the HTTP pipeline #then image transport remains isolated", async () => {
     // given
-    const stopState = createStopContinuationState()
     const body = chatOrphanBody()
-    body.messages.push({ role: "user", content: CONTINUATION_PROMPT_MARKER })
-    body.messages.push({ role: "user", content: "/stop-continuation" })
     // when
-    const report = await runRequestSteps({ body, shape: "chat", sessionID: "ses_pipe", stopState })
+    const report = await runRequestSteps({ body, shape: "chat", sessionID: "ses_pipe" })
     // then
-    expect(report.executed).toEqual(["tool-pair-validator", "stop-continuation-guard", "image-resizer"])
+    expect(report.executed).toEqual(["image-resizer"])
     expect(report.failures).toEqual([])
-    expect(stopState.isStopped("ses_pipe")).toBe(true)
-    expect(body.messages.some((message) => message.content === CONTINUATION_PROMPT_MARKER)).toBe(false)
-    expect(body.messages.some((message) => message.role === "tool" && message.tool_call_id === "call_chat_1")).toBe(true)
+    expect(body.messages.some((message) => message.role === "tool" && message.tool_call_id === "call_chat_1")).toBe(false)
   })
 
   test("#when a step throws #then the pipeline isolates it and keeps running", async () => {
@@ -518,5 +519,90 @@ describe("#given the image-resizer step", () => {
     // then
     expect(report.results.map((entry) => entry.name)).toEqual(["tool-pair-validator", "stop-continuation-guard", "image-resizer"])
     expect(report.results.find((entry) => entry.name === "image-resizer").result.removed).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 5. stop-continuation transition callbacks (T20 phase-4 parity)
+// ---------------------------------------------------------------------------
+
+describe("#given a stop-continuation state with transition callbacks", () => {
+  test("#when stop and clear repeat #then each callback fires only on its transition", () => {
+    // given
+    const stops = []
+    const clears = []
+    const state = createStopContinuationState({
+      onStop: (sessionID) => stops.push(sessionID),
+      onClear: (sessionID) => clears.push(sessionID),
+    })
+    // when
+    state.stop("ses_a")
+    state.stop("ses_a")
+    state.stop("ses_a")
+    state.clear("ses_a")
+    state.clear("ses_a")
+    state.clear("ses_b")
+    // then
+    expect(stops).toEqual(["ses_a"])
+    expect(clears).toEqual(["ses_a"])
+    expect(state.isStopped("ses_a")).toBe(false)
+  })
+
+  test("#when onStop throws synchronously #then stop still records the stopped session", () => {
+    // given
+    const state = createStopContinuationState({ onStop: () => { throw new Error("boom") } })
+    // when / then
+    expect(() => state.stop("ses_throw")).not.toThrow()
+    expect(state.isStopped("ses_throw")).toBe(true)
+  })
+
+  test("#when onStop rejects asynchronously #then the rejection is swallowed", async () => {
+    // given
+    const state = createStopContinuationState({ onStop: async () => { throw new Error("async boom") } })
+    // when
+    state.stop("ses_async")
+    await Promise.resolve()
+    // then
+    expect(state.isStopped("ses_async")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Named-RED mutation harness
+// ---------------------------------------------------------------------------
+
+describe("Rigel V2 request-steps named-RED mutation harness", () => {
+  test("#given stop() drops its transition guard #when the contract runs #then it turns RED and restores byte-identically", async () => {
+    // given: an isolated copy of the module tree so relative imports resolve.
+    const root = mkdtempSync(join(tmpdir(), "rigel-steps-mutant-"))
+    const directory = join(root, "opencode")
+    cpSync(OPENCODE_DIR, directory, { recursive: true })
+    const target = join(directory, "rigel-v2-native-request-steps.mjs")
+    const before = readFileSync(target)
+
+    // when
+    const receipt = await runMutation({
+      file: target,
+      mutate: (source) => source.replace("      if (stoppedSessions.has(sessionID)) return\n", ""),
+      contract: {
+        name: "stop-continuation state fires onStop only on the not-stopped -> stopped transition",
+        run: async ({ load }) => {
+          const module = await load()
+          let count = 0
+          const state = module.createStopContinuationState({ onStop: () => { count += 1 } })
+          state.stop("s")
+          state.stop("s")
+          if (count !== 1) throw new Error(`expected onStop once across repeated stop, got ${count}`)
+        },
+      },
+    })
+
+    // then
+    expect(receipt.contract).toBe("stop-continuation state fires onStop only on the not-stopped -> stopped transition")
+    expect(receipt.red).toBe(true)
+    expect(receipt.redError).toContain("expected onStop once")
+    expect(receipt.beforeHash).toBe(receipt.afterHash)
+    expect(readFileSync(target).equals(before)).toBe(true)
+    rmSync(root, { recursive: true, force: true })
   })
 })

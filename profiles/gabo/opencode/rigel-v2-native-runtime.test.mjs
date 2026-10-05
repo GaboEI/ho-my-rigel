@@ -40,6 +40,7 @@ function createEventFeed() {
   return {
     events,
     requestHook: undefined,
+    promptHook: undefined,
     subscribe: ({ signal } = {}) => { abortSignal = signal; return events },
     push(event) {
       queue.push(event)
@@ -67,7 +68,7 @@ function reactiveFallbackContext(feed, { switchModel, models } = {}) {
     ] }) },
     event: { subscribe: feed.subscribe },
     session: {
-      hook: async (name, handler) => { if (name === "http.request") { feed.requestHook = handler } return { dispose() {} } },
+      hook: async (name, handler) => { if (name === "model.request") feed.requestHook = handler; if (name === "prompt") feed.promptHook = handler; return { dispose() {} } },
       create: async () => ({ data: { id: "ses_child" } }),
       prompt: async () => ({ data: {} }),
       ...(switchModel ? { switchModel } : {}),
@@ -220,7 +221,7 @@ test("native runtime resolves the next chain rung when the primary model is unav
     },
     model: { list: async () => ({ data: [{ providerID: "opencode-go", id: "kimi-k3", enabled: true }] }) },
     session: {
-      hook: async (name, handler) => { if (name === "http.request") requestHook = handler; return { dispose() {} } },
+    hook: async (name, handler) => { if (name === "model.request") requestHook = handler; return { dispose() {} } },
       create: async () => ({ data: { id: "ses_child" } }),
       prompt: async () => ({ data: {} }),
     },
@@ -230,7 +231,7 @@ test("native runtime resolves the next chain rung when the primary model is unav
   const input = {
     sessionID: "ses_root",
     agent: "Sisyphus - ultraworker",
-    model: { providerID: "opencode-go", modelID: "kimi-k3" },
+    model: { providerID: "opencode-go", modelID: "missing-primary" },
     request: new Request("https://example.invalid/chat", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "missing-primary", messages: [{ role: "user", content: "work" }] }),
@@ -269,7 +270,7 @@ test("native runtime keeps reactive fallback inside the provider V2 already sele
     ] }) },
     event: { subscribe: () => events },
     session: {
-      hook: async (name, handler) => { if (name === "http.request") requestHook = handler; return { dispose() {} } },
+    hook: async (name, handler) => { if (name === "model.request") requestHook = handler; return { dispose() {} } },
       create: async () => ({ data: { id: "ses_child" } }),
       prompt: async (input) => {
         prompts.push(input)
@@ -287,7 +288,7 @@ test("native runtime keeps reactive fallback inside the provider V2 already sele
   const request = () => ({
     sessionID: "ses_child",
     agent: "explore",
-    model: { providerID: "openai", modelID: "gpt-6-luna-fast" },
+    model: { providerID: "openai", modelID: "kimi-for-coding-highspeed" },
     request: new Request("https://example.invalid/chat", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "kimi-for-coding-highspeed", messages: [{ role: "user", content: "work" }] }),
@@ -667,17 +668,24 @@ test("native runtime registers its ordered tool hook chain and disposes every re
     const dispose = await plugin.setup(context)
 
     // Observed from the recording tool.hook/session.hook fake: two
-    // execute.after handlers (directory instructions, then the ordered result
-    // chain), three execute.before handlers (the ordered write-guard chain,
-    // the non-interactive env guard, the permission gate), and one
-    // http.request pipeline, in that exact order.
+  // execute.after handlers (directory instructions, then the ordered result
+  // chain), three execute.before handlers (the ordered write-guard chain,
+  // the non-interactive env guard, the permission gate), prompt admission,
+  // model-visible context, semantic model requests, and image transport.
     expect(registrations.map((registration) => registration.name)).toEqual([
       "execute.after",
       "execute.after",
-      "execute.before",
-      "execute.before",
-      "execute.before",
-      "http.request",
+    "execute.before",
+    "execute.before",
+    "execute.before",
+    "prompt",
+    "compaction",
+    "execute.before",
+    "execute.after",
+    "prompt",
+    "context",
+    "model.request",
+    "http.request",
     ])
 
     // Driving the after chain returns the boundary report: every rule ran in
@@ -705,8 +713,8 @@ test("native runtime registers its ordered tool hook chain and disposes every re
     ])
     expect(afterReport.failures).toEqual([])
 
-    // The before chain composes the four built-in rules followed by the T13
-    // guard rules and the T14 fsync start rule, in that declared order.
+    // The before chain preserves the declared native-rule order before the
+    // T13 guard rules and the T14 fsync start rule.
     const beforeChain = registrations.filter((registration) => registration.name === "execute.before")
     const beforeReport = await beforeChain[0].handler({
       tool: "read",
@@ -719,6 +727,9 @@ test("native runtime registers its ordered tool hook chain and disposes every re
       "write-existing-file-guard",
       "comment-checker",
       "webfetch-redirect-guard",
+      "mcp-prefix-strip",
+      "bash-null-byte-strip",
+      "background-sleep-block",
       "notepad-write-guard",
       "question-label-truncator",
       "sisyphus-junior-notepad",
@@ -759,6 +770,9 @@ test("native runtime isolates a throwing execute.before rule and keeps the chain
       "prometheus-md-only",
       "comment-checker",
       "webfetch-redirect-guard",
+      "mcp-prefix-strip",
+      "bash-null-byte-strip",
+      "background-sleep-block",
       "notepad-write-guard",
       "question-label-truncator",
       "sisyphus-junior-notepad",
@@ -795,6 +809,9 @@ test("native runtime isolates a throwing flow rule and keeps the composed before
       "write-existing-file-guard",
       "comment-checker",
       "webfetch-redirect-guard",
+      "mcp-prefix-strip",
+      "bash-null-byte-strip",
+      "background-sleep-block",
       "question-label-truncator",
       "sisyphus-junior-notepad",
       "fsync-skip-warning:record-start",
@@ -805,43 +822,31 @@ test("native runtime isolates a throwing flow rule and keeps the composed before
   }
 })
 
-test("native runtime composes the request steps into the single http.request handler", async () => {
+test("native runtime repairs tool pairs at the context seam and reserves HTTP for images", async () => {
   const { context, registrations } = recordingHookContext()
   const dispose = await plugin.setup(context)
 
-  // The flow steps share the one existing registration; no second
-  // `http.request` handler is opened.
+  // Tool-pair repair is model-visible context. HTTP retains exactly one image
+  // transport handler.
   const requestHandlers = registrations.filter((registration) => registration.name === "http.request")
   expect(requestHandlers).toHaveLength(1)
+  const contextHandler = registrations.find((registration) => registration.name === "context").handler
 
   const input = {
     sessionID: "ses_request",
     agent: "sisyphus",
     model: { providerID: "opencode-go", modelID: "gpt-6-luna-fast" },
-    request: new Request("https://example.invalid/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: "gpt-6-luna-fast",
-        messages: [
-          { role: "assistant", content: null, tool_calls: [{ id: "call_orphan", type: "function", function: { name: "read", arguments: "{}" } }] },
-          { role: "user", content: CONTINUATION_PROMPT_MARKER },
-          { role: "user", content: "/stop-continuation" },
-        ],
-      }),
-    }),
+    system: [],
+    options: {},
+    messages: [
+      { role: "assistant", content: null, tool_calls: [{ id: "call_orphan", type: "function", function: { name: "read", arguments: "{}" } }] },
+      { role: "user", content: "work" },
+    ],
   }
-  await requestHandlers[0].handler(input)
+  await contextHandler(input)
 
-  const body = await input.request.clone().json()
-  // Step 1: the orphaned assistant tool call gains its terminal result.
-  const repaired = body.messages.find((message) => message.role === "tool")
+  const repaired = input.messages.find((message) => message.role === "tool")
   expect(repaired).toMatchObject({ tool_call_id: "call_orphan", content: INTERRUPTED_TOOL_ERROR })
-  // Step 2: the stop command marks the session and the queued continuation is
-  // stripped from the same body, while the stop command itself stays.
-  expect(body.messages.some((message) => typeof message.content === "string"
-    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
-  expect(body.messages.some((message) => message.content === "/stop-continuation")).toBe(true)
   await dispose()
 })
 
@@ -850,73 +855,47 @@ test("native runtime clears the stop-continuation state when the session is dele
   const context = reactiveFallbackContext(feed)
   const dispose = await plugin.setup(context)
 
-  const request = (messages) => ({
+  const request = (text) => ({
     sessionID: "ses_child",
-    agent: "explore",
-    model: { providerID: "opencode-go", modelID: "grok-4.7" },
-    request: new Request("https://example.invalid/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "grok-4.7", messages }),
-    }),
+    prompt: { text },
   })
 
-  const stopped = request([
-    { role: "user", content: CONTINUATION_PROMPT_MARKER },
-    { role: "user", content: "/stop-continuation" },
-  ])
-  await feed.requestHook(stopped)
-  const stoppedBody = await stopped.request.clone().json()
-  expect(stoppedBody.messages.some((message) => typeof message.content === "string"
-    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
+  const stopped = request(`/stop-continuation\n${CONTINUATION_PROMPT_MARKER}`)
+  await feed.promptHook(stopped)
+  expect(stopped.prompt.text).not.toContain(CONTINUATION_PROMPT_MARKER)
 
   const deleted = feed.consumed()
   feed.push({ type: "session.deleted", data: { sessionID: "ses_child" } })
   await deleted
 
   // The stop flag is gone, so a queued continuation is no longer stripped.
-  const resumed = request([{ role: "user", content: CONTINUATION_PROMPT_MARKER }])
-  await feed.requestHook(resumed)
-  const resumedBody = await resumed.request.clone().json()
-  expect(resumedBody.messages.some((message) => typeof message.content === "string"
-    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(true)
+  const resumed = request(CONTINUATION_PROMPT_MARKER)
+  await feed.promptHook(resumed)
+  expect(resumed.prompt.text).toContain(CONTINUATION_PROMPT_MARKER)
   await dispose()
 })
 
 test("native runtime clears the flow state on dispose", async () => {
   const { context, registrations } = recordingHookContext()
   const dispose = await plugin.setup(context)
-  const handler = registrations.find((registration) => registration.name === "http.request").handler
+  const handler = registrations.filter((registration) => registration.name === "prompt").at(-1).handler
 
-  const request = (messages) => ({
+  const request = (text) => ({
     sessionID: "ses_dispose",
-    agent: "sisyphus",
-    model: { providerID: "opencode-go", modelID: "gpt-6-luna-fast" },
-    request: new Request("https://example.invalid/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-6-luna-fast", messages }),
-    }),
+    prompt: { text },
   })
 
-  const stopped = request([
-    { role: "user", content: CONTINUATION_PROMPT_MARKER },
-    { role: "user", content: "/stop-continuation" },
-  ])
+  const stopped = request(`/stop-continuation\n${CONTINUATION_PROMPT_MARKER}`)
   await handler(stopped)
-  const stoppedBody = await stopped.request.clone().json()
-  expect(stoppedBody.messages.some((message) => typeof message.content === "string"
-    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(false)
+  expect(stopped.prompt.text).not.toContain(CONTINUATION_PROMPT_MARKER)
 
   await dispose()
 
   // The disposed runtime holds no stopped session, so the queued continuation
   // survives the same handler.
-  const resumed = request([{ role: "user", content: CONTINUATION_PROMPT_MARKER }])
+  const resumed = request(CONTINUATION_PROMPT_MARKER)
   await handler(resumed)
-  const resumedBody = await resumed.request.clone().json()
-  expect(resumedBody.messages.some((message) => typeof message.content === "string"
-    && message.content.includes(CONTINUATION_PROMPT_MARKER))).toBe(true)
+  expect(resumed.prompt.text).toContain(CONTINUATION_PROMPT_MARKER)
 })
 
 test("native runtime clears a deleted session's background child so no wake is delivered", async () => {
@@ -955,6 +934,55 @@ test("native runtime clears a deleted session's background child so no wake is d
   // The child's own task prompt is expected; the parent wake is not.
   expect(prompts.filter((input) => input.sessionID === "ses_parent")).toEqual([])
   await dispose()
+})
+
+test("native runtime cancels a stopped session's tracked descendant child on /stop-continuation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "rigel-native-stop-bg-"))
+  try {
+    const feed = createEventFeed()
+    const interrupted = []
+    let childCounter = 0
+    let definition
+    const context = {
+      location: { directory },
+      agent: {
+        list: async () => ({ data: [{ id: "explore", name: "Explore", mode: "subagent" }] }),
+        transform: async () => ({ dispose() {} }),
+        reload: async () => {},
+      },
+      event: { subscribe: feed.subscribe },
+      session: {
+        hook: async (name, handler) => { if (name === "prompt") feed.promptHook = handler; return { dispose() {} } },
+        create: async () => ({ data: { id: `ses_child_${++childCounter}` } }),
+        context: async () => [],
+        prompt: async () => ({ data: {} }),
+        interrupt: async ({ sessionID }) => { interrupted.push(sessionID); return { data: {} } },
+      },
+      tool: { transform: async (callback) => { callback({ add: (value) => { if (value?.name === "rigel_task") definition = value } }); return { dispose() {} } } },
+    }
+    const dispose = await plugin.setup(context)
+    try {
+      await definition.execute({ subagent_type: "explore", prompt: "Read only.", run_in_background: true }, { sessionID: "ses_parent" })
+      expect(interrupted).toEqual([])
+
+      // when: /stop-continuation reaches the parent session
+      const request = {
+        sessionID: "ses_parent",
+        prompt: { text: "/stop-continuation" },
+      }
+      await feed.promptHook(request)
+
+      // then: the tracked running child is aborted and the shared stop marker
+      // records the stopped state.
+      expect(interrupted).toEqual(["ses_child_1"])
+      const marker = JSON.parse(readFileSync(join(directory, ".omo/run-continuation/ses_parent.json"), "utf-8"))
+      expect(marker.sources.stop.state).toBe("stopped")
+    } finally {
+      await dispose()
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 // Task 19: the hashline edit tool is registered only when the materialized
@@ -1011,6 +1039,134 @@ test("native runtime omits hashline_edit when the manifest gate is absent", asyn
   expect(added).toContain("rigel_task")
   expect(added).not.toContain("hashline_edit")
   await dispose()
+})
+
+test("native runtime registers /goal with V1 command semantics", async () => {
+  const originalMetadata = nativeManifest.metadata
+  nativeManifest.metadata = { global: { gates: { goal: true } } }
+  const storage = new Map()
+  const commands = new Map()
+  const context = {
+    ...editorCaptureContext().context,
+    storage: {
+      async get(key) { return storage.get(key) },
+      async set(key, value) { storage.set(key, value) },
+      async remove(key) { storage.delete(key) },
+    },
+    command: {
+      transform: async (callback) => {
+        callback({ add: (definition) => commands.set(definition.name, definition) })
+        return { dispose() {} }
+      },
+    },
+  }
+  try {
+    const dispose = await plugin.setup(context)
+    const goal = commands.get("goal")
+    expect(goal).toBeDefined()
+    // The V2 host sends `prompt` as a PromptInput object, not a raw string; the
+    // command arguments live on `.text`. Assert that real path so a regression
+    // that reverts to the object-instead-of-text read fails here.
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "Ship Wave 1" }, delivery: "queue" }))).toMatchObject({ goal: { objective: "Ship Wave 1", status: "active" } })
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "pause" }, delivery: "queue" }))).toMatchObject({ goal: { status: "paused" } })
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "resume" }, delivery: "queue" }))).toMatchObject({ goal: { status: "active" } })
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "" }, delivery: "queue" }))).toMatchObject({ goal: { objective: "Ship Wave 1" } })
+    // A bare string prompt is still honored (defensive fallback).
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: "clear", delivery: "queue" }))).toEqual({ goal: null })
+    // Whitespace-only arguments are a `show`, never a goal creation.
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "   " }, delivery: "queue" }))).toEqual({ goal: null })
+    await dispose()
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
+})
+
+test("native runtime /goal rejects an empty session without changing another goal", async () => {
+  const originalMetadata = nativeManifest.metadata
+  nativeManifest.metadata = { global: { gates: { goal: true } } }
+  const storage = new Map()
+  const commands = new Map()
+  const context = {
+    ...editorCaptureContext().context,
+    storage: {
+      async get(key) { return storage.get(key) },
+      async set(key, value) { storage.set(key, value) },
+      async remove(key) { storage.delete(key) },
+    },
+    command: {
+      transform: async (callback) => {
+        callback({ add: (definition) => commands.set(definition.name, definition) })
+        return { dispose() {} }
+      },
+    },
+  }
+  try {
+    const dispose = await plugin.setup(context)
+    const goal = commands.get("goal")
+    await goal.execute({ sessionID: "ses_goal", prompt: { text: "Keep me" }, delivery: "queue" })
+    expect(JSON.parse(await goal.execute({ sessionID: "", prompt: { text: "clear" }, delivery: "queue" }))).toEqual({ goal: null })
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_goal", prompt: { text: "show" }, delivery: "queue" }))).toMatchObject({ goal: { objective: "Keep me" } })
+    await dispose()
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
+})
+
+test("native runtime stop-continuation clears only its session goal", async () => {
+  const originalMetadata = nativeManifest.metadata
+  nativeManifest.metadata = { global: { gates: { goal: true } } }
+  const storage = new Map()
+  const commands = new Map()
+  const hooks = new Map()
+  let resolveRemoved
+  const removed = new Promise((resolve) => { resolveRemoved = resolve })
+  const context = {
+    ...editorCaptureContext().context,
+    storage: {
+      async get(key) { return storage.get(key) },
+      async set(key, value) { storage.set(key, value) },
+      async remove(key) { storage.delete(key); resolveRemoved() },
+    },
+    session: {
+      hook: async (name, handler) => { hooks.set(name, handler); return { dispose() {} } },
+      create: async () => ({ data: { id: "ses_native" } }),
+      prompt: async () => ({ data: {} }),
+    },
+    command: {
+      transform: async (callback) => {
+        callback({ add: (definition) => commands.set(definition.name, definition) })
+        return { dispose() {} }
+      },
+    },
+  }
+  try {
+    const dispose = await plugin.setup(context)
+    const goal = commands.get("goal")
+    await goal.execute({ sessionID: "ses_stop", prompt: "Stop me", delivery: "queue" })
+    await goal.execute({ sessionID: "ses_other", prompt: "Keep me", delivery: "queue" })
+    const request = {
+      sessionID: "ses_stop",
+      request: new Request("https://example.invalid/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "/stop-continuation" }] }),
+      }),
+    }
+      await hooks.get("prompt")({ sessionID: "ses_stop", prompt: { text: "/stop-continuation" } })
+    await removed
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_stop", prompt: "show", delivery: "queue" }))).toEqual({ goal: null })
+    expect(JSON.parse(await goal.execute({ sessionID: "ses_other", prompt: "show", delivery: "queue" }))).toMatchObject({ goal: { objective: "Keep me" } })
+    await hooks.get("http.request")({
+      sessionID: "ses_none",
+      request: new Request("https://example.invalid/chat", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "/stop-continuation" }] }) }),
+    })
+    await dispose()
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
 })
 
 // Task 19: a real compaction clears the file-read-scoped context and writes an

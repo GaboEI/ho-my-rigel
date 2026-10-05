@@ -74,6 +74,16 @@ describe("#given V1 skill MCP server configs", () => {
       .toEqual({ type: "local", command: ["npx", "-y", "server"], environment: { MODE: "x" } })
     expect(translateSkillMcpConfig({ type: "http", url: "http://127.0.0.1:1/mcp", headers: { a: "b" } }))
       .toEqual({ type: "remote", url: "http://127.0.0.1:1/mcp", headers: { a: "b" } })
+    expect(translateSkillMcpConfig({
+      type: "http",
+      url: "http://127.0.0.1:1/mcp",
+      oauth: { clientId: "skill-client", scopes: ["mcp.read", "mcp.write"] },
+    })).toEqual({
+      type: "remote",
+      url: "http://127.0.0.1:1/mcp",
+      oauth: { clientId: "skill-client", scope: "mcp.read mcp.write" },
+    })
+    expect(translateSkillMcpConfig({ type: "http", url: "http://127.0.0.1:1/mcp", oauth: false }).oauth).toBe(false)
     expect(translateSkillMcpConfig({ type: "stdio" })).toBeNull()
     expect(translateSkillMcpConfig({ type: "http" })).toBeNull()
   })

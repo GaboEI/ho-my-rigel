@@ -420,6 +420,66 @@ export function createBackgroundManager({
     return { cancelled: true, error: null, mode: record.status === "completed" ? "completed" : "running" }
   }
 
+  /**
+   * Every task that descends from `parentSessionID`, transitively. A task is a
+   * direct child when its `parentSessionID` names the session; once it has a
+   * `sessionID` of its own, that id is a parent for the next level (a delegated
+   * child that itself delegated). Order is breadth-first from the parent; a
+   * task id is returned once even if more than one path reaches it.
+   */
+  function getAllDescendantTasks(parentSessionID) {
+    const descendants = []
+    if (typeof parentSessionID !== "string" || parentSessionID.length === 0) return descendants
+    const seenTaskIds = new Set()
+    const seenSessionIds = new Set([parentSessionID])
+    let frontier = [parentSessionID]
+    while (frontier.length > 0) {
+      const nextFrontier = []
+      for (const record of tasks.values()) {
+        if (!frontier.includes(record.parentSessionID)) continue
+        if (seenTaskIds.has(record.taskId)) continue
+        seenTaskIds.add(record.taskId)
+        descendants.push(record)
+        if (typeof record.sessionID === "string" && record.sessionID.length > 0 && !seenSessionIds.has(record.sessionID)) {
+          seenSessionIds.add(record.sessionID)
+          nextFrontier.push(record.sessionID)
+        }
+      }
+      frontier = nextFrontier
+    }
+    return descendants
+  }
+
+  /**
+   * Cancel every queued / starting / running descendant of `parentSessionID`
+   * through the internal `cancel(taskId)`, so `/stop-continuation` stops the
+   * session's background work without clearing the parent's durable state
+   * (`clearParent` is reserved for a DELETED parent). Returns one
+   * `{ taskId, cancelled, mode }` per cancellable descendant.
+   *
+   * `options` mirrors the V1 owner's `cancelTask` call shape (`source`,
+   * `reason`, `skipNotification`); this manager's `cancel` has no notification
+   * seam, so the options are accepted for interface parity and not forwarded.
+   */
+  function cancelDescendants(parentSessionID, options = {}) {
+    void options
+    const cancellable = getAllDescendantTasks(parentSessionID).filter((record) => (
+      record.status === "queued" || record.status === "starting" || record.status === "running"
+    ))
+    // Withdraw the not-yet-started descendants first. Cancelling a running child
+    // releases its slot, which would synchronously promote a queued sibling to
+    // `running` before this loop reaches it; draining the queue-holders first
+    // keeps each descendant cancelled in the state it was found in.
+    const priority = { queued: 0, starting: 1, running: 2 }
+    cancellable.sort((left, right) => priority[left.status] - priority[right.status])
+    const results = []
+    for (const record of cancellable) {
+      const outcome = cancel(record.taskId)
+      results.push({ taskId: record.taskId, cancelled: outcome.cancelled, mode: outcome.mode })
+    }
+    return results
+  }
+
   /** Drop a session's background state (session.deleted fan-out for a child). */
   function clearSession(sessionID) {
     const taskId = bySession.get(sessionID)
@@ -689,6 +749,8 @@ export function createBackgroundManager({
   return {
     admit,
     cancel,
+    getAllDescendantTasks,
+    cancelDescendants,
     enqueueHandoff,
     retryPendingWakes,
     clearSession,

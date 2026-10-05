@@ -281,6 +281,15 @@ export const TOOL_PERMISSION_DENIED = "RIGEL_TOOL_PERMISSION_DENIED"
 export const TOOL_PERMISSION_APPROVAL_REQUIRED = "RIGEL_TOOL_PERMISSION_APPROVAL_REQUIRED"
 export const TOOL_PERMISSION_IDENTITY_UNRESOLVED = "RIGEL_TOOL_PERMISSION_IDENTITY_UNRESOLVED"
 
+export function frontierToolSchemaPermission(model) {
+  const id = typeof model === "string" ? model : model?.id
+  const normalized = String(id ?? "").toLowerCase()
+  if (/^(?:gpt-(?:5\.[56]|6(?:\.|$))|claude-opus-4-[7-9])/.test(normalized)) {
+    return { grep: "deny", glob: "deny" }
+  }
+  return {}
+}
+
 function permissionError(code, message) {
   const error = new Error(message)
   error.code = code
