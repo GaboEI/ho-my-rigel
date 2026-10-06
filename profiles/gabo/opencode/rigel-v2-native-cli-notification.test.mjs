@@ -280,7 +280,7 @@ describe("createNotificationPlugin", () => {
       createNotificationPlugin({ logFile, timer: clock }).setup(fake.api)
 
       fake.handler("session.idle")({ type: "session.idle", data: { sessionID: "ses_1" } })
-      fake.emitAll({ type: "message.part.updated", data: { sessionID: "ses_1" } })
+      fake.emitAll({ type: "session.text.delta", data: { sessionID: "ses_1" } })
       await clock.advance(200)
 
       expect(fake.attentionCalls).toHaveLength(0)

@@ -216,14 +216,55 @@ describe("#given the todo-continuation enforcer", () => {
     })
   })
 
-  describe("#when assistant activity is observed while idle", () => {
-    test("#then the continuation response is recorded", async () => {
+  describe("#when session activity is observed while idle", () => {
+    test("#then assistant output records the continuation response", async () => {
       const { enforcer } = harness()
       await enforcer.handleIdle(SESSION)
 
-      enforcer.onEvent({ type: "message.part.delta", sessionID: SESSION, properties: { info: { role: "assistant" } } })
+      enforcer.onEvent({ type: "session.text.delta", data: { sessionID: SESSION } })
 
       expect(enforcer.getState(SESSION).continuationResponseObserved).toBe(true)
+    })
+
+    test("#then streamed tool progress records the continuation response", async () => {
+      const { enforcer } = harness()
+      await enforcer.handleIdle(SESSION)
+
+      enforcer.onEvent({ type: "session.tool.progress", data: { sessionID: SESSION } })
+
+      expect(enforcer.getState(SESSION).continuationResponseObserved).toBe(true)
+    })
+
+    test("#then a failed tool still records the continuation response", async () => {
+      const { enforcer } = harness()
+      await enforcer.handleIdle(SESSION)
+
+      enforcer.onEvent({ type: "session.tool.failed", data: { sessionID: SESSION } })
+
+      expect(enforcer.getState(SESSION).continuationResponseObserved).toBe(true)
+    })
+
+    test("#then a message removal / revert is NOT a continuation response", async () => {
+      const { enforcer } = harness()
+      await enforcer.handleIdle(SESSION)
+
+      enforcer.onEvent({ type: "session.revert.staged", data: { sessionID: SESSION } })
+      enforcer.onEvent({ type: "session.revert.cleared", data: { sessionID: SESSION } })
+
+      const state = enforcer.getState(SESSION)
+      expect(state.continuationResponseObserved).toBe(false)
+      expect(state.continuationBlockReason).not.toBe("directive-response")
+    })
+
+    test("#then a new inbound user message records a user interruption", async () => {
+      const { enforcer } = harness()
+      await enforcer.handleIdle(SESSION)
+
+      enforcer.onEvent({ type: "session.inbox.enqueued", data: { sessionID: SESSION } })
+
+      const state = enforcer.getState(SESSION)
+      expect(state.continuationBlockReason).toBe("user-interruption")
+      expect(state.continuationResponseObserved).toBe(false)
     })
   })
 

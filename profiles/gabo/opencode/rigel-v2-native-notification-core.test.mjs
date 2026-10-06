@@ -159,7 +159,17 @@ describe("helpers", () => {
     expect(isPermissionHint("Do you allow this?")).toBe(true)
     expect(isPermissionHint("What color?")).toBe(false)
     expect(isActivityEvent("session.idle")).toBe(false)
-    expect(isActivityEvent("message.part.updated")).toBe(true)
+    expect(isActivityEvent("session.text.delta")).toBe(true)
+    // a long tool's streamed progress is activity
+    expect(isActivityEvent("session.tool.progress")).toBe(true)
+    // a tool terminal failure is activity
+    expect(isActivityEvent("session.tool.failed")).toBe(true)
+    // a message removal / revert cancels a pending idle notice
+    expect(isActivityEvent("session.revert.staged")).toBe(true)
+    expect(isActivityEvent("session.revert.cleared")).toBe(true)
+    // the V1 names V2 never emits are not activity
+    expect(isActivityEvent("message.updated")).toBe(false)
+    expect(isActivityEvent("message.removed")).toBe(false)
   })
 
   test("#given a notification kind #then the sound name is platform-resolved by the host", () => {

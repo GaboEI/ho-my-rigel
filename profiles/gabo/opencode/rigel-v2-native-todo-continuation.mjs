@@ -16,8 +16,8 @@
  *
  * Shape tolerance: the V2 session transcript is `{ data: [{ type, content }] }`
  * and the V2 event stream carries `{ properties }`/`{ data }` records. The
- * extractors below accept both the `content` and `parts` spellings and both the
- * `type` and `info.role` role spellings, because the two V2 surfaces differ.
+ * extractors below accept both the `content` and `parts` spellings, because the
+ * two V2 surfaces differ.
  */
 import {
   CONTINUATION_COOLDOWN_MS,
@@ -30,6 +30,7 @@ import {
 } from "./rigel-v2-native-todo-continuation-gate.mjs"
 import { createNativeTodoContinuationState } from "./rigel-v2-native-todo-continuation-state.mjs"
 import { buildContinuationPrompt } from "./rigel-v2-todo-continuation-prompt.mjs"
+import { isV2OutputActivity, isV2UserActivity } from "./rigel-v2-native-activity.mjs"
 
 const QUESTION_TOOLS = new Set(["question", "ask_user_question", "askuserquestion"])
 const TERMINAL_TOOL_STATUSES = new Set(["completed", "error", "cancelled"])
@@ -137,11 +138,6 @@ function eventErrorName(event) {
 function eventErrorMessage(event) {
   const value = event?.error?.message ?? event?.data?.error?.message ?? event?.properties?.error?.message ?? event?.properties?.message
   return typeof value === "string" ? value : ""
-}
-
-function eventRole(event) {
-  const role = event?.properties?.info?.role ?? event?.properties?.role ?? event?.data?.info?.role ?? event?.data?.role
-  return typeof role === "string" ? role.toLowerCase() : undefined
 }
 
 function isCompactionEvent(type) {
@@ -337,27 +333,26 @@ export function createNativeTodoContinuationEnforcer({
       armCompactionGuard(sessionID)
       return
     }
-    if (type === "message.part.delta" || type === "tool.execute.before" || type === "tool.execute.after") {
+    if (isV2OutputActivity(type) || isV2UserActivity(type) || type === "tool.execute.before" || type === "tool.execute.after") {
       const current = state.getExistingState(sessionID)
       if (current) {
-        current.continuationResponseObserved = current.awaitingPostInjectionProgressCheck === true
-        current.abortDetectedAt = undefined
-        current.wasCancelled = false
+        if (isV2UserActivity(type)) {
+          // A new inbound user message is the V2 analogue of V1's
+          // `message.updated` with `role === "user"`.
+          if (current.awaitingPostInjectionProgressCheck === true) {
+            current.continuationBlockReason = "user-interruption"
+          }
+        } else {
+          // Assistant output (text/reasoning/tool/step) observed: the
+          // continuation got a response. The V2 analogue of V1's
+          // `message.part.delta` and assistant `message.updated`.
+          current.continuationResponseObserved = current.awaitingPostInjectionProgressCheck === true
+          current.abortDetectedAt = undefined
+          current.wasCancelled = false
+        }
       }
       state.cancelCountdown(sessionID)
       return
-    }
-    if (type === "message.updated" || type === "message.part.updated") {
-      const role = eventRole(event)
-      const current = state.getExistingState(sessionID)
-      if (current && role === "assistant") {
-        current.continuationResponseObserved = current.awaitingPostInjectionProgressCheck === true
-        current.abortDetectedAt = undefined
-        current.wasCancelled = false
-      } else if (current && role === "user" && current.awaitingPostInjectionProgressCheck === true) {
-        current.continuationBlockReason = "user-interruption"
-      }
-      state.cancelCountdown(sessionID)
     }
   }
 

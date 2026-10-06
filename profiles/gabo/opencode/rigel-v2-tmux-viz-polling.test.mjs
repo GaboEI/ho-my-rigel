@@ -59,12 +59,23 @@ describe("tmux-viz polling", () => {
     expect(harness1.closes).toEqual([])
   })
 
-  test("message.part events bump the activity version of the tracked session", () => {
+  test("V2 activity (output, tool progress, mutation) bumps the tracked session", () => {
     const harness1 = harness({ tracked: [["ses_child", trackedSession()]] })
-    harness1.polling.handleEvent({ type: "message.part.updated", sessionID: "ses_child" })
-    expect(harness1.sessions.get("ses_child").activityVersion).toBe(1)
+    // given: assistant output in the raw (`data.sessionID`) and enriched shapes
+    harness1.polling.handleEvent({ type: "session.text.delta", data: { sessionID: "ses_child" } })
+    harness1.polling.handleEvent({ type: "session.step.started", sessionID: "ses_child" })
+    // a long tool that streams progress must reset the stability window
+    harness1.polling.handleEvent({ type: "session.tool.progress", data: { sessionID: "ses_child" } })
+    // a message removal / revert is activity for the pane
+    harness1.polling.handleEvent({ type: "session.revert.staged", data: { sessionID: "ses_child" } })
+    harness1.polling.handleEvent({ type: "session.revert.cleared", sessionID: "ses_child" })
+    expect(harness1.sessions.get("ses_child").activityVersion).toBe(5)
+    // when: a non-activity edge, and the V1 names V2 never emits, arrive
     harness1.polling.handleEvent({ type: "session.idle", sessionID: "ses_child" })
-    expect(harness1.sessions.get("ses_child").activityVersion).toBe(1)
+    harness1.polling.handleEvent({ type: "message.updated", data: { sessionID: "ses_child" } })
+    harness1.polling.handleEvent({ type: "message.removed", data: { sessionID: "ses_child" } })
+    // then: none of them bump the activity version
+    expect(harness1.sessions.get("ses_child").activityVersion).toBe(5)
   })
 
   test("a focused placeholder pane is respawned as attach within the auto-activate grace", async () => {

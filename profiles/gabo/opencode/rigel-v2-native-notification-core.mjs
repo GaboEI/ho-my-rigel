@@ -24,6 +24,8 @@
  *   packages/omo-opencode/src/hooks/session-notification-event-properties.ts
  */
 
+import { V2_ACTIVITY_EVENT_TYPES } from "./rigel-v2-native-activity.mjs"
+
 /** V1 defaults, from `createSessionNotification`'s merged config. */
 export const NOTIFICATION_DEFAULTS = Object.freeze({
   enabled: false,
@@ -51,19 +53,18 @@ export const PERMISSION_HINT_PATTERN = /\b(permission|approve|approval|allow|den
 
 /**
  * V2 events that mean "the session produced activity", used to cancel a pending
- * idle notification. Ported from V1's activity list (`session.created`,
- * `message.*`, `tool.execute.*`); `session.execution.started` is the V2
- * equivalent of a new run. `session.updated` is deliberately NOT activity: the
- * host emits it after a run completes (title/usage), and treating it as
+ * idle notification. V1's activity list (`session.created`, `message.*`,
+ * `tool.execute.*`) can not be ported literally: V2 emits no `message.*` events
+ * (T36 live capture, v2.0.22), so the `message.*` entries were dead. The V2
+ * equivalent is `session.execution.started` (a new run) plus the native session
+ * output activity vocabulary. `session.updated` is deliberately NOT activity:
+ * the host emits it after a run completes (title/usage), and treating it as
  * activity would cancel the completion notice the plugin just scheduled.
  */
 export const ACTIVITY_EVENT_TYPES = Object.freeze([
   "session.created",
   "session.execution.started",
-  "message.updated",
-  "message.part.updated",
-  "message.part.delta",
-  "message.removed",
+  ...V2_ACTIVITY_EVENT_TYPES,
   "tool.execute.before",
   "tool.execute.after",
 ])

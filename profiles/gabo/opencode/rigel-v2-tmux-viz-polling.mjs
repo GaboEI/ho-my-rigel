@@ -10,10 +10,11 @@
  * - Stability close: an `idle` session older than 10s with 3 consecutive
  *   unchanged activity polls and a confirming recheck is closed.
  * - Missing grace 30s, hard timeout 60min for never-activated panes.
- * - Activity version bumps on message.* events for tracked sessions.
+ * - Activity version bumps on session output events for tracked sessions.
  */
 
 import { buildReplaceArgs, buildAttachCommand } from "./rigel-v2-tmux-viz-layout.mjs"
+import { V2_ACTIVITY_EVENT_TYPES, resolveV2EventSessionID } from "./rigel-v2-native-activity.mjs"
 
 export const POLL_INTERVAL_BACKGROUND_MS = 2000
 export const SESSION_TIMEOUT_MS = 60 * 60 * 1000
@@ -22,13 +23,13 @@ export const AUTO_ACTIVATE_GRACE_MS = 5 * 1000
 export const MIN_STABILITY_TIME_MS = 10 * 1000
 export const STABLE_POLLS_REQUIRED = 3
 
-const ACTIVITY_EVENT_TYPES = new Set([
-  "message.updated",
-  "message.part.updated",
-  "message.part.delta",
-  "message.part.removed",
-  "message.removed",
-])
+// V1 bumped the activity version on the `message.updated`/`message.part.*`/
+// `message.removed` family. T36 live capture (v2.0.22) proves V2 emits none of
+// those events: the activity stream is the `session.*` vocabulary. The general
+// union includes assistant output (with streamed tool progress), inbound user
+// messages, and transcript mutations (a message removal / revert), so a long
+// running tool and a revert both reset the stability window as V1 did.
+const ACTIVITY_EVENT_TYPES = new Set(V2_ACTIVITY_EVENT_TYPES)
 
 export function createTmuxVizPolling({
   getTrackedSessions,
@@ -145,8 +146,12 @@ export function createTmuxVizPolling({
       timer = null
     },
     handleEvent(event) {
-      if (!ACTIVITY_EVENT_TYPES.has(event?.type) || typeof event?.sessionID !== "string") return
-      const tracked = getTrackedSessions().get(event.sessionID)
+      if (!ACTIVITY_EVENT_TYPES.has(event?.type)) return
+      // V2 events carry the id under `data.sessionID`; an enriched event may
+      // carry it at the top level. The shared resolver accepts both shapes.
+      const sessionID = resolveV2EventSessionID(event)
+      if (!sessionID) return
+      const tracked = getTrackedSessions().get(sessionID)
       if (tracked) tracked.activityVersion = (tracked.activityVersion ?? 0) + 1
     },
     pollOnce: (now = Date.now()) => pollSessions(now),
