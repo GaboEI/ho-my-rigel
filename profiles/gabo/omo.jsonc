@@ -23,9 +23,7 @@
           "ultrawork": true
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
-        "disabled_hooks": [
-          "compaction-todo-preserver"
-        ],
+        "disabled_hooks": [],
         "team_mode": {
           "enabled": true,
           "tmux_visualization": false,

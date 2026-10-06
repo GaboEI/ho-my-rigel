@@ -28,10 +28,11 @@ if (profile.default_mode?.ultrawork !== true) fail("Ultrawork must be enabled by
 if (profile.goal?.enabled !== true) fail("OmO root Goal must be enabled for internal ownership")
 if (profile.disabled_hooks?.includes("goal")) fail("OmO goal hook must be enabled for internal ownership")
 // T21 (2026-10-06): compaction-context-injector is implemented natively and is
-// always-on like V1, so it must no longer sit in disabled_hooks. The todo
-// preserver stays disabled until T22 owns it.
+// always-on like V1, so it must no longer sit in disabled_hooks. T22 (2026-10-06)
+// graduates compaction-todo-preserver and todo-continuation-enforcer natively, so
+// the todo preserver must not stay disabled either.
 if (profile.disabled_hooks?.includes("compaction-context-injector")) fail("OmO compaction-context-injector is migrated natively (T21) and must not stay disabled")
-if (!profile.disabled_hooks?.includes("compaction-todo-preserver")) fail("OmO compaction-todo-preserver must be disabled until T22 migrates it")
+if (profile.disabled_hooks?.includes("compaction-todo-preserver")) fail("OmO compaction-todo-preserver is migrated natively (T22) and must not stay disabled")
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")

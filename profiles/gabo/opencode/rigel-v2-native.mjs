@@ -59,6 +59,7 @@ import { createFileBackgroundState, createStorageBackgroundState } from "./rigel
 // state factories come from their binder modules.
 import { createFlowRules } from "./rigel-v2-native-flow-rules.mjs"
 import { createNativeCompactionContextHook, isCompactionSummaryRequest } from "./rigel-v2-native-compaction-context.mjs"
+import { createNativeCompactionTodoPreserver } from "./rigel-v2-native-compaction-todo-preserver.mjs"
 import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
 import { applyPromptAdmission, createStopContinuationState, repairChatToolPairs, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
 import { createNativeAutoSlashCommandHook } from "./rigel-v2-auto-slash-command-bridge.mjs"
@@ -73,6 +74,12 @@ import { registerClaudeCodeMcps } from "./rigel-v2-claude-code-mcp.mjs"
 import { createNativeToolBeforeRules } from "./rigel-v2-native-tool-before.mjs"
 import { createTmuxVizManager } from "./rigel-v2-tmux-viz-manager.mjs"
 import { readNativeTmuxVisualization } from "./rigel-v2-native-config.mjs"
+// Todo-continuation enforcer. The state port owns the per-session
+// progress/stagnation/cooldown bookkeeping, the gate is the pure decision
+// predicate, and the prompt module builds the V1 continuation directive whose
+// sentinel the V1 runtime recognizes.
+import { createNativeTodoContinuationEnforcer } from "./rigel-v2-native-todo-continuation.mjs"
+import { createTodoContinuationQa } from "./rigel-v2-native-todo-continuation-qa.mjs"
 
 /**
  * Read the user's category overrides from the V2 setup context. V2 exposes the
@@ -727,6 +734,10 @@ export default {
     let goalController
     const stopContinuationState = createStopContinuationState({
       onStop: async (sessionID) => {
+        // A manual stop drops pending todo-continuation countdowns so a stopped
+        // session cannot be woken by the enforcer. `onStop` fires only on the
+        // not-stopped -> stopped edge.
+        todoContinuation.cancelAllCountdowns()
         backgroundManager.cancelDescendants(sessionID, {
           source: "stop-continuation",
           reason: "Continuation stopped via /stop-continuation",
@@ -774,6 +785,13 @@ export default {
       clear: (sessionID) => {
         stopContinuationState.clear(sessionID)
         fsyncSkipState.clear()
+        // A deleted session drops both compaction snapshots too, matching
+        // the V1 preserver's `session.idle` / `session.deleted` cleanup. The
+        // preserver is created below; the closure reads it at dispose time.
+        compactionTodoPreserver.forget?.(sessionID)
+        // And its todo-continuation bookkeeping, so a deleted session cannot
+        // leave a stale cooldown/stagnation state behind.
+        todoContinuation.clear(sessionID)
       },
     })
     // Session/todo surface (Fase 3 T5b). V2 has no native session-todo API, so
@@ -788,6 +806,43 @@ export default {
       : undefined
     const readTodos = sessionTodoStore ? (sessionID) => sessionTodoStore.readTodos(sessionID) : undefined
     const taskTodoSync = sessionTodoStore ? createTaskTodoSync({ store: sessionTodoStore }) : undefined
+    // The compaction todo-preserver keeps detailed todos alive across a
+    // context-window compaction. It snapshots the registry before the summary
+    // request (capture), restores the snapshot once the summary lands
+    // (restore), and blocks a late all-Atlas-bootstrap `todowrite` from erasing
+    // the restored work (beforeTodoWrite). With no storage domain the store is
+    // absent; the preserver degrades to a no-op surface rather than failing.
+    const compactionTodoPreserver = createNativeCompactionTodoPreserver({ store: sessionTodoStore })
+    // Todo-continuation enforcer: reads the real session todos, transcript and
+    // owning agent, then injects the V1 continuation directive on an accepted
+    // idle edge. Every blocker (pending/unanswered question, last-assistant
+    // abort, compaction guard, skip agent, background work, manual stop) is
+    // resolved from a real V2 surface, and the progress/stagnation/failure
+    // bookkeeping is consumed from the state store and updated on injection.
+    const getSessionMessages = typeof context?.session?.context === "function"
+      ? (sessionID) => context.session.context({ sessionID })
+      : undefined
+    // V1's countdown existed to render a TUI toast; the headless V2 runtime has
+    // no such surface, so it injects immediately by default. The countdown and
+    // inFlight machinery stays owned and cancellable by the enforcer, and
+    // RIGEL_TODO_CONTINUATION_COUNTDOWN_MS arms a delayed injection window.
+    const configuredCountdownMs = Number(process.env.RIGEL_TODO_CONTINUATION_COUNTDOWN_MS)
+    // Default-off QA seam: inert unless a control file exists under the
+    // runtime's own state root. It is the only way to drive the failure/cooldown
+    // gate from the lab, because the V2 host accepts an internal prompt at
+    // enqueue and reports provider/model/session failures later as
+    // `session.error` instead of rejecting `dispatch`.
+    const todoContinuationQa = createTodoContinuationQa()
+    const todoContinuation = createNativeTodoContinuationEnforcer({
+      readTodos,
+      getMessages: getSessionMessages,
+      resolveAgent: sessionAgentResolver,
+      backgroundManager,
+      isContinuationStopped: (sessionID) => stopContinuationState.isStopped?.(sessionID) ?? false,
+      dispatch: todoContinuationQa.wrapDispatch(({ sessionID, text }) => context.session.prompt({ sessionID, text, resume: true })),
+      countdownMs: Number.isFinite(configuredCountdownMs) && configuredCountdownMs >= 0 ? configuredCountdownMs : 0,
+      onError: (message) => console.error(message),
+    })
     // Task 15: the monitor registry is created inside `tool.transform` (it needs
     // the V2 pty/storage/event domains) and disposed on teardown. It is `let`
     // because the transform callback runs after this declaration.
@@ -810,9 +865,13 @@ export default {
       ? (async () => {
         try {
           for await (const event of context.event.subscribe({ signal: abortBackgroundHandoffs.signal })) {
-            const sessionID = event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
+            const sessionID = event?.sessionID ?? event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
             await claudeCodeHooks?.handleEvent?.({ ...event, sessionID })
             await contextLimitRecovery.handle({ ...event, sessionID })
+            // Observe abort / token-limit / unrecoverable errors, compaction
+            // epochs and message activity so the continuation skip gates reflect
+            // real session state instead of constants.
+            todoContinuation.onEvent(event)
             // Event-driven wake retry. A parent-prompt failure leaves the wake
             // pending; the next event re-queues it, so no timer or poller is
             // needed. A no-op when nothing is pending.
@@ -837,7 +896,25 @@ export default {
               if (event.type === "session.next.compaction.started") keywordState.markNeedsRestoration(sessionID)
               else keywordState.handleEvent({ type: event.type, sessionID })
               const idle = idleGate.accept({ ...event, sessionID })
-              if (idle) await idleContinuations.handle(idle)
+              if (idle) {
+                await idleContinuations.handle(idle)
+                // The todo-continuation enforcer rides the SAME accepted idle
+                // edge, after the background hint. The cooldown and the rest of
+                // the gate make a duplicate idle a no-op.
+                const decision = await todoContinuation.handleIdle(sessionID)
+                todoContinuationQa.observeAfterIdle({ sessionID, decision, state: todoContinuation.getState(sessionID) })
+              }
+            }
+            // Once a compaction lands, restore the pre-compaction detailed
+            // todos the summary dropped. Idempotent, so a repeated event (the V2
+            // stream may deliver `session.compacted` and `session.compaction.ended`
+            // for one compaction) is harmless.
+            if (typeof sessionID === "string" && (event.type === "session.compacted" || event.type === "session.compaction.ended")) {
+              try {
+                await compactionTodoPreserver.restore(sessionID)
+              } catch (error) {
+                console.error(`[oh-my-rigel] Native V2 compaction todo restore failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
             }
             // Task 19: a real V2 compaction clears the file-read-scoped rule and
             // directory context, so the next read re-injects instead of relying
@@ -1025,6 +1102,10 @@ export default {
         manifest,
         context,
         pluginConfig: context?.config,
+        // The per-session todo registry this runtime owns (Fase 3 T5b). Without
+        // it `session_info`/`session_read` can only report an empty list while
+        // the task tools silently wrote nothing a session could read back.
+        readTodos,
       })
       nativeToolRegistry = families.registry
       coreFamilyToolNames = Object.keys(families.tools)
@@ -1040,7 +1121,13 @@ export default {
       // the V2 equivalent of V1's `tool.definition` rewrite; the tool is backed
       // by the runtime's own per-session todo store. Registered in this single
       // transform callback so it lands in the same tool set as the others.
-      editor.add(createTodoDescriptionTool({ store: sessionTodoStore }))
+      editor.add(createTodoDescriptionTool({
+        store: sessionTodoStore,
+        // The same preserver that restored the snapshot also guards the
+        // next `todowrite`, so a late all-bootstrap write cannot erase the
+        // restored detailed todos.
+        beforeWrite: (sessionID, todos) => compactionTodoPreserver.beforeTodoWrite(sessionID, todos),
+      }))
       // slashcommand (Ola 6): the model-facing command discovery. V2 owns the
       // command catalog, so the native tool reads ctx.command.list() instead of
       // walking project directories like V1.
@@ -1177,17 +1264,43 @@ export default {
     // so the V1 `output.context` effect is carried by this hook. Content must
     // be V2 message parts; a string content crashes
     // `SessionCompaction.compact` in `SessionModelRequest.prepare`.
+    const nativeCompactionContextHook = createNativeCompactionContextHook({
+      getHistory: (sessionID) => {
+        try {
+          return backgroundManager.formatForCompaction(sessionID)
+        } catch (error) {
+          console.error(`[oh-my-rigel] Native V2 compaction history read failed: ${error instanceof Error ? error.message : String(error)}`)
+          return undefined
+        }
+      },
+      // Carry the still-incomplete todos into the compaction summary so the
+      // post-compaction session is oriented without a restart. The store owns a
+      // tolerant read; a read failure degrades to an empty list rather than
+      // dropping the whole context block.
+      getTodos: async (sessionID) => {
+        try {
+          return readTodos ? await readTodos(sessionID) : []
+        } catch (error) {
+          console.error(`[oh-my-rigel] Native V2 compaction todo read failed: ${error instanceof Error ? error.message : String(error)}`)
+          return []
+        }
+      },
+    })
     const compactionContextRegistration = typeof context?.session?.hook === "function"
-      ? await context.session.hook("compaction", createNativeCompactionContextHook({
-        getHistory: (sessionID) => {
+      ? await context.session.hook("compaction", async (event) => {
+        // Snapshot the detailed todos BEFORE the summary request runs, so a
+        // compaction that comes back empty (or with only the two Atlas bootstrap
+        // entries) can be repaired by the post-compaction restore. Then inject
+        // the compaction context exactly as before.
+        if (typeof event?.sessionID === "string") {
           try {
-            return backgroundManager.formatForCompaction(sessionID)
+            await compactionTodoPreserver.capture(event.sessionID)
           } catch (error) {
-            console.error(`[oh-my-rigel] Native V2 compaction history read failed: ${error instanceof Error ? error.message : String(error)}`)
-            return undefined
+            console.error(`[oh-my-rigel] Native V2 compaction todo capture failed: ${error instanceof Error ? error.message : String(error)}`)
           }
-        },
-      }))
+        }
+        return nativeCompactionContextHook(event)
+      })
       : undefined
     // Native HTTP is reserved for the image transport mutation. Context,
     // admission, semantic options, headers, and fallback all use V2 hooks.
@@ -1236,6 +1349,9 @@ export default {
       context,
       manifest,
       directory: location.directory,
+      // The task tools mirror every write into the same per-session registry the
+      // session tools read, so a created/updated task becomes a visible todo.
+      syncTodos: taskTodoSync?.syncTodos,
       maxTools: readNativeMaxTools(manifest),
       existingToolNames: coreToolNames,
     })

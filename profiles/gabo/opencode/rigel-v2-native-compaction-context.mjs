@@ -35,6 +35,17 @@ const COMPACTION_CONTEXT_TYPE = "COMPACTION CONTEXT"
  */
 export const COMPACTION_CONTEXT_MARKER = `${SYSTEM_DIRECTIVE_PREFIX} - ${COMPACTION_CONTEXT_TYPE}]`
 
+const SESSION_TODOS_DIRECTIVE_TYPE = "SESSION TODOS"
+
+/**
+ * Marker for the injected session-todo section, composed from the same V1
+ * system-directive prefix: `[SYSTEM DIRECTIVE: OH-MY-OPENCODE - SESSION TODOS]`.
+ * It rides inside the compaction-context block (which already starts with
+ * `COMPACTION_CONTEXT_MARKER`), so the hook's existing marker scan makes the
+ * todo section idempotent for free.
+ */
+export const SESSION_TODOS_MARKER = `${SYSTEM_DIRECTIVE_PREFIX} - ${SESSION_TODOS_DIRECTIVE_TYPE}]`
+
 /**
  * Byte-for-byte port of the V1 `COMPACTION_CONTEXT_PROMPT` template. The body
  * (the 8 sections plus the trailing continuity line) is identical to the V1
@@ -224,15 +235,52 @@ export function formatDelegatedSessionHistory(entries, options = {}) {
 // Compaction context block (V1 inject() composition)
 // ---------------------------------------------------------------------------
 
+const INCOMPLETE_TODO_STATUSES = new Set(["pending", "in_progress"])
+const MAX_TODO_CONTENT_CHARS = 240
+const MAX_TODO_ID_CHARS = 120
+
+/**
+ * Format the session's incomplete todos as a continuation directive. Only
+ * `pending` and `in_progress` todos survive compaction: a `completed` or
+ * `cancelled` item is finished work the summary must not resurrect. Returns
+ * `null` when there is nothing to inject (a non-array, an empty list, or a list
+ * with no incomplete todo), so the caller appends no section.
+ */
+export function formatIncompleteTodos(todos) {
+  if (!Array.isArray(todos)) {
+    return null
+  }
+  const incomplete = todos.filter(
+    (todo) => todo && typeof todo === "object" && INCOMPLETE_TODO_STATUSES.has(todo.status),
+  )
+  if (incomplete.length === 0) {
+    return null
+  }
+  const lines = incomplete.map((todo) => {
+    const id = typeof todo.id === "string" && todo.id.length > 0
+      ? ` (id: \`${compactInline(todo.id, MAX_TODO_ID_CHARS)}\`)`
+      : ""
+    return `- [${todo.status}]${id} ${compactInline(todo.content, MAX_TODO_CONTENT_CHARS)}`.trimEnd()
+  })
+  return `${SESSION_TODOS_MARKER}\n${lines.join("\n")}`
+}
+
 /**
  * Build the injected block: the compaction prompt, plus the delegated-session
- * history section when history is present. Mirrors V1 `inject()` exactly, whose
- * append carries a leading and a trailing newline.
+ * history section when history is present, plus the session-todo directive when
+ * incomplete todos are present. Mirrors V1 `inject()` exactly, whose append
+ * carries a leading and a trailing newline; the todo section follows the same
+ * shape. With neither history nor incomplete todos the block is the prompt
+ * alone, byte-identical to the V1 template.
  */
-export function buildCompactionContextBlock({ history } = {}) {
+export function buildCompactionContextBlock({ history, todos } = {}) {
   let block = COMPACTION_CONTEXT_PROMPT
   if (history) {
     block += `\n### Active/Recent Delegated Sessions\n${history}\n`
+  }
+  const todoSection = formatIncompleteTodos(todos)
+  if (todoSection) {
+    block += `\n### Session Todos\n${todoSection}\n`
   }
   return block
 }
@@ -315,20 +363,25 @@ export function classifyProviderRequest({ body, kind } = {}) {
  * typed parts (a string content crashes `SessionCompaction.compact` in
  * `SessionModelRequest.prepare`), so the block is pushed as one text part and
  * the idempotency scan reads both string and part content.
+ *
+ * `getTodos(sessionID)` supplies the session's todo list so the injected block
+ * can carry the still-incomplete work across compaction; it may be synchronous
+ * or return a promise, and an absent reader simply leaves the section out.
  */
 export function createNativeCompactionContextHook({
   buildBlock = buildCompactionContextBlock,
   getHistory,
+  getTodos,
 } = {}) {
   return async (event) => {
     if (!event || !Array.isArray(event.messages)) return
     if (messagesContainMarker(event.messages)) return
-    const history = typeof getHistory === "function"
-      ? getHistory(typeof event.sessionID === "string" ? event.sessionID : undefined)
-      : undefined
+    const sessionID = typeof event.sessionID === "string" ? event.sessionID : undefined
+    const history = typeof getHistory === "function" ? getHistory(sessionID) : undefined
+    const todos = typeof getTodos === "function" ? await getTodos(sessionID) : undefined
     event.messages.push({
       role: "user",
-      content: [{ type: "text", text: buildBlock({ history }) }],
+      content: [{ type: "text", text: buildBlock({ history, todos }) }],
     })
   }
 }

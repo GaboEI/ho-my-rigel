@@ -69,6 +69,14 @@ export default {
     futureEvidence:
       "`rigel-v2-native-compaction-context.mjs`; `rigel-v2-native-compaction-context.test.mjs`; `rigel-v2-background-manager.mjs` (formatForCompaction); `rigel-v2-native.mjs` (hook compaction + trigger redundante http.request + dispose); `qa-v2-t21-compaction-experiment.mjs`; `qa-v2-compaction-hook-contract.mjs` (re-graduado); `.omo/evidence/20261006-t21-compaction/`",
   },
+  "compaction-todo-preserver": {
+    classification: "Adaptar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/compaction-todo-preserver/hook.ts` mantiene viva la lista de todos a traves de la compactacion: captura la instantanea detallada antes de compactar, la restaura en `session.compacted` solo cuando la lista posterior quedo vacia o con los dos todos de arranque de Atlas, protege la instantanea restaurada frente a un `todowrite` tardio que la degradaria y limpia ambos mapas en idle/delete. El port nativo `rigel-v2-native-compaction-todo-preserver.mjs` conserva los predicados byte a byte (coincidencia por id O por content), la tabla `ATLAS_BOOTSTRAP_TODOS` y la decision de restauracion, pero se retargeta al registro de todos respaldado por storage de V2 (`createV2SessionTodoStore` en `tools/session-todo-store.mjs`) en vez de `ctx.client.session.todo`; `rigel-v2-native.mjs` lo cablea en la compactacion (capture), en los eventos de compactacion (restore) y en el `beforeWrite` del store. La paridad de la tabla con el fuente V1 esta fijada por prueba.",
+    futureEvidence:
+      "`rigel-v2-native-compaction-todo-preserver.mjs`; `rigel-v2-native-compaction-todo-preserver.test.mjs`; `rigel-v2-native-todo-preserver-wiring.test.mjs`; `tools/session-todo-store.mjs`; `rigel-v2-native.mjs`",
+  },
   "comment-checker": {
     classification: "Migrar",
     rationale:
@@ -313,6 +321,14 @@ export default {
     rationale:
       "El gate V1 en `hooks/team-tool-gating/hook.ts` restringe las herramientas de equipo segun el rol. La regla nativa corre en la cadena `execute.before` de V2 bajo el gate team_mode: team_create denegado a participantes, delete/shutdown_request solo lead, approve/reject participantes, herramientas universales solo participantes del team nombrado; la denegacion lanza y bloquea la llamada.",
     futureEvidence: "`rigel-v2-team-gating.mjs` (createNativeTeamGatingRule); `rigel-v2-team-gating.test.mjs`; `rigel-v2-native.mjs` (nativeBeforeRules)",
+  },
+  "todo-continuation-enforcer": {
+    classification: "Adaptar",
+    status: "Migrado",
+    rationale:
+      "El hook V1 en `hooks/todo-continuation-enforcer/` reinyecta un prompt de continuacion cuando la sesion queda idle con todos incompletos. El port nativo divide el contrato en tres piezas puras: `rigel-v2-native-todo-continuation-gate.mjs` (`decideTodoContinuation`) reproduce el orden exacto de compuertas de skip (todos completos, recuperacion, cancelacion, limite de tokens, error irrecuperable, ventana de aborto, trabajo background, preguntas pendientes/sin responder, aborto del ultimo asistente, guard de compactacion, agente saltado, parada manual, estancamiento, fallos consecutivos y cooldown); `rigel-v2-native-todo-continuation-state.mjs` porta el store por sesion con la semantica de progreso de V1 (menos incompletos, mas completos o cambio de `{id -> status}`; un cambio solo de content/priority NO es progreso, issue #4013); y `rigel-v2-todo-continuation-prompt.mjs` mantiene el marcador y el prompt byte a byte. `rigel-v2-native.mjs` los cablea sobre la MISMA frontera de idle aceptado que el resto de continuaciones, con dedupe, parada manual y limpieza en delete.",
+    futureEvidence:
+      "`rigel-v2-native-todo-continuation-gate.mjs`; `rigel-v2-native-todo-continuation-state.mjs`; `rigel-v2-todo-continuation-prompt.mjs`; `rigel-v2-native-todo-continuation-wiring.test.mjs`; `rigel-v2-native-todo-continuation-gate.test.mjs`; `rigel-v2-native-todo-continuation-state.test.mjs`; `rigel-v2-todo-continuation-prompt.test.mjs`; `rigel-v2-native.mjs`",
   },
   "todo-description-override": {
     classification: "Migrar",

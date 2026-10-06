@@ -18,7 +18,7 @@ test("context-limit errors request exactly one V2 compaction until the incident 
 })
 
 test("idle gate normalizes status idle and prevents duplicate continuation delivery", async () => {
-  const times = [1000, 1100, 1600]
+  const times = [1000, 1100, 1600, 2200]
   const gate = createNativeIdleGate({ now: () => times.shift() })
   const delivered = []
   const continuation = createNativeIdleContinuations({
@@ -31,12 +31,14 @@ test("idle gate normalizes status idle and prevents duplicate continuation deliv
     { type: "session.status", properties: { sessionID: "ses_1", status: "idle" } },
     { type: "session.idle", properties: { sessionID: "ses_1" } },
     { type: "session.idle", properties: { sessionID: "ses_2" } },
+    { type: "session.execution.succeeded", data: { sessionID: "ses_3" } },
   ]) {
     const normalized = gate.accept(event)
     if (normalized) await continuation.handle(normalized)
   }
 
-  expect(delivered).toHaveLength(2)
+  expect(delivered).toHaveLength(3)
   expect(delivered[0]).toMatchObject({ sessionID: "ses_1" })
   expect(delivered[1]).toMatchObject({ sessionID: "ses_2" })
+  expect(delivered[2]).toMatchObject({ sessionID: "ses_3" })
 })

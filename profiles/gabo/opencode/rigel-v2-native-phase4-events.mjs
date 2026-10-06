@@ -11,15 +11,21 @@ function eventMessage(event) {
 }
 
 /**
- * V2 emits both `session.status` and `session.idle`. Normalize only the former
- * and collapse rapid duplicates before running idle-dependent native behavior.
+ * V2 emits `session.idle` / `session.status`, and a completed turn surfaces as
+ * `session.execution.succeeded`. Normalize all three to one idle edge and
+ * collapse rapid duplicates before running idle-dependent native behavior. The
+ * headless V2 server does not emit `session.idle` for an ordinary completed
+ * turn (only `session.execution.succeeded`), so omitting the latter left the
+ * todo-continuation gate permanently unarmed in the lab.
  */
 export function createNativeIdleGate({ now = () => Date.now(), windowMs = 500 } = {}) {
   const recent = new Map()
   return {
     accept(event) {
       const sessionID = eventSessionID(event)
-      const idle = event?.type === "session.idle" || (event?.type === "session.status" && event?.properties?.status === "idle")
+      const idle = event?.type === "session.idle"
+        || (event?.type === "session.status" && event?.properties?.status === "idle")
+        || event?.type === "session.execution.succeeded"
       if (!sessionID || !idle) return undefined
       const timestamp = now()
       const previous = recent.get(sessionID)

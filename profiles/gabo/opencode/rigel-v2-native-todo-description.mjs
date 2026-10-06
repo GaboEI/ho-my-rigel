@@ -49,8 +49,13 @@ export function formatTodoWriteResult(todos) {
  * Build the `todowrite` tool definition. `store` is the runtime's per-session
  * todo store (`createV2SessionTodoStore`); when present the tool persists the
  * list for `toolContext.sessionID`, so the tool is real, not a schema-only stub.
+ *
+ * `beforeWrite(sessionID, todos)` is the V1 `compaction-todo-preserver`
+ * `beforeTodoWrite` seam. When supplied it resolves the list that is actually
+ * written and reported: a late all-Atlas-bootstrap `todowrite` after a restore
+ * is replaced by the protected detailed snapshot instead of erasing real work.
  */
-export function createTodoDescriptionTool({ store } = {}) {
+export function createTodoDescriptionTool({ store, beforeWrite } = {}) {
   return normalizeToolDefinition({
     name: TODO_DESCRIPTION_TOOL_NAME,
     options: { codemode: false },
@@ -80,8 +85,13 @@ export function createTodoDescriptionTool({ store } = {}) {
       additionalProperties: false,
     },
     execute: async (input, toolContext) => {
-      const todos = Array.isArray(input?.todos) ? input.todos : []
+      const incoming = Array.isArray(input?.todos) ? input.todos : []
       const sessionID = toolContext?.sessionID
+      let todos = incoming
+      if (typeof beforeWrite === "function" && typeof sessionID === "string" && sessionID) {
+        const resolved = beforeWrite(sessionID, incoming)
+        if (Array.isArray(resolved)) todos = resolved
+      }
       if (store && typeof store.writeTodos === "function" && typeof sessionID === "string" && sessionID) {
         await store.writeTodos(sessionID, todos)
       }
