@@ -28,16 +28,18 @@ export default {
     futureEvidence: "`rigel-v2-native-categories.mjs`; `rigel-v2-background-key.mjs`; `rigel-v2-native.mjs`",
   },
   glob: {
-    classification: "Equivale a builtin V2",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El builtin `glob` de V2 cubre la búsqueda por patrón de `tools/glob/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo.",
-    futureEvidence: "task:37",
+      "El builtin del host no es equivalente a V1: excluye archivos ocultos por defecto, no sigue enlaces ni limita la profundidad igual, y usa otro formato. La herramienta V1 `tools/glob/tools.ts` se porta a una herramienta nativa V2 en `opencode/tools/glob-grep*.mjs`, registrada con `ctx.tool.transform` bajo el mismo nombre `glob` (una registracion posterior reemplaza la del host) conservando el schema V1 (pattern/path), el default de ocultos y `--follow`, el limite de 100 resultados, el timeout de 60s, el orden por mtime descendente y el formato V1. El contrato `qa-v2-builtin-parity.mjs` prueba la paridad en vivo con la misma llamada observable y comprueba que las mismas aserciones FALLAN contra el builtin del host. Conserva ademas la resolucion V1 completa (rg empaquetado, PATH, instalado y fallback a grep) con autoaprovisionamiento, el semaforo de concurrencia (2) y el backend fallback de `find` en Unix y PowerShell en Windows.",
+    futureEvidence: "`opencode/tools/glob-grep.tools.mjs`; `opencode/tools/glob-grep-search.mjs`; `opencode/tools/glob-grep-format.mjs`; `opencode/tools/glob-grep-cli.mjs`; `opencode/tools/glob-grep-install.mjs`; `opencode/tools/glob-grep-concurrency.mjs`; `opencode/tools/glob-grep.tools.test.mjs`; `opencode/tools/glob-grep-fallback.test.mjs`; `qa-v2-builtin-parity.mjs`; `.omo/evidence/20261007-builtin-glob-grep-parity/report.txt`",
   },
   grep: {
-    classification: "Equivale a builtin V2",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El builtin `grep` de V2 cubre la búsqueda por contenido de `tools/grep/tools.ts`; la equivalencia se demuestra con una prueba de paridad de comportamiento contra el builtin nativo.",
-    futureEvidence: "task:37",
+      "El builtin del host no es equivalente a V1: busca ocultos siempre (`--hidden`), no expone los modos `content`/`files_with_matches`/`count` ni `head_limit`, y omite los limites V1 por archivo. La herramienta V1 `tools/grep/tools.ts` se porta a una herramienta nativa V2 en `opencode/tools/glob-grep*.mjs`, registrada con `ctx.tool.transform` bajo el mismo nombre `grep` conservando el schema V1 (pattern/include/path/output_mode/head_limit), la exclusion de ocultos, los modos y formatos V1, y los limites `--max-count=500`, `--max-columns=1000`, `--max-filesize=10M`, `--max-depth=20` y `head_limit`. El contrato `qa-v2-builtin-parity.mjs` prueba la paridad en vivo y comprueba que las mismas aserciones FALLAN contra el builtin del host. Conserva ademas la resolucion V1 completa (rg empaquetado, PATH, instalado y fallback a grep) con autoaprovisionamiento, el semaforo de concurrencia (2) y el backend fallback de grep clasico.",
+    futureEvidence: "`opencode/tools/glob-grep.tools.mjs`; `opencode/tools/glob-grep-search.mjs`; `opencode/tools/glob-grep-format.mjs`; `opencode/tools/glob-grep-cli.mjs`; `opencode/tools/glob-grep-install.mjs`; `opencode/tools/glob-grep-concurrency.mjs`; `opencode/tools/glob-grep.tools.test.mjs`; `opencode/tools/glob-grep-fallback.test.mjs`; `qa-v2-builtin-parity.mjs`; `.omo/evidence/20261007-builtin-glob-grep-parity/report.txt`",
   },
   "hashline-edit": {
     classification: "Migrar",

@@ -33,6 +33,8 @@ const ALLOWED_STATUSES = new Set([
 // so the duplicate entry requires both rows to render it.
 const EXPECTED_STATUS_ROWS = [
   ["goal", "Migrado"],
+  ["glob", "Migrado"],
+  ["grep", "Migrado"],
   ["interactive-bash-session", "Migrado parcialmente"],
   ["monitor", "Migrado parcialmente"],
   ["monitor", "Migrado parcialmente"],

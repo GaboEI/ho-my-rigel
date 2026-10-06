@@ -39,6 +39,7 @@ import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
 import { createSkillMcpManager, createSkillMcpToolDefinition, registerSkillMcpServers } from "./rigel-v2-native-skill-mcp.mjs"
 import { createSlashcommandTool } from "./tools/slashcommand.tools.mjs"
+import { createGlobGrepTools } from "./tools/glob-grep.tools.mjs"
 import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
 import { formatGoalResponse, parseGoalCommand } from "./tools/goal.tools.mjs"
@@ -1235,6 +1236,15 @@ export default {
       // walking project directories like V1.
       if (typeof context?.command?.list === "function") {
         editor.add(createSlashcommandTool({ listCommands: () => context.command.list() }))
+      }
+      // V1-parity `glob`/`grep`. The host builtins diverge from the V1 owner
+      // contract (`packages/omo-opencode/src/tools/{glob,grep}`): hidden default,
+      // follow and depth, output modes, per-file limits and the result format all
+      // differ. The runtime registers native ports under the same names, so a
+      // later registration overrides the host tool with V1-exact behavior for the
+      // same observable call, with no extra options required from the model.
+      for (const definition of createGlobGrepTools({ directory: location.directory })) {
+        editor.add(definition)
       }
     })
     // Ordered rule chains for the two V2 tool hooks. Each built-in rule keeps
