@@ -70,6 +70,7 @@ import { createUlwExecuteCommand } from "./rigel-v2-ulw-execute.mjs"
 import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
 import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
 import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
+import { createNativeMonitorStatusInjector } from "./rigel-v2-monitor-status.mjs"
 import { registerClaudeCodeMcps } from "./rigel-v2-claude-code-mcp.mjs"
 import { createNativeToolBeforeRules } from "./rigel-v2-native-tool-before.mjs"
 import { createTmuxVizManager } from "./rigel-v2-tmux-viz-manager.mjs"
@@ -968,6 +969,28 @@ export default {
         }
       })()
       : undefined
+    // The monitor engine runs a real V2 persistent terminal served over the
+    // host HTTP API. Build the identity-gated server API and verify it once; only
+    // a verified API is handed to the tool families, so a non-serve context keeps
+    // today's behavior byte-identical. The probe sends nothing unless the origin
+    // is this host's own server and a server credential is present (fails closed).
+    // Build and verify the server transport ONLY when the monitor gate is on:
+    // the persistent-terminal transport is the monitor family's only consumer,
+    // so a gate-off context must not probe. A verified API is the only one
+    // handed to the aggregator; an unverified or absent one leaves the monitor
+    // family inert without changing any other surface.
+    const serverApi = nativeGates.monitor === true
+      ? createServerApi({ argv: process.argv, env: process.env, context })
+      : undefined
+    if (serverApi) {
+      try {
+        await serverApi.verifyIdentity()
+      } catch (error) {
+        console.error(`[oh-my-rigel] Native V2 server API identity probe failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    const toolServerApi = serverApi?.available ? serverApi : undefined
+
     const registration = await context.tool.transform((editor) => {
       const before = editor.get?.(taskName)
       // Register the skill MCP tool before the delegation tool so a single
@@ -1106,11 +1129,20 @@ export default {
         // it `session_info`/`session_read` can only report an empty list while
         // the task tools silently wrote nothing a session could read back.
         readTodos,
+        // Only a verified server API reaches the aggregator, which hands it
+        // to the monitor terminal port and nothing else. Undefined when the host
+        // exposes no verified loopback server, so the monitor family stays inert.
+        serverApi: toolServerApi,
       })
       nativeToolRegistry = families.registry
       coreFamilyToolNames = Object.keys(families.tools)
       for (const [name, definition] of Object.entries(families.tools)) {
-        editor.add({ name, options: { codemode: false }, ...definition })
+        // Every family tool returns a V1-style value (the monitor and session
+        // tools return strings). The V2 host requires a result object, so the
+        // family tools go through the same registration-seam normalizer the
+        // conditional tools and `hashline_edit` use; without it a string return
+        // crashes the host (`"output" in s` on a primitive).
+        editor.add({ name, options: { codemode: false }, ...normalizeToolDefinition(definition) })
       }
       if (hashlineEditTool) {
         editor.add({ name: "hashline_edit", options: { codemode: false }, ...normalizeToolDefinition(hashlineEditTool) })
@@ -1252,12 +1284,21 @@ export default {
         }
       })
       : undefined
+    // The monitor-status injector consumes the registry built inside
+    // `tool.transform` (hence the getter, read at event time, never captured by
+    // value). It is created only under the `monitor.enabled` gate, so a gate-off
+    // runtime never touches the hook; it also no-ops on an undefined registry
+    // (gate off or no verified server).
+    const monitorStatusInjector = nativeGates.monitor === true
+      ? createNativeMonitorStatusInjector({ getRegistry: () => nativeToolRegistry })
+      : undefined
     const contextRegistration = await context.session.hook("context", async (event) => {
       repairChatToolPairs(event.messages)
       await consumePendingContext(event)
       await nativeContextPipeline(event)
       await teamMailboxInjector?.(event)
       await teamStatusInjector?.(event)
+      await monitorStatusInjector?.(event)
     })
     const modelRequestRegistration = await context.session.hook("model.request", nativeModelRequestPipeline)
     // T21: the compaction context rides on the summary request. The live

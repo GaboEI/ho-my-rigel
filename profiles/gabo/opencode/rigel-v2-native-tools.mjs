@@ -26,6 +26,10 @@ import { createMonitorRegistry } from "./tools/monitor-engine.mjs"
 import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
 import { readNativeGates } from "./rigel-v2-native-config.mjs"
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
 /**
  * Build every enabled native tool family.
  *
@@ -42,7 +46,10 @@ export function createNativeToolFamilies({ clients, location, manifest, context,
   const gates = readNativeGates(manifest)
   const tools = {}
 
-  Object.assign(tools, createSessionTools({ clients, directory: location?.directory, readTodos, serverApi }))
+  // `serverApi` is consumed only by the monitor family below. The session
+  // family keeps its client-based path, so this migration changes no session
+  // surface; wiring the session server transport is a separate, atomic task.
+  Object.assign(tools, createSessionTools({ clients, directory: location?.directory, readTodos }))
   tools.look_at = createLookAtTool({ clients, location })
 
   let registry
@@ -54,15 +61,23 @@ export function createNativeToolFamilies({ clients, location, manifest, context,
     // V2 host, the environment, or this process's serve argv, plus the server
     // credential). A resolved-but-unauthenticated origin is not enough.
     if (serverApi?.available) {
+      // The resolved monitor block (enabled + allowed_commands) is materialized
+      // in the manifest because the V2 setup context does not carry the OmO
+      // `[opencode].monitor` block; the manifest is the honest source. Fall back
+      // to the plugin config only for a caller that supplies no manifest block
+      // (fixtures).
+      const monitorConfig = isPlainObject(manifest?.metadata?.global?.monitor)
+        ? manifest.metadata.global.monitor
+        : isPlainObject(pluginConfig?.monitor) ? pluginConfig.monitor : {}
       const terminalFactory = (sessionID) => createPersistentTerminalPort({ serverApi, sessionID })
       registry = createMonitorRegistry({
         storage: context?.storage,
         terminalFactory,
         event: context?.event,
         sessions: context?.session,
-        config: pluginConfig?.monitor ?? {},
+        config: monitorConfig,
       })
-      Object.assign(tools, createMonitorTools({ registry, pluginConfig }))
+      Object.assign(tools, createMonitorTools({ registry, pluginConfig: { ...(pluginConfig ?? {}), monitor: monitorConfig } }))
     } else {
       unavailable.push({
         family: "monitor",

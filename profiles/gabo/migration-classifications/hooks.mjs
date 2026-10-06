@@ -165,10 +165,11 @@ export default {
   },
   "monitor-status-injector": {
     classification: "Migrar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "El inyector V1 en `hooks/monitor-status-injector/hook.ts` añade el estado del monitor vigilado al turno. Sin implementacion nativa hoy (sin modulo ni estado). Dueno: T32 del plan maestro; estrategia: inyector sobre `context.messages` con el patron ya probado de los inyectores team (`rigel-v2-team-gating.mjs`), bajo el gate `monitor.enabled`.",
-    futureEvidence: "dueno: T32; gate:monitor.enabled",
+      "El inyector V1 en `hooks/monitor-status-injector/hook.ts` añade el estado de los monitores vigilados al turno. El port nativo `createNativeMonitorStatusInjector` (`rigel-v2-monitor-status.mjs`) consume el registro real de monitores (`tools/monitor-engine.mjs`) sobre el hook `context` de V2, tras los inyectores team y bajo el gate `monitor.enabled`: filtra los monitores activos (`running`/`starting`), compone la linea V1 `Active monitors: ... - call monitor_stop to stop` sin exponer el comando crudo, refresca el bloque existente in situ o lo antepone al ultimo mensaje de usuario real, y es no-op con cero monitores activos o gate apagado. El runtime construye y verifica la API de servidor (`createServerApi`/`verifyIdentity`) que da de alta el registro y las herramientas `monitor_*`.",
+    futureEvidence:
+      "`rigel-v2-monitor-status.mjs`; `rigel-v2-monitor-status.test.mjs`; `rigel-v2-monitor-status-wiring.test.mjs`; `rigel-v2-native.mjs` (hook context); `tools/monitor-engine.mjs`",
   },
   "native-edition-nudge": {
     classification: "Migrar",
