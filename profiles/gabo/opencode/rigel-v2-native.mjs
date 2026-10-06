@@ -1197,6 +1197,8 @@ export default {
       categories: buildCategoryRoster(userCategories),
       resolveModel: resolveNativeModel,
       getAgentRequestBody: (agent) => agentRequestBodies.get(String(agent ?? "").toLocaleLowerCase()),
+      // Mirror the V1 `disabled_hooks` gate for think-mode (default on).
+      thinkModeEnabled: !readNativeDisabled(manifest).hooks.includes("think-mode"),
       onAgentTuningApplied: (event) => {
         recordAgentTuning(event)
       },

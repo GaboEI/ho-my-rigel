@@ -788,6 +788,9 @@ export function resolveNativePluginConfig(options = {}) {
       tools: config.disabled_tools ?? [],
       agents: config.disabled_agents ?? [],
       skills: config.disabled_skills ?? [],
+      // V1 `disabled_hooks` gate (e.g. "think-mode"). Carried so a per-hook
+      // runtime surface can honor the same disable switch.
+      hooks: config.disabled_hooks ?? [],
     },
     disabled_mcps: config.disabled_mcps ?? [],
     // User-layer only (V1 parity): never merged from project layers.
@@ -845,6 +848,7 @@ export function readNativeDisabled(manifest) {
     tools: normalize(source.tools),
     agents: normalize(source.agents),
     skills: normalize(source.skills),
+    hooks: normalize(source.hooks),
   }
 }
 

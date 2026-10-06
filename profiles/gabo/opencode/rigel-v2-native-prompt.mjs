@@ -7,6 +7,9 @@ import {
   currentUserMessageIndex,
   responsesUserParts,
 } from "./rigel-v2-native-keyword-seam.mjs"
+import { buildReasoningOptions, reasoningEffortFromThinking } from "./rigel-v2-native-reasoning-options.mjs"
+
+export { reasoningEffortFromThinking }
 
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
@@ -106,26 +109,6 @@ function mergeInstructions(instructions, injections) {
   return base ? `${base}\n\n${appended}` : appended
 }
 
-/**
- * Provider/shape-aware translation of an Anthropic-style `thinking` config into
- * the reasoning effort the OpenAI Responses body actually accepts. The Responses
- * body rejects a `thinking` field (`Unknown parameter: 'thinking'`; live:
- * gpt-6-luna, muse-spark), so an enabled thinking budget is carried as
- * `reasoning.effort`, which preserves the observable effect (the model reasons)
- * without leaking an unsupported key. Budget bands mirror the Claude
- * thinking-budget scale used by the V1 owner (`agents/types.ts`
- * CLAUDE_THINKING_BUDGET_TOKENS = 32000).
- */
-export function reasoningEffortFromThinking(thinking) {
-  if (!thinking || typeof thinking !== "object" || Array.isArray(thinking)) return undefined
-  if (thinking.type !== "enabled") return undefined
-  const budget = thinking.budgetTokens
-  if (typeof budget !== "number" || !Number.isFinite(budget)) return "high"
-  if (budget >= 32000) return "high"
-  if (budget >= 16000) return "medium"
-  return "low"
-}
-
 function applyAgentTuning(body, tuning, shape) {
   if (!tuning || typeof tuning !== "object" || Array.isArray(tuning)) return undefined
   const payload = {}
@@ -157,6 +140,16 @@ function contextUserParts(messages) {
   return chatUserParts(messages)
 }
 
+/** Text of the current (last) user message; the per-turn think/ultrawork seam. */
+function lastUserMessageText(messages) {
+  if (!Array.isArray(messages)) return ""
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== "user") continue
+    return chatUserParts([messages[index]]).map((part) => part.text).join(" ")
+  }
+  return ""
+}
+
 function hasContextUltraworkKeyword(messages) {
   return contextUserParts(messages).some((part) => /\b(?:ultrawork|ulw)\b/i.test(part.text))
 }
@@ -178,6 +171,7 @@ export function createNativeContextHook({
   onDelegationRoster,
   getAgentRequestBody,
   onAgentTuningApplied,
+  thinkModeEnabled = true,
   ultraworkPrompt = "",
   ultraworkPrompts,
   keywordMessages,
@@ -209,13 +203,20 @@ export function createNativeContextHook({
       ? event.model.modelID
       : (typeof event.model?.id === "string" ? event.model.id : undefined)
     const tuning = typeof getAgentRequestBody === "function" ? getAgentRequestBody(agentName) : undefined
-    const tuningPayload = applyAgentTuning(event.options ?? (event.options = {}), tuning, "chat")
-    if (tuningPayload) {
+    const { options: reasoningOptions, source: reasoningSource } = buildReasoningOptions({
+      tuning,
+      currentTurnText: lastUserMessageText(event.messages),
+      modelID,
+      thinkModeEnabled,
+    })
+    if (Object.keys(reasoningOptions).length > 0) {
+      Object.assign(event.options ?? (event.options = {}), reasoningOptions)
       onAgentTuningApplied?.({
         agent: agentName,
         providerID: event.model?.providerID ?? event.model?.provider,
         shape: "context",
-        payload: tuningPayload,
+        source: reasoningSource,
+        payload: reasoningOptions,
       })
     }
     let agents

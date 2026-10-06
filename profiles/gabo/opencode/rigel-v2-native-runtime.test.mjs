@@ -661,6 +661,43 @@ function recordingHookContext(directory = "/native-v2") {
   return { context, registrations }
 }
 
+test("native runtime applies per-turn think reasoning in its registered context hook and leaves the model variant untouched", async () => {
+  const { context, registrations } = recordingHookContext()
+  const dispose = await plugin.setup(context)
+  try {
+    const contextRegistration = registrations.find((registration) => registration.name === "context")
+    expect(contextRegistration).toBeDefined()
+
+    // A tuning-free agent isolates the think-keyword path from agent tuning.
+    const thinking = {
+      sessionID: "ses_think_wiring",
+      agent: "Prometheus - Plan Builder",
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" },
+      system: [],
+      messages: [{ role: "user", content: "please think about this" }],
+      options: {},
+    }
+    const modelBefore = structuredClone(thinking.model)
+    await contextRegistration.handler(thinking)
+    expect(thinking.options.reasoningEffort).toBe("high")
+    // Variant routing owns the model ref; the reasoning application must not touch it.
+    expect(thinking.model).toEqual(modelBefore)
+
+    const plain = {
+      sessionID: "ses_plain_wiring",
+      agent: "Prometheus - Plan Builder",
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+      system: [],
+      messages: [{ role: "user", content: "hello there" }],
+      options: {},
+    }
+    await contextRegistration.handler(plain)
+    expect(plain.options.reasoningEffort).toBeUndefined()
+  } finally {
+    dispose()
+  }
+})
+
 test("native runtime registers its ordered tool hook chain and disposes every registration", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "rigel-native-hook-order-"))
   try {
@@ -741,6 +778,49 @@ test("native runtime registers its ordered tool hook chain and disposes every re
 
     await dispose()
     expect(registrations.every((registration) => registration.disposed)).toBe(true)
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+test("native runtime wires per-turn think reasoning into the model-visible context without touching the model ref", async () => {
+  const workspace = mkdtempSync(join(tmpdir(), "rigel-native-think-"))
+  try {
+    const { context, registrations } = recordingHookContext(workspace)
+    const dispose = await plugin.setup(context)
+    try {
+      const contextHandler = registrations.find((registration) => registration.name === "context")?.handler
+      expect(typeof contextHandler).toBe("function")
+
+      // A think keyword on the current turn raises the semantic reasoning option.
+      const think = {
+        sessionID: "ses_think",
+        agent: "Auditor",
+        model: { providerID: "openai", modelID: "gpt-6", variant: "low" },
+        system: [],
+        messages: [{ role: "user", content: "please think this through" }],
+        options: {},
+      }
+      await contextHandler(think)
+      expect(think.options.reasoningEffort).toBe("high")
+
+      // Variant routing lives on the model ref, which this hook must never edit.
+      expect(think.model).toEqual({ providerID: "openai", modelID: "gpt-6", variant: "low" })
+
+      // A turn without the keyword carries no reasoning option.
+      const control = {
+        sessionID: "ses_plain",
+        agent: "Auditor",
+        model: { providerID: "openai", modelID: "gpt-6" },
+        system: [],
+        messages: [{ role: "user", content: "hello there" }],
+        options: {},
+      }
+      await contextHandler(control)
+      expect(control.options.reasoningEffort).toBeUndefined()
+    } finally {
+      await dispose()
+    }
   } finally {
     rmSync(workspace, { recursive: true, force: true })
   }

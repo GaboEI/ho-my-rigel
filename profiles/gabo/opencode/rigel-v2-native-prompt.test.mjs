@@ -19,7 +19,7 @@ test("context hook adds root roster to system and agent tuning to options", asyn
   }
   await hook(event)
   expect(event.system).toContainEqual(expect.objectContaining({ text: expect.stringContaining("<rigel-native-delegation-roster>") }))
-  expect(event.options).toMatchObject({ temperature: 0.1, max_tokens: 4096 })
+  expect(event.options).toMatchObject({ temperature: 0.1, maxTokens: 4096 })
 })
 
 test("context collector orders, replaces, consumes, and injects only into the last real user message", async () => {

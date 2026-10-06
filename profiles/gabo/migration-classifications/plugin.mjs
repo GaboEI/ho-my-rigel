@@ -35,9 +35,10 @@ export default {
   },
   "chat-headers": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "`plugin/chat-headers.ts` inyecta la cabecera `x-initiator` de Copilot, pero V2 no tiene mapeo verificado para `chat.headers`; se adapta en la frontera `http.request` que el runtime nativo ya usa en `rigel-v2-native.mjs`.",
-    futureEvidence: "task:23",
+      "`plugin/chat-headers.ts` inyecta la cabecera `x-initiator` de Copilot. La documentacion oficial mapea `chat.headers` a `ctx.session.hook(\"model.request\", ...)`; el runtime nativo registra `createNativeModelRequestHook` y aplica `x-initiator` cuando el mensaje lleva el marcador interno, con gate de proveedor, conservando la semantica V1.",
+    futureEvidence: "`rigel-v2-native-prompt.mjs` (createNativeModelRequestHook); `rigel-v2-native-prompt.test.mjs`; `rigel-v2-native.mjs`",
   },
   "chat-message": {
     classification: "Adaptar",
@@ -48,10 +49,11 @@ export default {
       "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-keyword-seam.mjs`; `rigel-v2-native-prompt.test.mjs`; `.omo/evidence/20261005-task-20/t12-keyword-seam.md`",
   },
   "chat-params": {
-    classification: "Adaptar",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "`plugin/chat-params.ts` ajusta esfuerzo Anthropic, think mode y fallback de modelo, pero V2 no tiene mapeo verificado para `chat.params`; se adapta mutando el cuerpo real de la petición en la frontera `http.request`.",
-    futureEvidence: "task:23",
+      "`plugin/chat-params.ts` ajusta esfuerzo Anthropic, think mode y fallback de modelo. La documentacion oficial mapea `chat.params` al hook `context` de V2 (`event.options`). Demostrado en vivo con captura del body final del proveedor: `event.options.reasoningEffort` llega como `reasoning_effort` (adaptador OpenAI, modelo loopback) y `event.options.thinking` llega como `thinking: {type:'enabled', budget_tokens}` (adaptador Anthropic REAL de V2, endpoint loopback, claude-opus-4-7); `reasoningEffort` lo ignora Anthropic y `thinking` lo ignora OpenAI, asi que `rigel-v2-native-reasoning-options.mjs` emite AMBOS carriers (como hacia el chat.params V1) y `rigel-v2-native-prompt.mjs` los aplica en el hook `context`.",
+    futureEvidence: "`rigel-v2-native-reasoning-options.mjs`; `rigel-v2-native-reasoning-options.test.mjs`; `rigel-v2-native-prompt.mjs`; `qa-v2-reasoning-variant-mechanism.mjs`; `qa-v2-reasoning-anthropic.mjs`; `.omo/evidence/20261006-t23-think-variants/`",
   },
   "command-execute-before": {
     classification: "Adaptar",
