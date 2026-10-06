@@ -69,12 +69,12 @@ const PROFILE_KEYS = new Set(["categories", "disabled_skills", "[opencode]", "[n
 
 const TARGET_KEYS = new Set([
   "monitor", "goal", "experimental", "team_mode", "skills", "disabled_tools", "disabled_agents", "disabled_mcps",
-  "disabled_skills", "categories", "ralph_loop", "hashline_edit",
+  "disabled_skills", "disabled_commands", "categories", "ralph_loop", "hashline_edit",
 ])
 
 const MAX_PROJECT_CONFIG_DIRECTORY_DEPTH = 256
 
-const STRING_ARRAY_KEYS = new Set(["disabled_tools", "disabled_agents", "disabled_skills", "disabled_mcps", "mcp_env_allowlist"])
+const STRING_ARRAY_KEYS = new Set(["disabled_tools", "disabled_agents", "disabled_skills", "disabled_mcps", "disabled_commands", "mcp_env_allowlist"])
 
 const DEFAULT_READ_FILE_SYSTEM = {
   existsSync,
@@ -576,6 +576,7 @@ function mergeConfigViews(base, override) {
     disabled_tools: mergeUniqueStrings(base.disabled_tools, override.disabled_tools),
     disabled_agents: mergeUniqueStrings(base.disabled_agents, override.disabled_agents),
     disabled_skills: mergeUniqueStrings(base.disabled_skills, override.disabled_skills),
+    disabled_commands: mergeUniqueStrings(base.disabled_commands, override.disabled_commands),
     disabled_mcps: mergeUniqueStrings(base.disabled_mcps, override.disabled_mcps),
     categories: deepMerge(base.categories, override.categories),
   }
@@ -791,6 +792,9 @@ export function resolveNativePluginConfig(options = {}) {
       // V1 `disabled_hooks` gate (e.g. "think-mode"). Carried so a per-hook
       // runtime surface can honor the same disable switch.
       hooks: config.disabled_hooks ?? [],
+      // V1 `disabled_commands` gate: the builtin command loader filters these
+      // names out. Carried so the native command surface honors the same switch.
+      commands: config.disabled_commands ?? [],
     },
     disabled_mcps: config.disabled_mcps ?? [],
     // User-layer only (V1 parity): never merged from project layers.
@@ -849,6 +853,7 @@ export function readNativeDisabled(manifest) {
     agents: normalize(source.agents),
     skills: normalize(source.skills),
     hooks: normalize(source.hooks),
+    commands: normalize(source.commands),
   }
 }
 

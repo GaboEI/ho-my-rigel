@@ -67,6 +67,7 @@ import { OMO_INTERNAL_INITIATOR_MARKER } from "./rigel-v2-keyword-core.mjs"
 import { createNativeContextCollector, createNativeContextMessageConsumer } from "./rigel-v2-context-collector.mjs"
 import { createNativeClaudeCodeHooks } from "./rigel-v2-claude-code-hooks.mjs"
 import { createUlwExecuteCommand } from "./rigel-v2-ulw-execute.mjs"
+import { registerBuiltinCommands } from "./rigel-v2-native-builtin-commands.mjs"
 import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
 import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
 import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
@@ -1438,6 +1439,20 @@ export default {
         }),
       ))
     }
+    // T35: the remaining V1 builtin commands (refactor, remove-ai-slops,
+    // handoff, hyperplan). Their V1 `<command-instruction>` bodies are generated
+    // from the owner into a manifest and delivered into the session turn by the
+    // command executor. `goal` and `ulw-execute` are registered above and
+    // `stop-continuation` is owned by the prompt seam, so they are not repeated
+    // here. `disabled_commands` is honored from the materialized manifest.
+    let builtinCommandsRegistration
+    if (typeof context?.command?.transform === "function") {
+      builtinCommandsRegistration = await registerBuiltinCommands({
+        context,
+        teamModeEnabled: nativeGates.team_mode === true,
+        disabledCommands: readNativeDisabled(manifest).commands,
+      })
+    }
     // Reconcile durable background state from a previous process: re-admit
     // queued descriptors (they never started), re-track running children WITHOUT
     // re-creating them, and re-queue undelivered wakes. A fresh manager (tests,
@@ -1496,6 +1511,7 @@ export default {
       await conditionalTools?.dispose?.()
       await goalCommandRegistration?.dispose?.()
       await ulwExecuteCommandRegistration?.dispose?.()
+      await builtinCommandsRegistration?.dispose?.()
       autoSlashCommand.clear()
       disposeClaudeCodeHooks()
       await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), compactionContextRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])

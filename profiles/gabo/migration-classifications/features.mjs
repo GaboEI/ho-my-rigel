@@ -39,9 +39,10 @@ export default {
   },
   "builtin-commands": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "Las plantillas de comandos de `features/builtin-commands/` (refactor, init-deep, handoff, ulw-loop) se migran al modelo de comandos de V2 conservando los mismos disparadores y cuerpos.",
-    futureEvidence: "dueno: T35 del plan maestro (registrar `refactor`, `remove-ai-slops`, `handoff` e `hyperplan` como comandos nativos y crear el contrato de comandos builtin); resto de comandos ya registrados via `ctx.command.transform` en `rigel-v2-native.mjs`",
+      "Las plantillas de comandos de `features/builtin-commands/` (refactor, ulw-execute, stop-continuation, handoff, remove-ai-slops, hyperplan, goal) se migran al modelo de comandos de V2 conservando los mismos disparadores y cuerpos. `goal` y `ulw-execute` se registran directamente en el runtime nativo; `stop-continuation` se entrega por el seam de prompt; los cuatro comandos restantes (`refactor`, `remove-ai-slops`, `handoff`, `hyperplan`) se registran via `ctx.command.transform` con su plantilla V1 generada desde el dueno y entregada al turno real de la sesion (`ctx.session.prompt`).",
+    futureEvidence: "`rigel-v2-native-builtin-commands.mjs`; `rigel-v2-native-builtin-command-manifest.mjs`; `generate-v2-builtin-command-manifest.mjs`; `rigel-v2-native-builtin-commands.test.mjs`; `generate-v2-builtin-command-manifest.test.mjs`; `rigel-v2-native-runtime.test.mjs`; `qa-v2-builtin-commands-contract.mjs`; `.omo/evidence/20261006-t35-builtin-commands/task-35.txt`",
   },
   "claude-code-agent-loader": {
     classification: "Migrar",

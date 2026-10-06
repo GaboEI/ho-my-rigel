@@ -1251,6 +1251,122 @@ test("native runtime stop-continuation clears only its session goal", async () =
   }
 })
 
+test("native runtime registers the remaining builtin commands with the V1 templates", async () => {
+  const commands = new Map()
+  const prompts = []
+  const context = {
+    ...editorCaptureContext().context,
+    session: {
+      hook: async () => ({ dispose() {} }),
+      create: async () => ({ data: { id: "ses_cmd" } }),
+      prompt: async (input) => { prompts.push(input); return { data: {} } },
+    },
+    command: {
+      transform: async (callback) => {
+        callback({ add: (definition) => commands.set(definition.name, definition) })
+        return { dispose() {} }
+      },
+    },
+  }
+  const dispose = await plugin.setup(context)
+  try {
+    for (const name of ["refactor", "remove-ai-slops", "handoff", "hyperplan"]) {
+      expect(typeof commands.get(name)?.execute).toBe("function")
+    }
+    // Commands owned by another native surface are not duplicated here.
+    expect(commands.has("stop-continuation")).toBe(false)
+    expect(commands.has("goal")).toBe(false)
+    // The command delivers the rendered V1 template into the session turn:
+    // argument and session placeholders resolve; none survives literally.
+    await commands.get("handoff").execute({ sessionID: "ses_cmd", prompt: { text: "continue the round" }, delivery: "queue" })
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0].sessionID).toBe("ses_cmd")
+    expect(prompts[0].delivery).toBe("queue")
+    expect(prompts[0].text).toContain("continue the round")
+    expect(prompts[0].text).toContain("ses_cmd")
+    expect(prompts[0].text).not.toContain("$ARGUMENTS")
+    expect(prompts[0].text).not.toContain("$SESSION_ID")
+    expect(prompts[0].text).not.toContain("$TIMESTAMP")
+    // An empty session never delivers.
+    await commands.get("refactor").execute({ sessionID: "", prompt: { text: "x" } })
+    expect(prompts).toHaveLength(1)
+  } finally {
+    await dispose()
+  }
+})
+
+test("native runtime honors disabled_commands for the native builtin commands", async () => {
+  const originalMetadata = nativeManifest.metadata
+  nativeManifest.metadata = { global: { disabled: { commands: ["handoff"] } } }
+  const commands = new Map()
+  const context = {
+    ...editorCaptureContext().context,
+    session: {
+      hook: async () => ({ dispose() {} }),
+      create: async () => ({ data: { id: "ses_cmd" } }),
+      prompt: async () => ({ data: {} }),
+    },
+    command: {
+      transform: async (callback) => {
+        callback({ add: (definition) => commands.set(definition.name, definition) })
+        return { dispose() {} }
+      },
+    },
+  }
+  try {
+    const dispose = await plugin.setup(context)
+    expect(commands.has("handoff")).toBe(false)
+    for (const name of ["refactor", "remove-ai-slops", "hyperplan"]) expect(commands.has(name)).toBe(true)
+    await dispose()
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
+})
+
+test("native runtime selects the team-mode template from the team_mode gate", async () => {
+  const originalMetadata = nativeManifest.metadata
+  const capture = () => {
+    const commands = new Map()
+    const prompts = []
+    const context = {
+      ...editorCaptureContext().context,
+      session: {
+        hook: async () => ({ dispose() {} }),
+        create: async () => ({ data: { id: "ses_cmd" } }),
+        prompt: async (input) => { prompts.push(input); return { data: {} } },
+      },
+      command: {
+        transform: async (callback) => {
+          callback({ add: (definition) => commands.set(definition.name, definition) })
+          return { dispose() {} }
+        },
+      },
+    }
+    return { commands, prompts, context }
+  }
+  try {
+    nativeManifest.metadata = { global: { gates: { team_mode: false } } }
+    const off = capture()
+    const disposeOff = await plugin.setup(off.context)
+    await off.commands.get("remove-ai-slops").execute({ sessionID: "ses_team", prompt: { text: "target" }, delivery: "queue" })
+    await disposeOff()
+    nativeManifest.metadata = { global: { gates: { team_mode: true } } }
+    const on = capture()
+    const disposeOn = await plugin.setup(on.context)
+    await on.commands.get("remove-ai-slops").execute({ sessionID: "ses_team", prompt: { text: "target" }, delivery: "queue" })
+    await disposeOn()
+    expect(off.prompts[0].text).not.toContain("$ARGUMENTS")
+    expect(on.prompts[0].text).not.toContain("$ARGUMENTS")
+    // The team-mode addendum adds content; a wiring regression that ignores the
+    // gate would deliver the identical base template.
+    expect(on.prompts[0].text.length).toBeGreaterThan(off.prompts[0].text.length)
+  } finally {
+    if (originalMetadata === undefined) delete nativeManifest.metadata
+    else nativeManifest.metadata = originalMetadata
+  }
+})
+
 // Task 19: a real compaction clears the file-read-scoped context and writes an
 // observable receipt under $XDG_STATE_HOME. The event feed resolves only after
 // the runtime finished handling the pushed event, so awaiting it is the

@@ -46,7 +46,7 @@ describe("#given no configuration exists", () => {
     expect(view.monitor).toBeUndefined()
     expect(view.goal).toBeUndefined()
     expect(view.experimental).toEqual({ task_system: false })
-    expect(view.disabled).toEqual({ tools: [], agents: [], skills: [], hooks: [] })
+    expect(view.disabled).toEqual({ tools: [], agents: [], skills: [], hooks: [], commands: [] })
     expect(view.categories).toEqual({})
     expect(view.sources.every((source) => source.loaded === false)).toBe(true)
   })
@@ -79,6 +79,7 @@ describe("#given plugin keys inside the [opencode] block", () => {
         "disabled_tools": ["todowrite"],
         "disabled_agents": ["oracle"],
         "disabled_skills": ["dev-browser"],
+        "disabled_commands": ["handoff"],
       },
     }`)
     // when
@@ -88,7 +89,7 @@ describe("#given plugin keys inside the [opencode] block", () => {
     expect(view.monitor.live_mode_enabled).toBe(true)
     expect(view.goal).toEqual({ enabled: true, auto_start: true, default_max_iterations: 7 })
     expect(view.experimental.task_system).toBe(true)
-    expect(view.disabled).toEqual({ tools: ["todowrite"], agents: ["oracle"], skills: ["dev-browser"], hooks: [] })
+    expect(view.disabled).toEqual({ tools: ["todowrite"], agents: ["oracle"], skills: ["dev-browser"], hooks: [], commands: ["handoff"] })
   })
 })
 
@@ -338,8 +339,8 @@ describe("#given a materialized manifest", () => {
 
   test("#when the manifest carries no denylists #then every list is empty", () => {
     // given / when / then
-    expect(readNativeDisabled(undefined)).toEqual({ tools: [], agents: [], skills: [], hooks: [] })
-    expect(readNativeDisabled({ metadata: { global: {} } })).toEqual({ tools: [], agents: [], skills: [], hooks: [] })
+    expect(readNativeDisabled(undefined)).toEqual({ tools: [], agents: [], skills: [], hooks: [], commands: [] })
+    expect(readNativeDisabled({ metadata: { global: {} } })).toEqual({ tools: [], agents: [], skills: [], hooks: [], commands: [] })
   })
 })
 
