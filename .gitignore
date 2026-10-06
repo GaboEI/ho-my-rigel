@@ -77,6 +77,12 @@ plans/
 !.omo/fixtures/
 !.omo/fixtures/**
 !.omo/init-deep.json
+# The Rigel migration master plan is the tracked source of truth for phase/task
+# state (referenced by profiles/gabo/migration-classifications/*.mjs). The rest of
+# .omo/plans/ stays per-session and ignored.
+!.omo/plans/
+.omo/plans/*
+!.omo/plans/migracion-espejo-v2-omr.md
 
 # Rust workspace (crates/senpi-desktop-*)
 /target
