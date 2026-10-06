@@ -46,35 +46,61 @@ export function createNativeIdleGate({ now = () => Date.now(), windowMs = 500 } 
  * Native V2 replacement for the V1 Anthropic context-window recovery hook.
  * The host owns compaction execution; the plugin requests it once per active
  * token-limit incident through the documented `session.compact` service.
+ *
+ * `incident` is an optional shared registry (T34
+ * `createNativeCompactionIncidentRegistry`). When the preemptive compaction
+ * trigger shares it, the reactive recovery and the preemptive trigger can never
+ * hold two pending `session.compact` requests for one session. Without it, the
+ * recovery keeps its own in-module pending set, byte-identical to the original.
  */
-export function createNativeContextLimitRecovery({ session, log = console.error } = {}) {
+export function createNativeContextLimitRecovery({ session, log = console.error, incident } = {}) {
   const pending = new Set()
-  return {
-    async handle(event) {
-      const sessionID = eventSessionID(event)
-      if (!sessionID) return false
-      if (event?.type === "session.deleted" || event?.type === "session.compacted") {
-        pending.delete(sessionID)
-        return false
-      }
-      if (event?.type !== "session.error" || !TOKEN_LIMIT_PATTERN.test(eventMessage(event)) || pending.has(sessionID)) return false
-      if (typeof session?.compact !== "function") return false
+  const registry = incident ?? {
+    begin(sessionID) {
+      if (pending.has(sessionID)) return false
       pending.add(sessionID)
-      try {
-        await session.compact({ sessionID })
-        log(`[oh-my-rigel] Native V2 context recovery requested compaction: session=${sessionID}`)
-        return true
-      } catch (error) {
-        pending.delete(sessionID)
-        log(`[oh-my-rigel] Native V2 context recovery failed: session=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
-        return false
-      }
+      return true
+    },
+    end(sessionID) {
+      pending.delete(sessionID)
+    },
+    has(sessionID) {
+      return pending.has(sessionID)
     },
     clear(sessionID) {
       pending.delete(sessionID)
     },
     clearAll() {
       pending.clear()
+    },
+  }
+  return {
+    async handle(event) {
+      const sessionID = eventSessionID(event)
+      if (!sessionID) return false
+      if (event?.type === "session.deleted" || event?.type === "session.compacted") {
+        registry.end(sessionID)
+        return false
+      }
+      if (event?.type !== "session.error" || !TOKEN_LIMIT_PATTERN.test(eventMessage(event))) return false
+      if (registry.has(sessionID)) return false
+      if (typeof session?.compact !== "function") return false
+      if (!registry.begin(sessionID)) return false
+      try {
+        await session.compact({ sessionID })
+        log(`[oh-my-rigel] Native V2 context recovery requested compaction: session=${sessionID}`)
+        return true
+      } catch (error) {
+        registry.end(sessionID)
+        log(`[oh-my-rigel] Native V2 context recovery failed: session=${sessionID}; ${error instanceof Error ? error.message : String(error)}`)
+        return false
+      }
+    },
+    clear(sessionID) {
+      registry.clear(sessionID)
+    },
+    clearAll() {
+      registry.clearAll()
     },
   }
 }

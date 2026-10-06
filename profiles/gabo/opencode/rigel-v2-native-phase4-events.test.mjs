@@ -4,6 +4,7 @@ import {
   createNativeIdleContinuations,
   createNativeIdleGate,
 } from "./rigel-v2-native-phase4-events.mjs"
+import { createNativeCompactionIncidentRegistry } from "./rigel-v2-native-preemptive-compaction.mjs"
 
 test("context-limit errors request exactly one V2 compaction until the incident closes", async () => {
   const compacted = []
@@ -15,6 +16,28 @@ test("context-limit errors request exactly one V2 compaction until the incident 
   await recovery.handle({ type: "session.error", sessionID: "ses_1", error: { message: "token limit reached" } })
 
   expect(compacted).toEqual([{ sessionID: "ses_1" }, { sessionID: "ses_1" }])
+})
+
+test("a shared incident registry collapses preemptive and reactive compaction requests", async () => {
+  const registry = createNativeCompactionIncidentRegistry()
+  const compacted = []
+  const recovery = createNativeContextLimitRecovery({
+    session: { compact: async (input) => { compacted.push(input) } },
+    log: () => {},
+    incident: registry,
+  })
+
+  // The preemptive trigger already holds the incident: the reactive recovery
+  // must not admit a second compaction for the same session.
+  registry.begin("ses_1")
+  await recovery.handle({ type: "session.error", sessionID: "ses_1", error: { message: "prompt is too long for this context length" } })
+  expect(compacted).toEqual([])
+
+  // Once the compaction lands the incident clears, so a fresh token-limit
+  // incident is admitted again.
+  await recovery.handle({ type: "session.compacted", sessionID: "ses_1" })
+  await recovery.handle({ type: "session.error", sessionID: "ses_1", error: { message: "token limit reached" } })
+  expect(compacted).toEqual([{ sessionID: "ses_1" }])
 })
 
 test("idle gate normalizes status idle and prevents duplicate continuation delivery", async () => {

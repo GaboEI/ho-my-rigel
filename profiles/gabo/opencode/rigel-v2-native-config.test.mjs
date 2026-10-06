@@ -10,7 +10,13 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { deriveNativeGates, readNativeDisabled, readNativeMcpPolicy, resolveNativePluginConfig
+import {
+  deriveNativeGates,
+  readNativeDisabled,
+  readNativeGates,
+  readNativeMcpPolicy,
+  readNativePreemptiveThreshold,
+  resolveNativePluginConfig,
 } from "./rigel-v2-native-config.mjs"
 
 const created = []
@@ -45,7 +51,7 @@ describe("#given no configuration exists", () => {
     // loader does not materialize schema defaults into the plugin view.
     expect(view.monitor).toBeUndefined()
     expect(view.goal).toBeUndefined()
-    expect(view.experimental).toEqual({ task_system: false })
+    expect(view.experimental).toEqual({ task_system: false, preemptive_compaction: false })
     expect(view.disabled).toEqual({ tools: [], agents: [], skills: [], hooks: [], commands: [] })
     expect(view.categories).toEqual({})
     expect(view.sources.every((source) => source.loaded === false)).toBe(true)
@@ -299,21 +305,32 @@ describe("#given a resolved native plugin config view", () => {
     // when
     const offGates = deriveNativeGates(off)
     // then
-    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, team_mode: false, interactive_bash: true, hashline_edit: false })
+    expect(offGates).toEqual({ monitor: false, goal: false, task_system: false, team_mode: false, interactive_bash: true, hashline_edit: false, preemptive_compaction: false })
 
     // given
     const on = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, team_mode: { enabled: true }, disabled: { tools: [] } }
     // when
     const onGates = deriveNativeGates(on)
     // then
-    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: true, interactive_bash: true, hashline_edit: false })
+    expect(onGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: true, interactive_bash: true, hashline_edit: false, preemptive_compaction: false })
 
     // given
     const disabled = { monitor: { enabled: true }, goal: { enabled: true }, experimental: { task_system: true }, disabled: { tools: ["interactive_bash"] } }
     // when
     const disabledGates = deriveNativeGates(disabled)
     // then
-    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: false, interactive_bash: false, hashline_edit: false })
+    expect(disabledGates).toEqual({ monitor: true, goal: true, task_system: true, team_mode: false, interactive_bash: false, hashline_edit: false, preemptive_compaction: false })
+  })
+
+  test("#when preemptive_compaction is set #then the gate is on and the threshold is projected", () => {
+    // given
+    const view = { monitor: undefined, goal: undefined, experimental: { task_system: false, preemptive_compaction: true, preemptive_compaction_threshold: 0.5 }, disabled: { tools: [] } }
+    // when
+    const gates = deriveNativeGates(view)
+    // then
+    expect(gates.preemptive_compaction).toBe(true)
+    // Off unless explicitly true: the V1 default.
+    expect(deriveNativeGates({ experimental: { preemptive_compaction: "yes" } }).preemptive_compaction).toBe(false)
   })
 
   test("#when the view is malformed #then every config gate degrades closed", () => {
@@ -344,6 +361,51 @@ describe("#given a materialized manifest", () => {
   })
 })
 
+
+describe("#given the T34 preemptive compaction gate", () => {
+  test("#when the block sets the gate and threshold #then the view projects both", () => {
+    // given
+    const fixture = makeFixture()
+    fixture.writeUser(`{
+      "[opencode]": {
+        "experimental": { "preemptive_compaction": true, "preemptive_compaction_threshold": 0.9 },
+      },
+    }`)
+    // when
+    const view = fixture.resolve()
+    // then
+    expect(view.experimental.preemptive_compaction).toBe(true)
+    expect(view.experimental.preemptive_compaction_threshold).toBe(0.9)
+    expect(deriveNativeGates(view).preemptive_compaction).toBe(true)
+  })
+
+  test("#when the threshold is out of range #then it is dropped but the gate survives", () => {
+    // given
+    const fixture = makeFixture()
+    fixture.writeUser(`{
+      "[opencode]": {
+        "experimental": { "preemptive_compaction": true, "preemptive_compaction_threshold": 1.5 },
+      },
+    }`)
+    // when
+    const view = fixture.resolve()
+    // then
+    expect(view.experimental.preemptive_compaction).toBe(true)
+    expect(view.experimental.preemptive_compaction_threshold).toBeUndefined()
+  })
+
+  test("#when the manifest materializes the gate #then readNativeGates and the threshold reader agree", () => {
+    // given
+    const manifest = { metadata: { global: { gates: { preemptive_compaction: true }, preemptiveCompactionThreshold: 0.42 } } }
+    // when / then
+    expect(readNativeGates(manifest).preemptive_compaction).toBe(true)
+    expect(readNativePreemptiveThreshold(manifest)).toBe(0.42)
+    // An absent or out-of-range threshold falls back to the V1 0.78 default.
+    expect(readNativePreemptiveThreshold({ metadata: { global: {} } })).toBeUndefined()
+    expect(readNativePreemptiveThreshold({ metadata: { global: { preemptiveCompactionThreshold: 2 } } })).toBeUndefined()
+    expect(readNativeGates({ metadata: { global: { gates: {} } } }).preemptive_compaction).toBe(false)
+  })
+})
 
 describe("#given the tier-2 MCP policy", () => {
   test("#when the manifest carries the mcp block #then readNativeMcpPolicy normalizes it", () => {

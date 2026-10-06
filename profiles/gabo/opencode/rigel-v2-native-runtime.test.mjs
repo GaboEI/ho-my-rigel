@@ -698,6 +698,40 @@ test("native runtime applies per-turn think reasoning in its registered context 
   }
 })
 
+test("native runtime keeps preemptive compaction a no-op while its gate is off", async () => {
+  // The tracked agent manifest is the empty placeholder, so every gate is off.
+  // A host that exposes both transcript and compact services must still never
+  // request a compaction: the T34 gate is the only switch.
+  const { context, registrations } = recordingHookContext()
+  const compactCalls = []
+  context.session.context = async () => ([{
+    id: "m1",
+    type: "assistant",
+    model: { providerID: "openai", id: "gpt-5" },
+    tokens: { input: 999_999, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+    content: [{ type: "text", text: "answer" }],
+  }])
+  context.session.compact = async (input) => { compactCalls.push(input) }
+  // A resolvable model limit and a huge token footprint: gate off must still
+  // never request a compaction, so the gate is the only switch under test.
+  context.model.list = async () => ({ data: [{ providerID: "openai", id: "gpt-5", limit: { context: 1_000 } }] })
+  const dispose = await plugin.setup(context)
+  try {
+    const contextRegistration = registrations.find((registration) => registration.name === "context")
+    await contextRegistration.handler({
+      sessionID: "ses_preemptive_off",
+      agent: "Sisyphus - ultraworker",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      system: [],
+      messages: [{ role: "user", content: "go" }],
+      options: {},
+    })
+    expect(compactCalls).toEqual([])
+  } finally {
+    await dispose()
+  }
+})
+
 test("native runtime registers its ordered tool hook chain and disposes every registration", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "rigel-native-hook-order-"))
   try {

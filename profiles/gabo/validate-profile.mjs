@@ -33,6 +33,10 @@ if (profile.disabled_hooks?.includes("goal")) fail("OmO goal hook must be enable
 // the todo preserver must not stay disabled either.
 if (profile.disabled_hooks?.includes("compaction-context-injector")) fail("OmO compaction-context-injector is migrated natively (T21) and must not stay disabled")
 if (profile.disabled_hooks?.includes("compaction-todo-preserver")) fail("OmO compaction-todo-preserver is migrated natively (T22) and must not stay disabled")
+// T34 (2026-10-06): preemptive compaction is a default-off experimental gate
+// (V1 parity). The tracked profile must keep it off; QA enables it through
+// RIGEL_V2_PROFILE_FILE so the shipped gate can never turn itself on.
+if (profile.experimental?.preemptive_compaction === true) fail("preemptive compaction is a default-off experimental gate (T34) and must not be enabled in the tracked profile")
 if (!profile.disabled_skills?.includes("dev-browser") || !profile.disabled_skills?.includes("ultimate-browsing")) fail("conflicting browser skills must be disabled")
 if (manifest.rootAuthorities?.orchestrator !== "sisyphus" || manifest.rootAuthorities?.orchestrationContract !== "sisyphus") fail("Sisyphus must own the merged orchestration contract")
 if (manifest.rootAuthorities?.acceptance !== "judge") fail("Judge must be the acceptance authority")

@@ -406,6 +406,19 @@ function validateExperimental(value, path, diagnostics) {
     if (typeof value.task_system === "boolean") parsed.task_system = value.task_system
     else warn(diagnostics, `config: ${path}: experimental.task_system ignored (invalid value)`)
   }
+  // T34: V1 `experimental.preemptive_compaction` gate (off by default). The
+  // threshold is a Rigel addition (V1 hardcodes 0.78); it must be a fraction in
+  // (0, 1] so a bad value degrades to the V1 default instead of disabling the
+  // guard silently.
+  if ("preemptive_compaction" in value) {
+    if (typeof value.preemptive_compaction === "boolean") parsed.preemptive_compaction = value.preemptive_compaction
+    else warn(diagnostics, `config: ${path}: experimental.preemptive_compaction ignored (invalid value)`)
+  }
+  if ("preemptive_compaction_threshold" in value) {
+    const threshold = value.preemptive_compaction_threshold
+    if (typeof threshold === "number" && Number.isFinite(threshold) && threshold > 0 && threshold <= 1) parsed.preemptive_compaction_threshold = threshold
+    else warn(diagnostics, `config: ${path}: experimental.preemptive_compaction_threshold ignored (invalid value)`)
+  }
   if ("max_tools" in value) {
     if (intInRange(value.max_tools, 1, 1000)) parsed.max_tools = value.max_tools
     else warn(diagnostics, `config: ${path}: experimental.max_tools ignored (invalid value)`)
@@ -780,6 +793,11 @@ export function resolveNativePluginConfig(options = {}) {
     experimental: {
       task_system: config.experimental?.task_system ?? false,
       max_tools: config.experimental?.max_tools,
+      // T34: preemptive compaction gate (V1 default off) and its Rigel threshold
+      // override. Absence keeps the gate off and the threshold unmaterialized, so
+      // the runtime falls back to the V1 0.78 constant.
+      preemptive_compaction: config.experimental?.preemptive_compaction ?? false,
+      preemptive_compaction_threshold: config.experimental?.preemptive_compaction_threshold,
     },
     team_mode: config.team_mode,
     // Root hashline_edit is authoritative; the legacy experimental placement is
@@ -810,7 +828,7 @@ export function resolveNativePluginConfig(options = {}) {
 // Reads materialized gates from the generated agent manifest so a tool
 // family is registered only when its gate is enabled. Distinct from
 // resolveNativePluginConfig (which reads omo.jsonc directly).
-const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "team_mode", "interactive_bash", "hashline_edit"])
+const GATE_KEYS = Object.freeze(["monitor", "goal", "task_system", "team_mode", "interactive_bash", "hashline_edit", "preemptive_compaction"])
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -879,6 +897,16 @@ export function readNativeMaxTools(manifest) {
 }
 
 /**
+ * Read the materialized `experimental.preemptive_compaction_threshold` (T34).
+ * Returns undefined when unset or out of the (0, 1] range, so the runtime keeps
+ * the V1 0.78 default instead of guessing.
+ */
+export function readNativePreemptiveThreshold(manifest) {
+  const value = manifest?.metadata?.global?.preemptiveCompactionThreshold
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 1 ? value : undefined
+}
+
+/**
  * Convenience predicate for a single gate. Kept separate from
  * `readNativeGates` so a caller that only needs one gate does not allocate the
  * whole record, and so the "unknown gate is off" rule lives in one place.
@@ -908,6 +936,8 @@ export function deriveNativeGates(view) {
     team_mode: view?.team_mode?.enabled === true,
     interactive_bash: !disabledTools.includes("interactive_bash"),
     hashline_edit: view?.hashline_edit === true,
+    // T34: V1 `experimental.preemptive_compaction`, off unless explicitly set.
+    preemptive_compaction: view?.experimental?.preemptive_compaction === true,
   }
 }
 

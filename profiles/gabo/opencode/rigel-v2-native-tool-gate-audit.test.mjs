@@ -14,7 +14,7 @@ import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { TASK_TOOL_NAMES } from "./tools/task.tools.mjs"
 import { GOAL_TOOL_NAMES } from "./tools/goal.tools.mjs"
 
-const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false, hashline_edit: false }
+const GATE_OFF = { interactive_bash: false, task_system: false, goal: false, monitor: false, hashline_edit: false, preemptive_compaction: false }
 
 function materialize(view) {
   return { metadata: { global: { gates: deriveNativeGates(view) } } }

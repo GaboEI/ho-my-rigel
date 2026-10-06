@@ -90,6 +90,9 @@ try {
         permission: { ...(config.permission ?? {}) },
         gates,
         maxTools: pluginView.experimental?.max_tools,
+        // T34: the Rigel preemptive-compaction threshold override, materialized
+        // so the runtime reads it from the manifest instead of parsing omo.jsonc.
+        preemptiveCompactionThreshold: pluginView.experimental?.preemptive_compaction_threshold,
         mcp: { disabled: [...(pluginView.disabled_mcps ?? [])], envAllowlist: [...(pluginView.mcp_env_allowlist ?? [])] },
         tmuxVisualization: pluginView.team_mode?.tmux_visualization === true,
         categories: { ...(pluginView.categories ?? {}) },

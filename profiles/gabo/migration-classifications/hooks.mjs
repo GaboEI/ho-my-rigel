@@ -208,10 +208,11 @@ export default {
   },
   "preemptive-compaction": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "La compactacion preventiva V1 (`hooks/preemptive-compaction/`, gate experimental apagado por defecto) compacta antes del limite de contexto. Dueno: T34 del plan maestro; estrategia decision de mantenedor (espejo total): hooks `context`/`compaction` + `session.compact` (patron ya probado del context-limit recovery en `rigel-v2-native-phase4-events.mjs`).",
-    futureEvidence: "dueno: T34; `rigel-v2-native-phase4-events.mjs` (patron session.compact)",
+      "La compactacion preventiva V1 (`hooks/preemptive-compaction/`, gate experimental apagado por defecto) compacta antes del limite de contexto: mira los tokens del ultimo mensaje assistant, calcula `(input + cache.read) / limite real` y pide el resumen sobre el umbral 0.78 con cooldown de 60s. Dueno: T34 del plan maestro. El port nativo `rigel-v2-native-preemptive-compaction.mjs` conserva la matematica V1 (umbral, cooldown, `contextUsage`, resolver de limite Anthropic, recuperacion post-compactacion acotada por epoch y cap) y la cablea sobre los hooks V2 `context`/`compaction` + `ctx.session.compact`: el hook `context` lee el transcript via `ctx.session.context` (los assistant llevan `tokens`, mismo shape que `message.updated` en V1), resuelve el limite real desde la fila `model.list` `limit.context` mas las reglas Anthropic V1 y admite `session.compact` una sola vez por umbral; los eventos `session.compacted`/`session.compaction.ended` re-arman y arman el monitor de degradacion; `session.deleted` limpia. Un registro de incidencia compartido con el context-limit recovery reactivo (`rigel-v2-native-phase4-events.mjs`) impide dos compactaciones pendientes por sesion. Gate `experimental.preemptive_compaction` materializado en el manifiesto (apagado por defecto) y umbral propio configurable (`experimental.preemptive_compaction_threshold`) con fallback 0.78. QA viva en el lab con gate on/off/umbral y captura del request de resumen; contratos hermeticos de umbral, idempotencia, race, recovery, cleanup e isolation.",
+    futureEvidence:
+      "`rigel-v2-native-preemptive-compaction.mjs`; `rigel-v2-native-preemptive-compaction.test.mjs`; `rigel-v2-native-config.mjs` (gate/umbral); `rigel-v2-native-phase4-events.mjs` (incidencia compartida); `rigel-v2-native.mjs` (hook context + re-armado); `.omo/evidence/20261006-t34-preemptive-compaction/`",
   },
 
   "no-hephaestus-non-gpt": {

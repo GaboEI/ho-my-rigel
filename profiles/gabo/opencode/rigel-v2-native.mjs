@@ -33,7 +33,7 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpPolicy } from "./rigel-v2-native-config.mjs"
+import { readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpPolicy, readNativePreemptiveThreshold } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
@@ -61,6 +61,7 @@ import { createFileBackgroundState, createStorageBackgroundState } from "./rigel
 import { createFlowRules } from "./rigel-v2-native-flow-rules.mjs"
 import { createNativeCompactionContextHook, isCompactionSummaryRequest } from "./rigel-v2-native-compaction-context.mjs"
 import { createNativeCompactionTodoPreserver } from "./rigel-v2-native-compaction-todo-preserver.mjs"
+import { createNativePreemptiveCompaction, createNativeCompactionIncidentRegistry, readAssistantUsage, resolveNativeContextLimit, PREEMPTIVE_COMPACTION_THRESHOLD } from "./rigel-v2-native-preemptive-compaction.mjs"
 import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
 import { applyPromptAdmission, createStopContinuationState, repairChatToolPairs, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
 import { createNativeAutoSlashCommandHook } from "./rigel-v2-auto-slash-command-bridge.mjs"
@@ -720,7 +721,11 @@ export default {
         console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${info?.sessionID ?? "unknown"}; ${error instanceof Error ? error.message : String(error)}`)
       },
     })
-    const contextLimitRecovery = createNativeContextLimitRecovery({ session: context.session })
+    // T34: one shared pending-compaction incident per session, consumed by both
+    // the reactive context-limit recovery and the preemptive trigger, so a
+    // session never holds two admitted `session.compact` requests at once.
+    const compactionIncident = createNativeCompactionIncidentRegistry()
+    const contextLimitRecovery = createNativeContextLimitRecovery({ session: context.session, incident: compactionIncident })
     const idleGate = createNativeIdleGate()
     const idleContinuations = createNativeIdleContinuations({
       session: context.session,
@@ -834,6 +839,56 @@ export default {
     const getSessionMessages = typeof context?.session?.context === "function"
       ? (sessionID) => context.session.context({ sessionID })
       : undefined
+    // T34: preemptive compaction (V1 `experimental.preemptive_compaction`, off by
+    // default). The trigger reads the session's provider-reported token usage
+    // from the transcript (`ctx.session.context`, the V1 `message.updated` info
+    // equivalent), resolves the model's real context window from the V2 model
+    // inventory, and asks the host to compact through `ctx.session.compact`
+    // before the window overflows. A gate-off runtime never builds it, so the
+    // path is a verifiable no-op.
+    const modelContextLimits = new Map()
+    const readModelContextLimit = async ({ providerID, modelID }) => {
+      if (typeof providerID !== "string" || typeof modelID !== "string" || !providerID || !modelID) return undefined
+      const key = `${providerID}/${modelID}`
+      if (modelContextLimits.has(key)) return modelContextLimits.get(key)
+      const models = await readAvailableModels()
+      if (Array.isArray(models)) {
+        for (const row of models) {
+          const rowProvider = row?.providerID ?? row?.provider
+          const rowModel = row?.id ?? row?.modelID
+          const limit = row?.limit?.context
+          if (typeof rowProvider === "string" && typeof rowModel === "string" && typeof limit === "number" && limit > 0) {
+            modelContextLimits.set(`${rowProvider}/${rowModel}`, limit)
+          }
+        }
+      }
+      return modelContextLimits.get(key)
+    }
+    const preemptiveCompaction = nativeGates.preemptive_compaction === true
+      && typeof context?.session?.compact === "function"
+      && typeof getSessionMessages === "function"
+      ? createNativePreemptiveCompaction({
+        threshold: readNativePreemptiveThreshold(manifest) ?? PREEMPTIVE_COMPACTION_THRESHOLD,
+        readUsage: async (sessionID) => readAssistantUsage(await getSessionMessages(sessionID)),
+        resolveContextLimit: async ({ providerID, modelID }) => {
+          try {
+            const modelContextLimit = await readModelContextLimit({ providerID, modelID })
+            return resolveNativeContextLimit({ providerID, modelID, modelContextLimit, env: process.env })
+          } catch (error) {
+            console.error(`[oh-my-rigel] Native V2 preemptive compaction limit resolution failed: ${error instanceof Error ? error.message : String(error)}`)
+            return null
+          }
+        },
+        requestCompact: ({ sessionID }) => context.session.compact({ sessionID }),
+        incident: compactionIncident,
+        log: (message) => console.error(message),
+        onDecision: (event) => writeStateReceipt("preemptive-compaction.json", event),
+      })
+      : undefined
+    if (preemptiveCompaction) {
+      // `clear` also releases the shared incident for the session.
+      sessionState.registerStore({ clear: (sessionID) => preemptiveCompaction.clear(sessionID) })
+    }
     // V1's countdown existed to render a TUI toast; the headless V2 runtime has
     // no such surface, so it injects immediately by default. The countdown and
     // inFlight machinery stays owned and cancellable by the enforcer, and
@@ -927,6 +982,10 @@ export default {
               } catch (error) {
                 console.error(`[oh-my-rigel] Native V2 compaction todo restore failed: ${error instanceof Error ? error.message : String(error)}`)
               }
+              // T34: a landed compaction ends its incident and re-arms the
+              // preemptive trigger, and (V1 parity) arms the post-compaction
+              // degradation monitor for the fresh epoch.
+              preemptiveCompaction?.onCompacted(sessionID)
             }
             // Task 19: a real V2 compaction clears the file-read-scoped rule and
             // directory context, so the next read re-injects instead of relying
@@ -1310,6 +1369,15 @@ export default {
       await teamMailboxInjector?.(event)
       await teamStatusInjector?.(event)
       await monitorStatusInjector?.(event)
+      // T34: observe the outgoing agent-loop request for the preemptive
+      // threshold. Isolated so a trigger failure never tears down the hook.
+      if (preemptiveCompaction) {
+        try {
+          await preemptiveCompaction.observe({ sessionID: event?.sessionID, model: event?.model })
+        } catch (error) {
+          console.error(`[oh-my-rigel] Native V2 preemptive compaction observe failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
     })
     const modelRequestRegistration = await context.session.hook("model.request", nativeModelRequestPipeline)
     // T21: the compaction context rides on the summary request. The live
