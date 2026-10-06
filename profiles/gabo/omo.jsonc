@@ -24,6 +24,9 @@
         },
         "disabled_skills": ["dev-browser", "ultimate-browsing"],
         "disabled_hooks": [],
+        "notification": {
+          "enabled": true
+        },
         "team_mode": {
           "enabled": true,
           "tmux_visualization": false,

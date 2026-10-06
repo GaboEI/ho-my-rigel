@@ -6,6 +6,12 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
+import {
+  parseJsonc,
+  registerNotificationCliPlugin,
+  resolveNotificationOptions,
+  resolveProfileOpenCodeBlock,
+} from "./notification-activation-config.mjs"
 
 const labRoot = process.env.RIGEL_V2_LAB_ROOT || path.join(os.homedir(), ".local/share/opencode-v2-lab")
 const home = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
@@ -33,6 +39,25 @@ if (beforeFingerprint.obsidian !== protectedFingerprint.obsidian || beforeFinger
 }
 if (!fs.existsSync(agentManifest)) fail("no existe el manifiesto nativo de agentes; genéralo antes de activar el runtime")
 
+// Resolve the notification gate BEFORE writing the runtime package.json: the
+// `./tui` export is what makes the host auto-load the companion CLI plugin, so
+// it must be absent unless the notification config is explicitly enabled. The
+// same options drive the isolated cli.json registration below.
+const profileFile = process.env.RIGEL_V2_PROFILE_FILE || path.join(sourceRoot, "profiles/gabo/omo.jsonc")
+let profileDocument = {}
+if (fs.existsSync(profileFile)) {
+  try {
+    profileDocument = parseJsonc(fs.readFileSync(profileFile, "utf8"))
+  } catch (error) {
+    fail(`no se pudo leer el perfil para la configuración de notificaciones: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+const openCodeBlock = resolveProfileOpenCodeBlock(profileDocument, process.env.OMO_PROFILE)
+const enabledOverride = process.env.RIGEL_V2_NOTIFICATION_ENABLED === undefined
+  ? undefined
+  : process.env.RIGEL_V2_NOTIFICATION_ENABLED === "1"
+const notificationOptions = resolveNotificationOptions({ profile: openCodeBlock, enabledOverride })
+
 fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
 fs.mkdirSync(path.join(runtime, "tools"), { recursive: true, mode: 0o700 })
 // Copy every runtime module the native entry transitively imports, discovered
@@ -47,6 +72,18 @@ for (const file of runtimeModules) {
   fs.copyFileSync(path.join(sourceOpen, file), destination)
 }
 fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native.mjs"), path.join(runtime, "index.js"))
+// Second entrypoint: the companion CLI plugin (`@opencode/plugin/tui`). A local
+// plugin directory is resolved by file name (`tui` -> `tui.js`), so it is
+// deployed as `tui.js` beside `index.js`. It is only deployed when the
+// notification config is explicitly enabled: with it absent, neither the file
+// nor the `./tui` export exists, so the host cannot load the companion at all.
+const cliEntryName = "tui.js"
+const cliEntryDestination = path.join(runtime, cliEntryName)
+if (notificationOptions.enabled) {
+  fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native-cli-notification.mjs"), cliEntryDestination)
+} else {
+  fs.rmSync(cliEntryDestination, { force: true })
+}
 // Task 12: stage the keyword-detector prompt bodies the native request seam
 // reads. The original prompts target OmO's V1 `task` tool, but V2 reserves that
 // name and the native runtime exposes `rigel_task`, so translate only actual
@@ -75,8 +112,13 @@ if (typeof comboBanner !== "string" || !comboBanner.trim()) {
 }
 fs.writeFileSync(path.join(runtime, "prompts/ultrawork-combo-banner.md"), `${comboBanner}\n`, { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
-fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-for (const file of ["index.js", ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", ...promptFiles.map(([name]) => `prompts/${name}`), "prompts/ultrawork-combo-banner.md"]) fs.chmodSync(path.join(runtime, file), 0o600)
+const runtimeExports = { ".": "./index.js" }
+if (notificationOptions.enabled) runtimeExports["./tui"] = `./${cliEntryName}`
+fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ name: "rigel-v2-native", type: "module", exports: runtimeExports }, null, 2) + "\n", { mode: 0o600 })
+for (const file of ["index.js", cliEntryName, ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", ...promptFiles.map(([name]) => `prompts/${name}`), "prompts/ultrawork-combo-banner.md"]) {
+  const target = path.join(runtime, file)
+  if (fs.existsSync(target)) fs.chmodSync(target, 0o600)
+}
 
 const candidate = structuredClone(before)
 const plugins = Array.isArray(candidate.plugin) ? candidate.plugin : []
@@ -94,4 +136,16 @@ state.pluginEntry = runtime
 state.protectedFingerprint = protectedFingerprint
 state.nativeV2ActivatedAt = new Date().toISOString()
 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 })
+
+// Register the companion CLI plugin in the isolated CLI config and disable the
+// host's always-on built-in notifier - only when the notification config is
+// explicitly enabled (resolved above). Otherwise any previous registration and
+// the builtin disable marker are removed, so an unconfigured profile leaves the
+// host builtin untouched.
+const cliConfigFile = path.join(path.dirname(configFile), "cli.json")
+const cliBefore = fs.existsSync(cliConfigFile) ? readJson(cliConfigFile) : { plugins: [] }
+const cliAfter = registerNotificationCliPlugin(cliBefore, { runtimeDir: runtime, options: notificationOptions })
+fs.writeFileSync(cliConfigFile, JSON.stringify(cliAfter, null, 2) + "\n", { mode: 0o600 })
+
 console.log("Rigel native OpenCode V2 runtime registered.")
+console.log(`Rigel session notifications ${notificationOptions.enabled ? "enabled" : "disabled"} in ${cliConfigFile}.`)

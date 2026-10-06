@@ -4,7 +4,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
+import { discoverRuntimeModules, RUNTIME_ENTRIES } from "./native-runtime-modules.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, "..", "..")
@@ -39,9 +39,9 @@ const FORBIDDEN_RELATIVE_IMPORTS = [
   { form: "dynamic import", pattern: /\bimport\s*\(\s*["'`](\.[^"'`\n]+)["'`]\s*\)/g },
 ]
 
-/** The entry plus every module the parser transitively discovers from it. */
+/** The entries plus every module the parser transitively discovers from them. */
 function reachableRuntimeFiles(sourceDir) {
-  return [ENTRY, ...discoverRuntimeModules(sourceDir, ENTRY)]
+  return [...RUNTIME_ENTRIES, ...discoverRuntimeModules(sourceDir, RUNTIME_ENTRIES)]
 }
 
 /** Every reachable module using a local import shape the parser cannot follow. */
@@ -61,9 +61,10 @@ function findForbiddenRelativeImports(sourceDir, files = reachableRuntimeFiles(s
 }
 
 /** Runtime-looking candidates that lab staging would never copy. */
-function findUnreachableRuntimeModules(candidates, discovered) {
+function findUnreachableRuntimeModules(candidates, discovered, entries = RUNTIME_ENTRIES) {
   const known = new Set(discovered)
-  return candidates.filter((file) => file !== ENTRY && !known.has(file)).sort()
+  const entrySet = new Set(entries)
+  return candidates.filter((file) => !entrySet.has(file) && !known.has(file)).sort()
 }
 
 /**
@@ -113,7 +114,7 @@ describe("Rigel native runtime module staging guard", () => {
   })
 
   test("#given the committed runtime modules #when compared to the native entry's transitive graph #then none is orphaned from lab staging", () => {
-    const unreachable = findUnreachableRuntimeModules(committedRuntimeModules(), discoverRuntimeModules(SOURCE_DIR, ENTRY))
+    const unreachable = findUnreachableRuntimeModules(committedRuntimeModules(), discoverRuntimeModules(SOURCE_DIR, RUNTIME_ENTRIES))
     expect(unreachable).toEqual([])
   })
 

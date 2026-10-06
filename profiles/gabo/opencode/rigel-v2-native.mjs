@@ -43,6 +43,7 @@ import { createNativeToolFamilies } from "./rigel-v2-native-tools.mjs"
 import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-tools.mjs"
 import { formatGoalResponse, parseGoalCommand } from "./tools/goal.tools.mjs"
 import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
+import { clearTodoPending, resolveBridgeStateRoot, wrapTodoStoreWithPending } from "./rigel-v2-native-todo-pending.mjs"
 import { createTodoDescriptionTool } from "./rigel-v2-native-todo-description.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
 import { createHashlineEditTool, createHashlineReadEnhancer } from "./rigel-v2-native-hashline.mjs"
@@ -806,15 +807,24 @@ export default {
       && typeof context.storage.set === "function"
       ? createV2SessionTodoStore({ storage: context.storage })
       : undefined
-    const readTodos = sessionTodoStore ? (sessionID) => sessionTodoStore.readTodos(sessionID) : undefined
-    const taskTodoSync = sessionTodoStore ? createTaskTodoSync({ store: sessionTodoStore }) : undefined
+    // The companion CLI plugin cannot read this server-process store, so the
+    // owner mirrors each write to a per-session pending file under the shared
+    // XDG state root (V2-native equivalent of V1's continuation `todo` source).
+    // The CLI reads that file for the `skipIfIncompleteTodos` gate; the store's
+    // own behavior is unchanged.
+    const todoBridgeStateRoot = resolveBridgeStateRoot(process.env)
+    const bridgedTodoStore = wrapTodoStoreWithPending(sessionTodoStore, { stateRoot: todoBridgeStateRoot })
+    const readTodos = bridgedTodoStore ? (sessionID) => bridgedTodoStore.readTodos(sessionID) : undefined
+    const taskTodoSync = bridgedTodoStore ? createTaskTodoSync({ store: bridgedTodoStore }) : undefined
+    // A deleted session drops its pending-todo bridge file too.
+    sessionState.registerStore({ clear: (sessionID) => clearTodoPending({ stateRoot: todoBridgeStateRoot, sessionID }) })
     // The compaction todo-preserver keeps detailed todos alive across a
     // context-window compaction. It snapshots the registry before the summary
     // request (capture), restores the snapshot once the summary lands
     // (restore), and blocks a late all-Atlas-bootstrap `todowrite` from erasing
     // the restored work (beforeTodoWrite). With no storage domain the store is
     // absent; the preserver degrades to a no-op surface rather than failing.
-    const compactionTodoPreserver = createNativeCompactionTodoPreserver({ store: sessionTodoStore })
+    const compactionTodoPreserver = createNativeCompactionTodoPreserver({ store: bridgedTodoStore })
     // Todo-continuation enforcer: reads the real session todos, transcript and
     // owning agent, then injects the V1 continuation directive on an accepted
     // idle edge. Every blocker (pending/unanswered question, last-assistant
@@ -1155,7 +1165,7 @@ export default {
       // by the runtime's own per-session todo store. Registered in this single
       // transform callback so it lands in the same tool set as the others.
       editor.add(createTodoDescriptionTool({
-        store: sessionTodoStore,
+        store: bridgedTodoStore,
         // The same preserver that restored the snapshot also guards the
         // next `todowrite`, so a late all-bootstrap write cannot erase the
         // restored detailed todos.

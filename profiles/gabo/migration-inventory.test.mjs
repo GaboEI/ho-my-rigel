@@ -37,6 +37,7 @@ const EXPECTED_STATUS_ROWS = [
   ["monitor", "Migrado parcialmente"],
   ["monitor", "Migrado parcialmente"],
   ["session-manager", "Migrado"],
+  ["session-notification", "Migrado"],
   ["task", "Migrado parcialmente"],
   ["opencode-skill-loader", "Migrado"],
   ["Goal", "Migrado"],

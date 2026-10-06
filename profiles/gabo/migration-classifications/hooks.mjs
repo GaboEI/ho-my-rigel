@@ -201,10 +201,10 @@ export default {
   },
   "session-notification": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "La notificacion V1 (`hooks/session-notification/`) avisa al usuario fuera del contexto del modelo (fin de sesion, input-needed, sonido por plataforma). Dueno: T33 del plan maestro; estrategia decision de mantenedor (espejo total): companion CLI plugin de V2 con `context.ui.toast.show`/`context.attention.notify`.",
-    futureEvidence: "dueno: T33; superficie V2 oficial: companion CLI plugin",
+      "La notificacion V1 (`hooks/session-notification/`) avisa al usuario fuera del contexto del modelo al terminar el turno (`session.idle` con retardo de confirmacion y cancelacion por actividad), al pedir permiso y al abrir una pregunta. El plugin CLI companion nativo (`rigel-v2-native-cli-notification.mjs`) es la superficie V2 (`@opencode/plugin/tui`): usa `context.attention.notify` para la notificacion de sistema y el sonido del sound pack de plataforma, y `context.ui.toast.show` para el aviso en la TUI. Porta los gates V1: filtro de sesion principal y de subagentes, `disabled_hooks`/`notification.force_enable`, deduplicacion por request/form id compartida entre instancias (guard de emision) y el gate `skipIfIncompleteTodos`. Como V2 elimino `session.todo` y el registro de todos vive en el proceso servidor, el owner del store espeja cada escritura a un archivo por sesion bajo el state root compartido (`rigel-v2-native-todo-pending.mjs`), que el companion lee para suprimir el aviso con todos pendientes y permitirlo con todos completados; una sonda de marcador de continuacion cubre background-task. Una configuracion ausente o deshabilitada no registra nada (cero efectos). El builtin siempre-activo `opencode.notifications` se desactiva en la activacion para no duplicar el aviso.",
+    futureEvidence: "dueno: T33; `rigel-v2-native-cli-notification.mjs`; `rigel-v2-native-notification-core.mjs`; `rigel-v2-native-todo-pending.mjs`; `rigel-v2-native-emission-guard.mjs`; `.omo/evidence/20261006-t33-session-notification/`",
   },
   "preemptive-compaction": {
     classification: "Adaptar",
