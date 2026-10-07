@@ -34,7 +34,7 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { checkNativeHostVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
+import { checkNativeHostVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativeOpenclaw, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
@@ -75,6 +75,7 @@ import { createUlwExecuteCommand } from "./rigel-v2-ulw-execute.mjs"
 import { registerBuiltinCommands } from "./rigel-v2-native-builtin-commands.mjs"
 import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
 import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
+import { createNativeOpenclaw } from "./rigel-v2-native-openclaw.mjs"
 import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
 import { createGitWorktreeRunner } from "./rigel-v2-team-worktrees.mjs"
 import { createTeamScopeRegistry } from "./rigel-v2-team-scope-registry.mjs"
@@ -610,6 +611,27 @@ export default {
     const hashlineEnabled = nativeGates.hashline_edit === true
     const hashline = hashlineEnabled ? createHashlineReadEnhancer() : undefined
     const hashlineEditTool = hashlineEnabled ? createHashlineEditTool({ directory: location.directory }) : undefined
+    // The bidirectional OpenClaw composition owns the outbound dispatch
+    // (invoked from the shared event loop below, never a second subscription) and
+    // the inbound reply listener (started here, stopped on dispose). The config is
+    // the manifest-materialized `openclaw` block; absent or disabled means a
+    // strict no-op with no listener, no dispatch and no network. `ready` is
+    // awaited so a configured listener is running before the first event, and a
+    // start failure degrades to disabled instead of failing setup.
+    const openclaw = createNativeOpenclaw({
+      context,
+      config: readNativeOpenclaw(manifest),
+      // V1 parity: a `session.created` for a delegated child is not a wake. The
+      // runtime already tracks delegated children in `childSessionIDs`, the same
+      // set the delegation roster uses as `isRootSession`.
+      isSubagentSession: (sessionID) => childSessionIDs.has(sessionID),
+      log: (line) => console.error(line),
+    })
+    try {
+      await openclaw.ready
+    } catch (error) {
+      console.error(`[oh-my-rigel] Native V2 openclaw listener start failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     // Task 19: category-skill reminder. The formatter is built once from the
     // discovered skill registry; `scope` maps to the formatter's `location` so
     // builtin skills are classified as builtin and the rest as user skills.
@@ -980,6 +1002,19 @@ export default {
             const sessionID = event?.sessionID ?? event?.data?.sessionID ?? event?.data?.session?.id ?? event?.properties?.sessionID
             await claudeCodeHooks?.handleEvent?.({ ...event, sessionID })
             await contextLimitRecovery.handle({ ...event, sessionID })
+            // OpenClaw outbound rides the SAME shared subscription. V2's
+            // session-start and session-end raw events map to the V1 hook keys;
+            // the stop edge is the normalized idle below (`session.idle` is not
+            // emitted by the headless server, so it is derived from
+            // `session.execution.succeeded` / `session.status`). The dispatch is
+            // fire-and-forget so a slow gateway can never head-of-line block the
+            // loop, and a failure is isolated here instead of aborting the
+            // subscription.
+            if (openclaw?.enabled && (event.type === "session.created" || event.type === "session.deleted")) {
+              void openclaw.handleEvent({ ...event, sessionID }).catch((error) => {
+                console.error(`[oh-my-rigel] Native V2 openclaw dispatch failed: ${error instanceof Error ? error.message : String(error)}`)
+              })
+            }
             // Observe abort / token-limit / unrecoverable errors, compaction
             // epochs and message activity so the continuation skip gates reflect
             // real session state instead of constants.
@@ -1009,6 +1044,14 @@ export default {
               else keywordState.handleEvent({ type: event.type, sessionID })
               const idle = idleGate.accept({ ...event, sessionID })
               if (idle) {
+                // The V1 "stop" wake fires on the accepted idle edge. The
+                // edge is already normalized to `session.idle` by the gate, which
+                // is the hook key the OpenClaw map expects.
+                if (openclaw?.enabled) {
+                  void openclaw.handleEvent({ ...idle, sessionID, projectPath: event.projectPath }).catch((error) => {
+                    console.error(`[oh-my-rigel] Native V2 openclaw idle dispatch failed: ${error instanceof Error ? error.message : String(error)}`)
+                  })
+                }
                 await idleContinuations.handle(idle)
                 // The todo-continuation enforcer rides the SAME accepted idle
                 // edge, after the background hint. The cooldown and the rest of
@@ -1637,6 +1680,9 @@ export default {
       // The abort signal disposes the background manager; call it explicitly so
       // teardown does not depend on the listener side effect.
       await backgroundManager.dispose()
+      // Stop the OpenClaw reply listener so no poll or request outlives the
+      // plugin. A no-op when the surface was disabled or never started.
+      await openclaw.dispose()
       directoryInstructions.clearAll()
       categorySkillReminder.clearAll()
       keywordState.clearAll()

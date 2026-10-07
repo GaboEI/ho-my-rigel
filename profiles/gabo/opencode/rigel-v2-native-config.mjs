@@ -57,7 +57,7 @@ export const NATIVE_GOAL_DEFAULTS = Object.freeze({
 const LAYER_KEYS = new Set([
   "formatOnMutation", "gateway", "$schema", "categories", "agents", "git_master", "disabled_mcps", "mcp_env_allowlist",
   "task", "teams", "models", "model_profiles", "model_profile", "memory",
-  "telemetry", "computer", "disabled_skills", "[opencode]", "[native]", "[senpi]",
+  "telemetry", "computer", "disabled_skills", "openclaw", "[opencode]", "[native]", "[senpi]",
   "[codex]", "[omo]", "profiles", "_migrations", "legacy_migrations",
 ])
 // Block keys of OmoConfigLayerSchema / OmoConfigProfileSchema.
@@ -69,7 +69,7 @@ const PROFILE_KEYS = new Set(["categories", "disabled_skills", "[opencode]", "[n
 
 const TARGET_KEYS = new Set([
   "monitor", "goal", "experimental", "team_mode", "skills", "disabled_tools", "disabled_agents", "disabled_mcps",
-  "disabled_skills", "disabled_commands", "categories", "ralph_loop", "hashline_edit",
+  "disabled_skills", "disabled_commands", "categories", "ralph_loop", "hashline_edit", "openclaw",
 ])
 
 const MAX_PROJECT_CONFIG_DIRECTORY_DEPTH = 256
@@ -583,6 +583,13 @@ function parseConfigView(view, diagnostics) {
       if (section !== undefined) parsed.categories = section
     } else if (key === "ralph_loop") {
       if (isPlainRecord(value)) parsed.ralph_loop = value
+    } else if (key === "openclaw") {
+      // The bidirectional OpenClaw block is carried raw (sanitized
+      // against prototype-pollution keys) because its own shape is validated at
+      // runtime by the native normalizer, exactly like V1 read it from the
+      // plugin config. An absent block stays absent (no-op), never materialized.
+      if (isPlainRecord(value)) parsed.openclaw = sanitizeValue(value)
+      else warn(diagnostics, `config: ${view.path}: openclaw ignored (invalid value)`)
     }
   }
   return parsed
@@ -847,6 +854,10 @@ export function resolveNativePluginConfig(options = {}) {
     // User-layer only (V1 parity): never merged from project layers.
     mcp_env_allowlist: userMcpEnvAllowlist,
     categories: config.categories ?? {},
+    // The resolved OpenClaw block is undefined when no layer sets it. The
+    // generator materializes it into the manifest; the runtime never parses
+    // omo.jsonc itself.
+    openclaw: config.openclaw,
     diagnostics,
     sources,
   }
@@ -902,6 +913,17 @@ export function readNativeDisabled(manifest) {
     hooks: normalize(source.hooks),
     commands: normalize(source.commands),
   }
+}
+
+/**
+ * Read the materialized `openclaw` profile block. Returns the block or
+ * undefined when absent, which is the strict no-op default. The runtime
+ * normalizes and gates it; the generator wrote it from the resolved config view,
+ * so the runtime never parses omo.jsonc itself.
+ */
+export function readNativeOpenclaw(manifest) {
+  const value = manifest?.metadata?.global?.openclaw
+  return isPlainObject(value) ? value : undefined
 }
 
 /**

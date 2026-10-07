@@ -180,6 +180,11 @@ try {
         minOpenCodeVersion: deriveNativeMinOpenCodeVersion(integrationManifest),
         categories: { ...(pluginView.categories ?? {}) },
         disabled: { ...(pluginView.disabled ?? {}) },
+        // The resolved OpenClaw block is absent when no layer sets it. The
+        // runtime's bidirectional surface reads it from the manifest, so the
+        // runtime never parses omo.jsonc itself. An absent block stays absent and
+        // the surface is a strict no-op.
+        ...(pluginView.openclaw ? { openclaw: pluginView.openclaw } : {}),
         // The resolved monitor block (enabled + allowed_commands) is needed by
         // the monitor tools' permission check; the V2 setup context has no
         // `config`, so the manifest is the only honest source.
