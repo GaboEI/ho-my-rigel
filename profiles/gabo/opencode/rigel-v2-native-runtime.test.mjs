@@ -964,6 +964,7 @@ test("native runtime repairs tool pairs at the context seam and reserves HTTP fo
   expect(requestHandlers).toHaveLength(1)
   const contextHandler = registrations.find((registration) => registration.name === "context").handler
 
+  // Legacy Chat Completions shape remains supported (compatibility).
   const input = {
     sessionID: "ses_request",
     agent: "sisyphus",
@@ -979,6 +980,47 @@ test("native runtime repairs tool pairs at the context seam and reserves HTTP fo
 
   const repaired = input.messages.find((message) => message.role === "tool")
   expect(repaired).toMatchObject({ tool_call_id: "call_orphan", content: INTERRUPTED_TOOL_ERROR })
+
+  // T27: the real V2 parts shape. An orphan tool-call gets a terminal tool-result
+  // inserted; a signed reasoning block is left untouched (the V1 thinking-block
+  // hook was removed, so the V2 provider transform owns reasoning); an unsupported
+  // Anthropic model ending on an assistant tail gets a synthetic user recovery turn.
+  const signed = { type: "reasoning", text: "plan", providerMetadata: { anthropic: { signature: "sig-plan" } } }
+  const orphan = {
+    sessionID: "ses_request_v2",
+    agent: "Sisyphus",
+    model: { providerID: "openai", modelID: "gpt-6" },
+    system: [],
+    options: {},
+    messages: [
+      { role: "user", content: [{ type: "text", text: "go" }] },
+      { role: "assistant", content: [signed, { type: "tool-call", id: "c1", name: "read", input: {} }] },
+    ],
+  }
+  await contextHandler(orphan)
+
+  const inserted = orphan.messages.find((message) => message.role === "tool")
+  expect(inserted).toMatchObject({
+    content: [{ type: "tool-result", id: "c1", name: "read", result: { type: "error", value: INTERRUPTED_TOOL_ERROR } }],
+  })
+  // Reasoning is untouched: no custom thinking effect is ported.
+  expect(orphan.messages[1].content[0]).toBe(signed)
+
+  const tail = {
+    sessionID: "ses_request_tail",
+    agent: "Sisyphus",
+    model: { providerID: "anthropic", modelID: "claude-opus-4-8" },
+    system: [],
+    options: {},
+    messages: [
+      { role: "user", content: [{ type: "text", text: "go" }] },
+      { role: "assistant", content: [{ type: "text", text: "partial" }] },
+    ],
+  }
+  await contextHandler(tail)
+
+  expect(tail.messages.at(-1)).toMatchObject({ role: "user", synthetic: true })
+  expect(tail.messages.at(-1).content[0].text).toBe("[internal] Continue from the previous assistant state.")
   await dispose()
 })
 

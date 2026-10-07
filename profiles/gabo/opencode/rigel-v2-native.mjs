@@ -64,7 +64,8 @@ import { createNativeCompactionContextHook, isCompactionSummaryRequest } from ".
 import { createNativeCompactionTodoPreserver } from "./rigel-v2-native-compaction-todo-preserver.mjs"
 import { createNativePreemptiveCompaction, createNativeCompactionIncidentRegistry, readAssistantUsage, resolveNativeContextLimit, PREEMPTIVE_COMPACTION_THRESHOLD } from "./rigel-v2-native-preemptive-compaction.mjs"
 import { createFsyncSkipWarningState } from "./rigel-v2-native-flow-after.mjs"
-import { applyPromptAdmission, createStopContinuationState, repairChatToolPairs, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
+import { applyPromptAdmission, createStopContinuationState, resolveRequestShape, runRequestSteps } from "./rigel-v2-native-request-steps.mjs"
+import { validateAndRepairMessages } from "./rigel-v2-native-message-repair.mjs"
 import { createNativeAutoSlashCommandHook } from "./rigel-v2-auto-slash-command-bridge.mjs"
 import { OMO_INTERNAL_INITIATOR_MARKER } from "./rigel-v2-keyword-core.mjs"
 import { createNativeContextCollector, createNativeContextMessageConsumer } from "./rigel-v2-context-collector.mjs"
@@ -1415,7 +1416,18 @@ export default {
       ? createNativeMonitorStatusInjector({ getRegistry: () => nativeToolRegistry })
       : undefined
     const contextRegistration = await context.session.hook("context", async (event) => {
-      repairChatToolPairs(event.messages)
+      // T27: tool-pair validation and assistant-prefill tail repair on the
+      // model-visible messages. Reasoning is owned by the V2 provider transform
+      // (the V1 thinking-block hook was removed); a valid history is left
+      // byte-identical. A repair is reported observably (counts only, no message
+      // content) instead of being silently ignored.
+      const repair = validateAndRepairMessages(event.messages, { model: event?.model })
+      if (repair.toolPairs.length > 0 || repair.prefill) {
+        // Observable, counts only (no message content): a log line plus a durable
+        // state receipt, so a repair is never silently ignored.
+        console.error(`[oh-my-rigel] native context message repair: toolPairs=${repair.toolPairs.length} prefill=${repair.prefill ? 1 : 0}`)
+        writeStateReceipt("message-repair.json", { sessionID: event?.sessionID, toolPairs: repair.toolPairs.length, prefill: repair.prefill })
+      }
       await consumePendingContext(event)
       await nativeContextPipeline(event)
       await teamMailboxInjector?.(event)

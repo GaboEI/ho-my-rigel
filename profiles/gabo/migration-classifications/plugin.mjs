@@ -127,10 +127,10 @@ export default {
   },
   "messages-transform": {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "`plugin/messages-transform.ts` cablea los inyectores sobre `experimental.chat.messages.transform` y ademas valida bloques de pensamiento, pares de herramientas y repara la cola assistant-prefill. T19 reubico la inyeccion de directorio y reglas al resultado de lectura y el roster, ultrawork, la guia raiz de Hephaestus y el recordatorio de categoria a los hooks `context`/`http.request`; la validacion de pensamiento/pares y la reparacion de prefill no se reimplementaron. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
-    futureEvidence: "`rigel-v2-native-prompt.mjs`; `rigel-v2-directory-instructions.mjs`; `rigel-v2-native-rules.mjs`",
+      "`plugin/messages-transform.ts` corre sobre `experimental.chat.messages.transform` (mapeado a `ctx.session.hook(\"context\", ...)`), encadena los inyectores y al final repara la cola assistant-prefill. T19 reubico los inyectores a los hooks `context`/`http.request`. T27 completa UNICAMENTE los dos efectos que el owner V1 actual todavia realiza, en el modulo puro `rigel-v2-native-message-repair.mjs` cableado en el hook `context` de `rigel-v2-native.mjs`: (a) validacion y reparacion de pares de herramienta en la forma real V2 (`tool-call`/`tool-result` en `content[]`), delegando la forma legacy Chat Completions al `repairChatToolPairs` existente para no duplicar; el owner V1 asienta el estado terminal de la tool part, y en V2 (sin estado de part) el equivalente es insertar el `tool-result` terminal; (b) reparacion de la cola assistant-prefill (`ensureUserTurnAfterAssistantTail`) con el gate de modelo V1 conservado. La validacion de thinking blocks NO se porta: el hook proactivo V1 fue reducido a no-op (733f141bb) y eliminado en 9a16b54e4, por lo que el owner V1 actual no tiene efecto saliente de thinking, y la normalizacion de reasoning pertenece al transform del proveedor V2 (`anthropic-messages.js:790-816`), observado en experimento binario (reasoning firmado llega como `thinking`; reasoning sin firma llega como `text`), no como efecto de plugin. Un historial valido queda byte-identico y cada reparacion se hace observable con log y recibo de estado (solo conteos).",
+    futureEvidence: "`rigel-v2-native-message-repair.mjs`; `rigel-v2-native-message-repair.test.mjs`; `rigel-v2-native.mjs` (hook context); `.omo/evidence/20261007-t27-thinking-prefill/task-27.txt`",
   },
   "native-skills": {
     classification: "Migrar",

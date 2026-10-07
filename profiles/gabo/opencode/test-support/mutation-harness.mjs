@@ -54,16 +54,21 @@ function normalizeContract(contract) {
   return { name: contract.name, run: contract.run }
 }
 
+// Process-wide counter so two `runMutation` calls on the SAME file in one
+// process never reuse a mutant sibling name. A per-loader counter collided
+// across calls (same pid + same sequence), and bun's module cache then returned
+// the first call's stale sibling instead of re-reading the second mutation.
+let mutantSequence = 0
+
 function createFreshLoader(file) {
   const directory = path.dirname(file)
   const fallbackExtension = path.extname(file)
-  let sequence = 0
   return async function load(specifier = file) {
     const absolute = path.isAbsolute(specifier) ? specifier : path.resolve(directory, specifier)
     const extension = path.extname(absolute) || fallbackExtension
     const base = path.basename(absolute, path.extname(absolute))
-    const copy = path.join(directory, `.mutant-${base}-${process.pid}-${sequence}${extension}`)
-    sequence += 1
+    const copy = path.join(directory, `.mutant-${base}-${process.pid}-${mutantSequence}${extension}`)
+    mutantSequence += 1
     fs.copyFileSync(absolute, copy)
     try {
       return await import(pathToFileURL(copy).href)
