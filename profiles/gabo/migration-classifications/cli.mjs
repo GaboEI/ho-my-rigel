@@ -156,11 +156,11 @@ export default {
     futureEvidence: "`profiles/gabo/rigel-v2-cli.test.mjs` (install validation); `profiles/gabo/cli/commands/install.mjs`; `profiles/gabo/cli/commands/commands.test.mjs`",
   },
   "mcp-oauth": {
-    classification: "Adaptar",
-    status: "Migrado parcialmente",
+    classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El flujo OAuth PKCE de MCP de tier 3 vive en el manager nativo (`rigel-v2-skill-mcp-oauth.mjs`); el comando interactivo de CLI `mcp oauth login` no tiene puerto porque el runtime nativo no ejecuta el CLI de OmO. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
-    futureEvidence: "`rigel-v2-skill-mcp-oauth.mjs`; `rigel-v2-skill-mcp-oauth.test.mjs`",
+      "El efecto del CLI V1 `mcp oauth login/logout/status` se porta como el comando nativo V2 `mcp-oauth` registrado con `ctx.command.transform`. Reutiliza el proveedor PKCE/DCR y el callback local del manager (`rigel-v2-skill-mcp-oauth.mjs`) y persiste el token en el dominio `ctx.storage`; no duplica discovery/DCR/PKCE, nunca imprime tokens y expone modo manual de callback cuando no hay navegador interactivo. El experimento vivo fijó el mecanismo: el comando ejecuta el efecto sin modelo y el reporte viaja por el canal oficial `session.prompt`.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-mcp-oauth-command.mjs`; `profiles/gabo/opencode/rigel-v2-native-mcp-oauth-command.test.mjs`; `profiles/gabo/qa-v2-t30-mcp-oauth.mjs`; `.omo/evidence/20261007-t30-mcp-oauth/`",
   },
   "minimum-opencode-version": {
     classification: "Migrar",

@@ -92,8 +92,8 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "El flujo OAuth 2.0 con PKCE, DCR y step-up de `features/mcp-oauth/` sobre `packages/mcp-client-core/` se migra como parte del sistema MCP de tres niveles de V2 con la misma seguridad.",
-    futureEvidence: "`rigel-v2-skill-mcp-oauth.mjs`; `rigel-v2-native-skill-mcp.mjs`; `rigel-v2-skill-mcp-oauth.test.mjs`",
+      "El flujo OAuth 2.0 con PKCE, DCR y step-up de `features/mcp-oauth/` sobre `packages/mcp-client-core/` se migra como parte del sistema MCP de tres niveles de V2 con la misma seguridad; el efecto interactivo del CLI V1 se completa con el comando nativo `mcp-oauth`.",
+    futureEvidence: "`rigel-v2-skill-mcp-oauth.mjs`; `rigel-v2-native-skill-mcp.mjs`; `rigel-v2-skill-mcp-oauth.test.mjs`; `profiles/gabo/opencode/rigel-v2-native-mcp-oauth-command.mjs`; `profiles/gabo/qa-v2-t30-mcp-oauth.mjs`",
   },
   monitor: {
     classification: "Migrar",

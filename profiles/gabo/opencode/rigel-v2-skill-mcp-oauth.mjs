@@ -20,7 +20,11 @@ import { createServer } from "node:http"
 import { spawn } from "node:child_process"
 
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000
-const TOKEN_STORAGE_PREFIX = "rigel-v2/oauth-token/"
+export const TOKEN_STORAGE_PREFIX = "rigel-v2/oauth-token/"
+// Parallel to V1 `mcp-oauth/storage-index.ts`: the token entry is keyed by a
+// hash of the server URL, so an index entry is the only way to recover the URL
+// (and the human label) for `status`/`logout` without guessing.
+export const TOKEN_INDEX_PREFIX = "rigel-v2/oauth-token-index/"
 
 export function isOAuthConfigured(config) {
   return Boolean(config?.oauth && typeof config?.url === "string" && config.url.trim())
@@ -92,14 +96,14 @@ function createCallbackWaiter(port, redirectPath, timeoutMs = CALLBACK_TIMEOUT_M
     try { server.close() } catch { /* already closed */ }
   }
   server.on("error", (error) => {
-    if (timeout) clearTimeout(timeout)
+    close()
     settle.reject(error)
   })
   server.listen(port, "127.0.0.1", () => {})
   return { promise, close }
 }
 
-function openSystemBrowser(url) {
+export function openSystemBrowser(url) {
   const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open"
   const args = process.platform === "win32" ? ["/c", "start", "", url] : [url]
   try {
@@ -217,13 +221,117 @@ async function exchangeToken(tokenEndpoint, form, fetchImpl) {
   }
 }
 
-function tokenStorageKey(serverUrl) {
-  return `${TOKEN_STORAGE_PREFIX}${createHash("sha256").update(serverUrl).digest("hex").slice(0, 24)}`
+export function tokenStorageKey(serverUrl) {
+  return `${TOKEN_STORAGE_PREFIX}${tokenHash(serverUrl)}`
 }
 
-function isTokenExpired(tokenData, now = Date.now()) {
+function tokenHash(serverUrl) {
+  return createHash("sha256").update(serverUrl).digest("hex").slice(0, 24)
+}
+
+function tokenIndexKey(serverUrl) {
+  return `${TOKEN_INDEX_PREFIX}${tokenHash(serverUrl)}`
+}
+
+/**
+ * Mirror of V1 `mcp-oauth/storage.ts` `normalizeHost`: reduce a server URL or
+ * host string to the bare host so `status` can address a token the way V1 did
+ * (scheme/port/path tolerant).
+ */
+export function normalizeServerHost(value) {
+  let host = String(value ?? "").trim()
+  if (!host) return host
+  if (host.includes("://")) {
+    try { host = new URL(host).hostname } catch { host = host.split("/")[0] ?? "" }
+  } else {
+    host = host.split("/")[0] ?? ""
+  }
+  if (host.startsWith("[")) {
+    const closing = host.indexOf("]")
+    return closing !== -1 ? host.slice(0, closing + 1) : host
+  }
+  return host.includes(":") ? (host.split(":")[0] ?? "") : host
+}
+
+export function isTokenExpired(tokenData, now = Date.now()) {
   if (tokenData?.expiresAt == null) return false
   return tokenData.expiresAt < Math.floor(now / 1000)
+}
+
+/**
+ * V2 counterpart of V1 `mcp-oauth/storage.ts` + `storage-index.ts`, over the
+ * official `ctx.storage` domain (never a file in the user home). The token value
+ * keeps the V1 `OAuthTokenData` shape; a parallel index entry recovers the
+ * server URL and the human label so `status`/`logout` can address a token by
+ * URL or by the name the user logged in with.
+ */
+export function createOAuthTokenStore({ storage } = {}) {
+  const canGet = Boolean(storage) && typeof storage.get === "function"
+  const canSet = Boolean(storage) && typeof storage.set === "function"
+  const canRemove = Boolean(storage) && typeof storage.remove === "function"
+  const canScan = Boolean(storage) && typeof storage.scan === "function"
+
+  async function scanAll(prefix) {
+    const entries = []
+    let after
+    do {
+      const page = await storage.scan({ prefix, ...(after ? { after } : {}) })
+      const listed = Array.isArray(page) ? page : page?.entries ?? []
+      for (const entry of listed) entries.push(entry)
+      after = Array.isArray(page) ? undefined : page?.next
+    } while (after)
+    return entries
+  }
+
+  return {
+    keyFor: (serverUrl) => tokenStorageKey(serverUrl),
+    indexKeyFor: (serverUrl) => tokenIndexKey(serverUrl),
+    async load(serverUrl) {
+      if (!canGet) return null
+      return (await storage.get(tokenStorageKey(serverUrl))) ?? null
+    },
+    async save(serverUrl, tokens) {
+      if (!canSet) return false
+      await storage.set(tokenStorageKey(serverUrl), tokens)
+      return true
+    },
+    async remember(serverUrl, name) {
+      if (!canSet) return false
+      await storage.set(tokenIndexKey(serverUrl), { serverUrl, ...(name ? { name } : {}) })
+      return true
+    },
+    async clear(serverUrl) {
+      let removed = false
+      if (canRemove) {
+        await storage.remove(tokenStorageKey(serverUrl))
+        await storage.remove(tokenIndexKey(serverUrl))
+        removed = true
+      }
+      return removed
+    },
+    async entries() {
+      if (!canScan) return []
+      const listed = await scanAll(TOKEN_STORAGE_PREFIX)
+      return listed.map((entry) => ({
+        hash: entry.key.slice(TOKEN_STORAGE_PREFIX.length),
+        token: entry.value,
+        storageKey: entry.key,
+      }))
+    },
+    async index() {
+      if (!canScan) return []
+      const listed = await scanAll(TOKEN_INDEX_PREFIX)
+      const index = new Map()
+      for (const entry of listed) {
+        const value = entry.value
+        const hash = entry.key.slice(TOKEN_INDEX_PREFIX.length)
+        if (value && typeof value.serverUrl === "string") {
+          index.set(hash, { serverUrl: value.serverUrl, ...(typeof value.name === "string" ? { name: value.name } : {}) })
+        }
+      }
+      return index
+    },
+  }
 }
 
 export function isStepUpRequired(statusCode, headers) {

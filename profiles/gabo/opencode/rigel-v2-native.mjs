@@ -73,6 +73,7 @@ import { createNativeContextCollector, createNativeContextMessageConsumer } from
 import { createNativeClaudeCodeHooks } from "./rigel-v2-claude-code-hooks.mjs"
 import { createUlwExecuteCommand } from "./rigel-v2-ulw-execute.mjs"
 import { registerBuiltinCommands } from "./rigel-v2-native-builtin-commands.mjs"
+import { registerMcpOAuthCommand } from "./rigel-v2-native-mcp-oauth-command.mjs"
 import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
 import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
 import { createNativeOpenclaw } from "./rigel-v2-native-openclaw.mjs"
@@ -1645,6 +1646,18 @@ export default {
         disabledCommands: readNativeDisabled(manifest).commands,
       })
     }
+    // The V1 `cli/mcp-oauth` effect as a native command. The interactive
+    // login reuses the skill-MCP OAuth provider and localhost callback and
+    // persists through `ctx.storage`; the command is gated by the same
+    // `disabled_commands` denylist as the other native commands.
+    let mcpOAuthCommandRegistration
+    if (typeof context?.command?.transform === "function") {
+      mcpOAuthCommandRegistration = await registerMcpOAuthCommand({
+        context,
+        storage: context?.storage,
+        disabledCommands: readNativeDisabled(manifest).commands,
+      })
+    }
     // Reconcile durable background state from a previous process: re-admit
     // queued descriptors (they never started), re-track running children WITHOUT
     // re-creating them, and re-queue undelivered wakes. A fresh manager (tests,
@@ -1707,6 +1720,7 @@ export default {
       await goalCommandRegistration?.dispose?.()
       await ulwExecuteCommandRegistration?.dispose?.()
       await builtinCommandsRegistration?.dispose?.()
+      await mcpOAuthCommandRegistration?.dispose?.()
       autoSlashCommand.clear()
       disposeClaudeCodeHooks()
       await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), compactionContextRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), builtinMcpRegistration?.dispose?.(), claudeMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
