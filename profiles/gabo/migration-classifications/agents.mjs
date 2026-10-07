@@ -234,9 +234,10 @@ export default {
   },
   "sisyphus-runtime-prompt-reconciler": {
     classification: "Migrar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "Correccion de cierre (contradiccion resuelta contra el codigo): el runtime nativo registra el prompt de Sisyphus como definicion estatica baked al modelo configurado en el manifiesto; no existe rebuild por modelo de runtime (V1 lo hacia en el system-transform por request, seam que V2 no expone). El seam adaptable en V2 es el hook `context` (`event.system`). Destino: Fase 5.",
-    futureEvidence: "dueno: rigel-v2-native-prompt.mjs (context hook); verificado: manifiesto con prompt estatico de 35904 caracteres sin reconciliacion; destino Fase 5",
+      "El cuerpo del prompt de Sisyphus es dependiente del modelo (experimento: el mismo pipeline de registro genera cuerpos distintos por cada modelo exacto; el proveedor no influye). V1 lo reconstruia por request en el system-transform (#5297/#5316/#6966). El runtime nativo lo adapta sobre el hook `context`: el generador hornea el cuerpo de Sisyphus para cada modelo que el runtime puede resolver (la cadena de fallback, el modelo del manifiesto y las identidades gpt explicitas, Astra incluida) y `rigel-v2-native-sisyphus-prompt.mjs` intercambia el cuerpo baked por el del modelo de runtime, con cache por modelo, en `event.system`. Un modelo fuera del conjunto baked no se silencia: se registra un recibo observable (`sisyphus-prompt-reconciled.json`, razon `model-not-baked`); Astra se resuelve de forma explicita (un selector accidental como `custom-gpt-6-astra` no selecciona el cuerpo Astra). No toca los prompts de otros agentes. Gate de delta upstream: el fix de formato de ejemplos (65f159da3) se sincroniza en los owners Sisyphus (ejemplos como lineas planas, sin blockquotes accidentales) y la deteccion explicita de Astra (2096e7805) se refleja en el conjunto baked; ambos con contrato estructural, parity test y QA viva.",
+    futureEvidence:
+      "`rigel-v2-native-sisyphus-prompt.mjs`; `rigel-v2-native-prompt.mjs` (hook `context`); `generate-v2-agents.mjs`; `rigel-v2-native-sisyphus-prompt.test.mjs`; `qa-v2-t28-sisyphus-prompt.mjs`; `.omo/evidence/20261007-t28-sisyphus-prompt/task-28.txt`",
   },
 }

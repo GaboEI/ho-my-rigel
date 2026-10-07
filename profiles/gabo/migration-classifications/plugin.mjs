@@ -194,10 +194,11 @@ export default {
   },
   "system-transform": {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "`plugin/system-transform.ts` reconcilia el prompt de Sisyphus y restaura ultrawork a nivel de sistema. Verificado contra el codigo: el runtime nativo registra el prompt de Sisyphus como definicion estatica en el manifiesto (baked al modelo configurado, sin rebuild por modelo de runtime), asi que la restauracion de ultrawork se adapta a la inyeccion de contexto en `rigel-v2-native-prompt.mjs` y la reconciliacion del prompt de Sisyphus por modelo de runtime NO esta reimplementada: su fila de agentes queda pendiente con destino Fase 5 (el seam adaptable es el hook `context` de V2 con `event.system`).",
-    futureEvidence: "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-prompt.test.mjs`; ver `agents/sisyphus-runtime-prompt-reconciler` (pendiente, Fase 5)",
+      "`plugin/system-transform.ts` reconcilia el prompt de Sisyphus y restaura ultrawork a nivel de sistema. El runtime nativo lo adapta al hook `context`: la restauracion de ultrawork vive en `rigel-v2-native-prompt.mjs` y la reconciliacion del prompt de Sisyphus por modelo de runtime ya esta implementada (generador hornea el cuerpo por modelo exacto resoluble; `rigel-v2-native-sisyphus-prompt.mjs` intercambia en `event.system` con cache por modelo; modelo fuera del conjunto -> recibo observable). Ambos efectos V1 quedan cubiertos.",
+    futureEvidence:
+      "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-sisyphus-prompt.mjs`; `rigel-v2-native-prompt.test.mjs`; `rigel-v2-native-sisyphus-prompt.test.mjs`; `agents/sisyphus-runtime-prompt-reconciler` (Migrado)",
   },
   "tool-definition": {
     classification: "Adaptar",

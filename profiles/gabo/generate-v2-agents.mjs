@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url"
 import legacyModule from "../../dist/index.js"
 import { sortAgentsByCanonicalOrder } from "./opencode/rigel-v2-native-agent-order.mjs"
 import { deriveNativeGates, deriveNativeMinOpenCodeVersion, resolveNativePluginConfig } from "./opencode/rigel-v2-native-config.mjs"
+import { agentChain } from "./opencode/rigel-v2-native-model-chains.mjs"
+import { SISYPHUS_AGENT_ID, SISYPHUS_PROMPT_IDENTITY_MODELS, applySisyphusFormatExampleFix, disposeBakeHooks, extractModelName, fixSisyphusAgentMap } from "./opencode/rigel-v2-native-sisyphus-prompt.mjs"
 
 const args = process.argv.slice(2)
 const take = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined }
@@ -31,9 +33,56 @@ if (!inputPath || !outputPath) {
   console.error("Usage: OMO_PROFILE=gabo node generate-v2-agents.mjs --input <opencode.json> --output <rigel-agent-manifest.mjs> --selection <v2-agent-selection.json> --judge <judge.v2.json> [--directory <cwd>]")
   process.exit(2)
 }
-const config = JSON.parse(fs.readFileSync(inputPath, "utf8"))
+const rawConfig = JSON.parse(fs.readFileSync(inputPath, "utf8"))
+const config = structuredClone(rawConfig)
 const client = { app: { log: async () => undefined }, session: { messages: async () => ({ data: [] }) } }
 const hooks = await legacyModule.server({ directory, client, serverUrl: new URL("http://127.0.0.1:4096") }, {})
+
+// T28: re-run the *same* registration pipeline for a different model to obtain
+// the Sisyphus body that registration would have baked for it. Only the model
+// changes; directory, profile, roster and category resolution stay identical, so
+// a variant body is comparable to the primary bake byte for byte.
+async function bakeAgentPromptForModel(model, agentId) {
+  const clone = structuredClone(rawConfig)
+  clone.model = model
+  const variantHooks = await legacyModule.server({ directory, client, serverUrl: new URL("http://127.0.0.1:4096") }, {})
+  try {
+    await variantHooks.config(clone)
+    return clone.agent?.[agentId]?.prompt
+  } finally {
+    await disposeBakeHooks(variantHooks, `${agentId} on ${model}`)
+  }
+}
+
+// Sisyphus is the only agent whose prompt is reconciled at runtime. Bake the
+// exact reachable set (the agent's fallback chain plus the manifest model),
+// keyed by the bare model name (the provider does not change the body; the exact
+// model name does). Other agents are never baked or touched.
+async function bakeSisyphusPromptVariants(agent) {
+  if (!agent || typeof agent.prompt !== "string" || !agent.prompt) return undefined
+  const configuredModel = typeof agent.model === "string" ? agent.model : ""
+  const configuredName = extractModelName(configuredModel)
+  const byModel = {}
+  if (configuredName) byModel[configuredName] = applySisyphusFormatExampleFix(agent.prompt)
+  for (const rung of agentChain(SISYPHUS_AGENT_ID) ?? []) {
+    const name = typeof rung?.model === "string" ? rung.model : ""
+    if (!name || byModel[name] !== undefined) continue
+    const provider = Array.isArray(rung.providers) && typeof rung.providers[0] === "string" ? rung.providers[0] : undefined
+    const baked = await bakeAgentPromptForModel(provider ? `${provider}/${name}` : name, SISYPHUS_AGENT_ID)
+    if (typeof baked === "string" && baked) byModel[name] = applySisyphusFormatExampleFix(baked)
+  }
+  // Explicit prompt-identity variants (the gpt family, Astra included) share a
+  // body skeleton but differ in the identity line, so bake each one. A runtime
+  // selector for one of them then resolves to its body instead of reporting a
+  // miss; an accidental selector (custom-gpt-6-astra) is not baked and stays a
+  // reported miss.
+  for (const name of SISYPHUS_PROMPT_IDENTITY_MODELS) {
+    if (!name || byModel[name] !== undefined) continue
+    const baked = await bakeAgentPromptForModel(`openai/${name}`, SISYPHUS_AGENT_ID)
+    if (typeof baked === "string" && baked) byModel[name] = applySisyphusFormatExampleFix(baked)
+  }
+  return { bakedModel: configuredModel, bakedPrompt: applySisyphusFormatExampleFix(agent.prompt), promptByModel: byModel }
+}
 
 try {
   await hooks.config(config)
@@ -73,6 +122,12 @@ try {
   // native resolver rather than the V1 plugin's internal config object.
   // `--profile-root` pins the user layer so resolution never depends on an
   // ambient HOME.
+  // T28 / upstream 65f159da3: the plain-line format-example fix is applied here,
+  // in the V2 bake, to the Sisyphus entry only. The V1 owners stay byte-identical
+  // to HEAD, so the registered body and the reconciliation plan agree while no
+  // other agent entry is touched.
+  const fixedAgents = fixSisyphusAgentMap(orderedSelected)
+  const sisyphusPrompt = await bakeSisyphusPromptVariants(fixedAgents[SISYPHUS_AGENT_ID])
   const pluginView = resolveNativePluginConfig({
     directory,
     ...(profileRoot ? { env: { ...process.env, HOME: profileRoot } } : {}),
@@ -91,7 +146,7 @@ try {
   if (gates.hashline_edit) tools["hashline_edit"] = true
   const materialized = {
     defaultAgent: config.default_agent,
-    agents: orderedSelected,
+    agents: fixedAgents,
     metadata: {
       generatedBy: "Oh My Rigel V2 native runtime",
       profile: process.env.OMO_PROFILE || null,
@@ -103,6 +158,9 @@ try {
         // T34: the Rigel preemptive-compaction threshold override, materialized
         // so the runtime reads it from the manifest instead of parsing omo.jsonc.
         preemptiveCompactionThreshold: pluginView.experimental?.preemptive_compaction_threshold,
+        // T28: the Sisyphus prompt reconciliation plan (`context` hook). Absent
+        // when the agent is not selected, in which case the hook is a no-op.
+        ...(sisyphusPrompt ? { sisyphusPrompt } : {}),
         // T38: V1 `experimental.truncate_all_tool_outputs`, materialized so the
         // runtime's tool-output truncator reads it from the manifest.
         truncateAllToolOutputs: pluginView.experimental?.truncate_all_tool_outputs === true,

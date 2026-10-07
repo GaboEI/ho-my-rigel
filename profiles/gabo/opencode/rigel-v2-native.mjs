@@ -21,6 +21,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { createNativeContextHook, createNativeModelRequestHook } from "./rigel-v2-native-prompt.mjs"
+import { readSisyphusPromptPlan, SISYPHUS_PROMPT_RECEIPT } from "./rigel-v2-native-sisyphus-prompt.mjs"
 import { agentChain, categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
@@ -1374,6 +1375,11 @@ export default {
         && !agents.some((agent) => agent.name.toLocaleLowerCase() === String(input.agent ?? "").toLocaleLowerCase()),
       getCategorySkillReminder: (sessionID) => (sessionID ? categorySkillReminder.pending(sessionID) : ""),
       onCategorySkillReminderConsumed: (sessionID) => { categorySkillReminder.consume(sessionID) },
+      // T28: reconcile the Sisyphus prompt for the runtime model on the context
+      // hook. The plan is materialized by the generator; the receipt makes a
+      // swap (or an un-baked model) observable instead of silent.
+      sisyphusPromptPlan: readSisyphusPromptPlan(manifest),
+      onSisyphusReconcile: (event) => writeStateReceipt(SISYPHUS_PROMPT_RECEIPT, event),
     })
     const contextCollector = createNativeContextCollector()
     const consumePendingContext = createNativeContextMessageConsumer(contextCollector)

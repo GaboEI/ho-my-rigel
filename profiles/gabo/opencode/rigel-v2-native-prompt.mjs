@@ -8,6 +8,7 @@ import {
   responsesUserParts,
 } from "./rigel-v2-native-keyword-seam.mjs"
 import { buildReasoningOptions, reasoningEffortFromThinking } from "./rigel-v2-native-reasoning-options.mjs"
+import { createSisyphusPromptReconciler } from "./rigel-v2-native-sisyphus-prompt.mjs"
 
 export { reasoningEffortFromThinking }
 
@@ -182,6 +183,8 @@ export function createNativeContextHook({
   getInitialDirectoryInstructions,
   getCategorySkillReminder,
   onCategorySkillReminderConsumed,
+  sisyphusPromptPlan,
+  onSisyphusReconcile,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
@@ -195,6 +198,12 @@ export function createNativeContextHook({
     enabledExpansions,
     defaultUltrawork,
   })
+  // T28: the Sisyphus body is model-dependent; reconcile it for the runtime model
+  // on every request, exactly as V1 did in the system-transform hook. Absent a
+  // plan (manifest without the contract) this stays a no-op.
+  const sisyphusReconciler = sisyphusPromptPlan
+    ? createSisyphusPromptReconciler({ ...sisyphusPromptPlan, onReconcile: onSisyphusReconcile })
+    : undefined
   return async (event) => {
     if (!event || typeof event !== "object") return
     const sessionID = typeof event.sessionID === "string" ? event.sessionID : undefined
@@ -236,6 +245,9 @@ export function createNativeContextHook({
       ? getCategorySkillReminder(sessionID)
       : ""
     const system = removeInjectedSystemParts(event.system)
+    // T28: swap the baked Sisyphus body for the runtime model's body before the
+    // roster/guidance parts are appended. The reconciler carries its own cache.
+    if (sisyphusReconciler) sisyphusReconciler.reconcile(system, modelID, { agent: agentName })
     for (const text of [initialDirectoryGuidance, roster, categorySkillReminder]) {
       if (text) system.push({ type: "text", text })
     }
