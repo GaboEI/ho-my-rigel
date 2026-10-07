@@ -53,13 +53,13 @@ export function buildAuthorizationUrl(authorizationEndpoint, { clientId, redirec
 
 // Subscribe-first callback waiter: the server listens BEFORE the browser opens,
 // so a fast redirect can never be lost.
-function createCallbackWaiter(port, redirectPath) {
+function createCallbackWaiter(port, redirectPath, timeoutMs = CALLBACK_TIMEOUT_MS) {
   let settle
   const promise = new Promise((resolve, reject) => { settle = { resolve, reject } })
   const timeout = setTimeout(() => {
     try { server.close() } catch { /* already closed */ }
-    settle.reject(new Error(`OAuth callback timed out after ${CALLBACK_TIMEOUT_MS}ms on port ${port}`))
-  }, CALLBACK_TIMEOUT_MS)
+    settle.reject(new Error(`OAuth callback timed out after ${timeoutMs}ms on port ${port}`))
+  }, timeoutMs)
   const server = createServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", `http://localhost:${port}`)
     if (requestUrl.pathname !== redirectPath && requestUrl.pathname !== "/") {
@@ -260,6 +260,7 @@ export function createNativeOAuthProvider({
   openBrowser = openSystemBrowser,
   callbackPort = 0,
   callbackRedirectPath = "/callback",
+  callbackTimeoutMs = CALLBACK_TIMEOUT_MS,
 } = {}) {
   if (!serverUrl || typeof serverUrl !== "string") throw new Error("OAuth provider requires a server URL")
   let tokens = null
@@ -307,7 +308,7 @@ export function createNativeOAuthProvider({
     })
     // Subscribe first: the callback server listens BEFORE the browser opens,
     // so a fast redirect can never be lost.
-    const callback = createCallbackWaiter(port, callbackRedirectPath)
+    const callback = createCallbackWaiter(port, callbackRedirectPath, callbackTimeoutMs)
     openBrowser?.(authorizationUrl)
     try {
       const result = await callback.promise
@@ -393,6 +394,7 @@ export function createOAuthHttpMcpClient({ url, oauth, headers = {}, fetchImpl =
     storage,
     openBrowser,
     ...(Number.isInteger(oauth?.callbackPort) && oauth.callbackPort > 0 ? { callbackPort: oauth.callbackPort } : {}),
+    ...(Number.isInteger(oauth?.callbackTimeoutMs) && oauth.callbackTimeoutMs > 0 ? { callbackTimeoutMs: oauth.callbackTimeoutMs } : {}),
   })
   const state = { sessionID: null, protocolVersion: "2024-11-05" }
 

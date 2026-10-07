@@ -143,16 +143,29 @@ describe("native team event handlers", () => {
   })
 
   test("a throwing handler is logged and never propagates into the shared event loop", async () => {
-    // given
+    // given: a storage whose scan rejects, so the idle-wake-hint body throws for real
     const logs = []
-    const brokenStorage = { get: async () => { throw new Error("disk gone") }, set: async () => {}, scan: undefined }
-    const handlers = createNativeTeamEventHandlers({ storage: brokenStorage, session: {}, log: (line) => logs.push(line) })
-    // when: no team record is reachable, and even a hard storage failure stays contained
-    for (const handler of handlers) {
-      await handler({ type: "session.idle", sessionID: "member-scout" })
+    const throwingStorage = {
+      get: async () => undefined,
+      set: async () => {},
+      scan: async () => { throw new Error("scan boom") },
     }
-    // then: every failure was swallowed by the isolation wrapper, none rethrown
-    expect(logs.length).toBeGreaterThanOrEqual(0)
+    const handlers = createNativeTeamEventHandlers({ storage: throwingStorage, session: {}, log: (line) => logs.push(line) })
+    // when: a session.idle event drives idle-wake-hint into the rejecting scan
+    let propagated = null
+    try {
+      await handlers[0]({ type: "session.idle", sessionID: "member-scout" })
+    } catch (error) {
+      propagated = error
+    }
+    // then: the throw was isolated and logged with the handler name and message, and never rethrown
+    expect(propagated).toBeNull()
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain("idle-wake-hint")
+    expect(logs[0]).toContain("scan boom")
+    // negative control: a mismatched event never reaches the rejecting storage and logs nothing
+    await handlers[2]({ type: "session.idle", sessionID: "member-scout" })
+    expect(logs).toHaveLength(1)
   })
 
   test("the team tool surface keeps the twelve V1 tool names", () => {

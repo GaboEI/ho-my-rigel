@@ -33,7 +33,7 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpPolicy, readNativePreemptiveThreshold } from "./rigel-v2-native-config.mjs"
+import { checkNativeHostVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
@@ -76,6 +76,7 @@ import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
 import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
 import { createNativeMonitorStatusInjector } from "./rigel-v2-monitor-status.mjs"
 import { registerClaudeCodeMcps } from "./rigel-v2-claude-code-mcp.mjs"
+import { registerNativeBuiltinMcps, resolveOpenCodeConfigDir } from "./rigel-v2-native-builtin-mcps.mjs"
 import { createNativeToolBeforeRules } from "./rigel-v2-native-tool-before.mjs"
 import { createTmuxVizManager } from "./rigel-v2-tmux-viz-manager.mjs"
 import { readNativeTmuxVisualization } from "./rigel-v2-native-config.mjs"
@@ -344,6 +345,14 @@ export default {
   id: "oh-my-rigel",
   setup: async (context) => {
     const location = context?.location ?? { directory: process.cwd() }
+    // Host-version floor (V1 `minimum-opencode-version.ts` parity): refuse a host
+    // below the minimum materialized into the manifest. An absent
+    // `context.app.version` degrades to no check instead of failing a host that
+    // does not publish its identity.
+    const hostVersionCheck = checkNativeHostVersion(manifest, context?.app?.version)
+    if (!hostVersionCheck.ok) {
+      throw new Error(hostVersionCheck.message)
+    }
     if (typeof context?.tool?.transform !== "function") {
       throw new Error("OpenCode V2 tool.transform is unavailable")
     }
@@ -408,6 +417,20 @@ export default {
       claudeConfigDir: context?.options?.skillsEnv?.CLAUDE_CONFIG_DIR,
       disabledMcps: readNativeMcpPolicy(manifest).disabled,
       allowlist: readNativeMcpPolicy(manifest).envAllowlist,
+    })
+    // Tier-1 OmO builtin MCP servers (T38). The V2 host has no LSP tools and no
+    // grep_app server (official migrate-v1: V2 "does not run language servers,
+    // expose LSP tools, or produce LSP diagnostics"), so the retained builtins
+    // are registered natively through `context.mcp.transform` exactly as V1
+    // registered them through the plugin config. A missing LSP runtime degrades
+    // to a disabled server instead of a broken one.
+    const builtinMcpRegistration = await registerNativeBuiltinMcps(context, {
+      cwd: location.directory,
+      repoRoot: readNativeRepoRoot(manifest),
+      configDir: resolveOpenCodeConfigDir(),
+      disabledMcps: readNativeMcpPolicy(manifest).disabled,
+      retained: readNativeMcpBuiltinsPolicy(manifest).retained,
+      env: process.env,
     })
     // Real skill-body injection for delegated children: resolve each requested
     // name through the discovered registry and inject the body. Disabled or
@@ -601,7 +624,7 @@ export default {
     // tracker the before start rule records into and the after warning rule
     // drains from. `createFlowRules` rebuilds the ordered collections over it.
     const fsyncSkipState = createFsyncSkipWarningState()
-    const flowRules = createFlowRules({ fsyncSkipState })
+    const flowRules = createFlowRules({ fsyncSkipState, truncateAllToolOutputs: readNativeTruncateAllToolOutputs(manifest) })
     // Team mode (Phase-4 Ola 6): when the materialized `team_mode` gate is on
     // and the V2 storage domain exists, the four native team event handlers
     // (idle wake hint, member status, member error, lead orphan) join the same
@@ -1602,7 +1625,7 @@ export default {
       await builtinCommandsRegistration?.dispose?.()
       autoSlashCommand.clear()
       disposeClaudeCodeHooks()
-      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), compactionContextRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
+      await Promise.all([registration?.dispose?.(), directoryReadRegistration?.dispose?.(), remindersRegistration?.dispose?.(), writeGuardRegistration?.dispose?.(), nonInteractiveRegistration?.dispose?.(), permissionRegistration?.dispose?.(), autoSlashCommandRegistration?.dispose?.(), contextRegistration?.dispose?.(), modelRequestRegistration?.dispose?.(), compactionContextRegistration?.dispose?.(), imageRequestRegistration?.dispose?.(), skillRegistry?.dispose?.(), skillMcpRegistration?.dispose?.(), builtinMcpRegistration?.dispose?.(), claudeMcpRegistration?.dispose?.(), eventSubscription, tmuxVizManager?.cleanup?.()])
     }
   },
 }

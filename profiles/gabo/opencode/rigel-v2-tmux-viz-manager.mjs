@@ -163,6 +163,14 @@ export function createTmuxVizManager({
       activityVersion: 0,
       stablePolls: 0,
       attachActivated: environment.cmux && !result.isolated,
+      // Pending-close retry/cooldown state (V1 `TrackedSession` parity):
+      // a failed close leaves the session tracked so a later polling pass
+      // retries it, and after MAX_CLOSE_RETRY_COUNT failures a cooldown is
+      // stamped instead of leaking the pane for the session lifetime.
+      closePending: false,
+      closeSent: false,
+      closeRetryCount: 0,
+      closeRetryCooldownUntil: undefined,
     })
     polling.start()
     return { ok: true, paneId: result.paneId }
@@ -209,15 +217,63 @@ export function createTmuxVizManager({
     if (typeof deferredLoop.unref === "function") deferredLoop.unref()
   }
 
+  // Pending-close retry/cooldown, ported from V1 `retryPendingCloses`
+  // (`features/tmux-subagent/manager.ts:511-582`). A failed close keeps the
+  // session tracked with `closePending=true`; each polling pass retries once,
+  // incrementing `closeRetryCount`; after MAX_CLOSE_RETRY_COUNT failures the
+  // session is stamped with `closeRetryCooldownUntil` instead of leaking the
+  // pane. Once the cooldown elapses, the retry state resets so polling can
+  // re-attempt. No timer is used: the cooldown is a timestamp compared on the
+  // next pass, so a wedged pane cannot hang the process.
+  async function retryPendingCloses(now = Date.now()) {
+    for (const tracked of [...sessions.values()]) {
+      if (!tracked.closePending || !sessions.has(tracked.sessionID)) continue
+      const retryCount = tracked.closeRetryCount ?? 0
+      if (retryCount >= MAX_CLOSE_RETRY_COUNT) {
+        if (tracked.closeRetryCooldownUntil != null && now >= tracked.closeRetryCooldownUntil) {
+          tracked.closeRetryCount = 0
+          tracked.closePending = false
+          tracked.closeSent = false
+          tracked.closeRetryCooldownUntil = undefined
+          log(`close-retry cooldown elapsed for ${tracked.sessionID}; retry state reset for a fresh attempt`)
+        }
+        continue
+      }
+      const result = await closeTmuxPane({ runner, paneId: tracked.paneId, sleep })
+      if (result.closed) {
+        sessions.delete(tracked.sessionID)
+        log(`retried close succeeded for ${tracked.sessionID}`)
+        continue
+      }
+      const nextRetryCount = retryCount + 1
+      tracked.closeRetryCount = nextRetryCount
+      if (nextRetryCount >= MAX_CLOSE_RETRY_COUNT) {
+        tracked.closeRetryCooldownUntil = now + CLOSE_RETRY_COOLDOWN_MS
+        log(`close retries exhausted for ${tracked.sessionID}; cooldown ${CLOSE_RETRY_COOLDOWN_MS / 60000}min armed`)
+      } else {
+        log(`retried close failed for ${tracked.sessionID}: ${result.reason} (retry ${nextRetryCount}/${MAX_CLOSE_RETRY_COUNT})`)
+      }
+    }
+  }
+
   const polling = createTmuxVizPolling({
     getTrackedSessions: () => sessions,
     closeSessionById: async (sessionID) => {
+      // The polling pass already set `closeSent` before this call: this is the
+      // first close attempt for a session polling decided to close. A failure
+      // leaves the session tracked as pending; `retryPendingCloses` (the
+      // `onPoll` callback) handles every subsequent attempt with retry/cooldown.
       const tracked = sessions.get(sessionID)
       if (!tracked) return
       const result = await closeTmuxPane({ runner, paneId: tracked.paneId, sleep })
-      if (result.closed) sessions.delete(sessionID)
-      else log(`close failed for ${sessionID}: ${result.reason}`)
+      if (result.closed) {
+        sessions.delete(sessionID)
+        return
+      }
+      tracked.closePending = true
+      log(`close failed for ${sessionID}: ${result.reason}; pending retry`)
     },
+    onPoll: (now) => retryPendingCloses(now),
     runner: enabled ? runner : createTmuxVizRunner({ tmuxPath: "/nonexistent-tmux-viz", spawnImpl: () => ({ exitCode: Promise.resolve(1), stdout: Promise.resolve(""), stderr: Promise.resolve("") }) }),
     serverUrl,
     directory,
@@ -230,6 +286,7 @@ export function createTmuxVizManager({
     enabled,
     degradedReason: environment.degradedReason,
     environment,
+    retryPendingCloses,
     getTrackedPaneId(sessionID) { return sessions.get(sessionID)?.paneId ?? null },
     async onSessionCreated(event) {
       if (!enabled) return
@@ -258,15 +315,14 @@ export function createTmuxVizManager({
       if (!enabled || typeof sessionID !== "string") return
       const tracked = sessions.get(sessionID)
       if (!tracked) return
-      let attempts = 0
-      while (attempts < MAX_CLOSE_RETRY_COUNT) {
-        attempts += 1
-        const result = await closeTmuxPane({ runner, paneId: tracked.paneId, sleep })
-        if (result.closed) break
-        if (attempts === MAX_CLOSE_RETRY_COUNT) {
-          log(`close retries exhausted for ${sessionID}; cooldown ${CLOSE_RETRY_COOLDOWN_MS / 60000}min armed`)
-          setTimeout(() => { attempts = 0 }, CLOSE_RETRY_COOLDOWN_MS)
-        }
+      const result = await closeTmuxPane({ runner, paneId: tracked.paneId, sleep })
+      if (!result.closed) {
+        // Keep the session tracked; `closeSent` blocks the polling one-shot so
+        // the pending-close retry (with cooldown) owns every later attempt.
+        tracked.closePending = true
+        tracked.closeSent = true
+        log(`close failed for ${sessionID}: ${result.reason}; pending retry`)
+        return
       }
       sessions.delete(sessionID)
       if (tracked.isolated && resolved.isolation === "session") {

@@ -42,6 +42,7 @@ export function createTmuxVizPolling({
   logger = console.error,
   intervalMs = POLL_INTERVAL_BACKGROUND_MS,
   timeouts = {},
+  onPoll,
 } = {}) {
   const limits = {
     sessionTimeout: SESSION_TIMEOUT_MS,
@@ -87,6 +88,10 @@ export function createTmuxVizPolling({
     if (pollingInFlight) return
     pollingInFlight = true
     try {
+      // Owner hook: the manager's pending-close retry runs once per pass,
+      // before the decision loop, so a session whose close failed on an earlier
+      // pass gets a bounded retry with a cooldown instead of leaking.
+      if (typeof onPoll === "function") await onPoll(now)
       await activateFocusedPanes(now)
       const statuses = typeof fetchSessionStatus === "function" ? await fetchSessionStatus() : null
       for (const tracked of getTrackedSessions().values()) {

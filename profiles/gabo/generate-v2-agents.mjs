@@ -5,9 +5,10 @@
  */
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import legacyModule from "../../dist/index.js"
 import { sortAgentsByCanonicalOrder } from "./opencode/rigel-v2-native-agent-order.mjs"
-import { deriveNativeGates, resolveNativePluginConfig } from "./opencode/rigel-v2-native-config.mjs"
+import { deriveNativeGates, deriveNativeMinOpenCodeVersion, resolveNativePluginConfig } from "./opencode/rigel-v2-native-config.mjs"
 
 const args = process.argv.slice(2)
 const take = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined }
@@ -17,6 +18,15 @@ const directory = take("--directory") || process.cwd()
 const selectionPath = take("--selection")
 const judgePath = take("--judge")
 const profileRoot = take("--profile-root")
+// T38: the native runtime registers the retained builtin MCP servers (grep_app,
+// lsp) through `context.mcp.transform`. The lsp server command must resolve
+// `packages/lsp-daemon` in the source tree, which the deployed runtime (staged
+// under the lab state root) cannot discover by walking its own directory, so the
+// repo root and the MCP retention policy are materialized into the manifest.
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url))
+const sourceRoot = path.resolve(moduleDirectory, "../..")
+const integrationManifest = JSON.parse(fs.readFileSync(path.join(moduleDirectory, "integration-manifest.json"), "utf8"))
+const manifestMcpPolicy = integrationManifest?.mcpPolicy ?? {}
 if (!inputPath || !outputPath) {
   console.error("Usage: OMO_PROFILE=gabo node generate-v2-agents.mjs --input <opencode.json> --output <rigel-agent-manifest.mjs> --selection <v2-agent-selection.json> --judge <judge.v2.json> [--directory <cwd>]")
   process.exit(2)
@@ -93,8 +103,23 @@ try {
         // T34: the Rigel preemptive-compaction threshold override, materialized
         // so the runtime reads it from the manifest instead of parsing omo.jsonc.
         preemptiveCompactionThreshold: pluginView.experimental?.preemptive_compaction_threshold,
+        // T38: V1 `experimental.truncate_all_tool_outputs`, materialized so the
+        // runtime's tool-output truncator reads it from the manifest.
+        truncateAllToolOutputs: pluginView.experimental?.truncate_all_tool_outputs === true,
         mcp: { disabled: [...(pluginView.disabled_mcps ?? [])], envAllowlist: [...(pluginView.mcp_env_allowlist ?? [])] },
+        // T38: materialized MCP retention policy + repo root for the native
+        // builtin-MCP registration (grep_app remote, lsp local).
+        repoRoot: sourceRoot,
+        mcpPolicy: {
+          retained: [...(manifestMcpPolicy.omoBuiltinsRetained ?? [])],
+          builtinsDisabled: [...(manifestMcpPolicy.omoBuiltinsDisabled ?? [])],
+        },
         tmuxVisualization: pluginView.team_mode?.tmux_visualization === true,
+        // V1 `minimum-opencode-version.ts` refuses an unsupported host. The
+        // native runtime enforces the same floor from the materialized minimum
+        // (derived from integration-manifest.json platform.opencode), read at
+        // setup from `context.app.version`.
+        minOpenCodeVersion: deriveNativeMinOpenCodeVersion(integrationManifest),
         categories: { ...(pluginView.categories ?? {}) },
         disabled: { ...(pluginView.disabled ?? {}) },
         // The resolved monitor block (enabled + allowed_commands) is needed by

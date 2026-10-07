@@ -21,9 +21,15 @@ describe("#given the frozen flow-rule registry", () => {
       "notepad-write-guard",
       "question-label-truncator",
       "sisyphus-junior-notepad",
+      "bash-file-read-guard",
       "fsync-skip-warning:record-start",
     ])
-    expect(afterRules.map((rule) => rule.name)).toEqual(["delegate-task-retry", "fsync-skip-warning"])
+    expect(afterRules.map((rule) => rule.name)).toEqual([
+      "delegate-task-retry",
+      "fsync-skip-warning",
+      "empty-task-response-detector",
+      "tool-output-truncator",
+    ])
     expect(requestSteps.map((step) => step.name)).toEqual(["image-resizer"])
     expect(Object.isFrozen(beforeRules)).toBe(true)
     expect(Object.isFrozen(afterRules)).toBe(true)

@@ -180,24 +180,24 @@ export default {
 
   "bash-file-read-guard": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "El guard V1 (`hooks/bash-file-read-guard.ts`) avisa cuando un comando bash simple usa cat/head/tail para leer un archivo, prefiriendo la tool Read. Verificado: las reglas `tool.execute.before` nativas (`rigel-v2-native-tool-before.mjs`) no lo incluyen. Dueno: T38 del plan maestro (regla before con el mensaje V1 y los tres patrones).",
-    futureEvidence: "dueno: T38; `rigel-v2-native-tool-before.mjs`; V1 `hooks/bash-file-read-guard.ts:6-20`",
+      "El guard V1 (`hooks/bash-file-read-guard.ts`) avisa cuando un comando bash simple usa cat/head/tail para leer un archivo, prefiriendo la tool Read. El port nativo `rigel-v2-native-tool-guards.mjs` reproduce el mensaje V1 byte a byte y los tres patrones exactos como regla `tool.execute.before`; como V2 no admite un mensaje en `execute.before` (probado para el guard non-interactive), la advertencia se hace observable prefijando el comando con un echo a stderr y preservando la lectura. Contrato positivo/negativo y mutation RED/restore en `rigel-v2-native-tool-guards.test.mjs`.",
+    futureEvidence: "`rigel-v2-native-tool-guards.mjs`; `rigel-v2-native-tool-guards.test.mjs`; `rigel-v2-native-flow-rules.mjs`; V1 `hooks/bash-file-read-guard.ts:6-20`; `.omo/evidence/20261007-t38-coverage-guards/mutations.txt`",
   },
   "empty-task-response-detector": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "El detector V1 (`hooks/empty-task-response-detector.ts`) advierte cuando una invocacion de task termina sin respuesta. Verificado: el resultado de `rigel_task` nativo no aplica este aviso. Dueno: T38 del plan maestro (regla after sobre rigel_task con el mensaje V1).",
-    futureEvidence: "dueno: T38; `rigel-v2-native.mjs` (resultado de rigel_task); V1 `hooks/empty-task-response-detector.ts:5-19`",
+      "El detector V1 (`hooks/empty-task-response-detector.ts`) advierte cuando una invocacion de task termina sin respuesta. El port nativo `rigel-v2-native-tool-guards.mjs` aplica la regla `tool.execute.after` al nombre nativo de delegacion (`rigel_task`/`RIGEL_NATIVE_TASK_NAME`) y a `task`, sustituye un resultado completado vacio por el bloque V1 byte a byte, y no toca resultados no vacios, errores ni otras tools. Contrato positivo/negativo y mutation RED/restore en `rigel-v2-native-tool-guards.test.mjs`.",
+    futureEvidence: "`rigel-v2-native-tool-guards.mjs`; `rigel-v2-native-tool-guards.test.mjs`; `rigel-v2-native-flow-rules.mjs`; V1 `hooks/empty-task-response-detector.ts:5-19`; `.omo/evidence/20261007-t38-coverage-guards/mutations.txt`",
   },
   "tool-output-truncator": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "El truncador V1 (`hooks/tool-output-truncator.ts`) recorta la salida de grep/glob/lsp_diagnostics/interactive_bash/skill_mcp/webfetch sobre un limite de tokens (50k general, 10k webfetch). Verificado: el runtime nativo solo trunca lecturas de directorio (`rigel-v2-directory-instructions.mjs`); la salida de tools no se trunca. Dueno: T38 del plan maestro (regla after con el truncador dinamico V1).",
-    futureEvidence: "dueno: T38; `rigel-v2-directory-instructions.mjs` (truncador inline existente, solo directorio); V1 `hooks/tool-output-truncator.ts:5-24`",
+      "El truncador V1 (`hooks/tool-output-truncator.ts`) recorta la salida de grep/glob/lsp_diagnostics/interactive_bash/skill_mcp/webfetch sobre un limite de tokens (50k general, 10k webfetch). El port nativo `rigel-v2-native-tool-guards.mjs` conserva la lista TRUNCATABLE_TOOLS, los dos presupuestos, el truncador de 4 chars/token con 3 lineas de cabecera y el gate `experimental.truncate_all_tool_outputs` (materializado en config/manifiesto/lector y cableado desde `rigel-v2-native.mjs`). Contrato positivo/negativo incluyendo gate on/off y mutation RED/restore.",
+    futureEvidence: "`rigel-v2-native-tool-guards.mjs`; `rigel-v2-native-tool-guards.test.mjs`; `rigel-v2-native-flow-rules.mjs`; `rigel-v2-native-config.mjs`; `rigel-v2-native.mjs`; `generate-v2-agents.mjs`; V1 `hooks/tool-output-truncator.ts:5-24`; `.omo/evidence/20261007-t38-coverage-guards/mutations.txt`",
   },
   "session-notification": {
     classification: "Adaptar",

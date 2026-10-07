@@ -495,6 +495,7 @@ function permissionManifest() {
   return {
     agents: {
       sisyphus: { name: "Sisyphus - ultraworker", mode: "primary", permission: { teammate: "allow", task: "allow", call_omo_agent: "allow" } },
+      librarian: { name: "librarian", mode: "subagent", permission: { "grep_app_*": "allow", task: "deny" } },
       "multimodal-looker": { name: "Multimodal-Looker", mode: "subagent", permission: { look_at: "deny" } },
     },
     metadata: {
@@ -545,9 +546,18 @@ test("native runtime permission wiring blocks a denied call before the executor 
   // The legacy Lsp* names are denied by the translated global tools.
   await expect(wiring.before({ tool: "LspCodeActions", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
 
-  // global teammate:false is a hard V1 catalog disable: the agent teammate
-  // allow must not lift it.
-  await expect(wiring.before({ tool: "team_create", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
+  // T38: the retained OmO lsp_* MCP family is not swallowed by the PascalCase
+  // Lsp* built-in disables; the lsp tools stay callable.
+  await expect(wiring.before({ tool: "lsp_diagnostics", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
+
+  // V1 precedence: an agent `permission` entry overrides the global `tools`
+  // default. Sisyphus has teammate:allow, which re-enables the globally
+  // default-denied team_* family for the lead.
+  await expect(wiring.before({ tool: "team_create", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
+
+  // T38 regression: the librarian's grep_app_* allow re-enables the globally
+  // default-denied grep_app family (V1: only the librarian may search GitHub).
+  await expect(wiring.before({ tool: "grep_app_searchGitHub", agent: "librarian" })).resolves.toBeUndefined()
 
   // An agent allow applies when global tools does not hard-disable the tool.
   await expect(wiring.before({ tool: "call_omo_agent", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
@@ -571,7 +581,7 @@ test("native runtime wildcard agent permission denies every concrete tool name e
   await expect(wiring.before({ tool: "team_create", agent: "Multimodal-Looker" })).rejects.toThrow(/denied/)
 })
 
-test("native runtime agent wildcard allow does not bypass a global hard-disable", async () => {
+test("native runtime agent allow overrides a global tools default-deny", async () => {
   const manifest = {
     agents: { sisyphus: { name: "Sisyphus - ultraworker", mode: "primary", permission: { "*": "allow" } } },
     metadata: { global: { tools: { call_omo_agent: false } } },
@@ -579,7 +589,8 @@ test("native runtime agent wildcard allow does not bypass a global hard-disable"
   const wiring = nativeRuntime.createNativePermissionWiring({ manifest })
   await registerPermissionAgents(wiring, manifest)
 
-  await expect(wiring.before({ tool: "call_omo_agent", agent: "Sisyphus - ultraworker" })).rejects.toThrow(/denied/)
+  // The agent `*: allow` re-enables the globally default-denied call_omo_agent.
+  await expect(wiring.before({ tool: "call_omo_agent", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
   await expect(wiring.before({ tool: "look_at", agent: "Sisyphus - ultraworker" })).resolves.toBeUndefined()
 })
 
@@ -783,6 +794,8 @@ test("native runtime registers its ordered tool hook chain and disposes every re
       "webfetch-redirect-guard",
       "delegate-task-retry",
       "fsync-skip-warning",
+      "empty-task-response-detector",
+      "tool-output-truncator",
     ])
     expect(afterReport.failures).toEqual([])
 
@@ -806,6 +819,7 @@ test("native runtime registers its ordered tool hook chain and disposes every re
       "notepad-write-guard",
       "question-label-truncator",
       "sisyphus-junior-notepad",
+      "bash-file-read-guard",
       "fsync-skip-warning:record-start",
     ])
     expect(beforeReport.failures).toEqual([])
@@ -892,6 +906,7 @@ test("native runtime isolates a throwing execute.before rule and keeps the chain
       "notepad-write-guard",
       "question-label-truncator",
       "sisyphus-junior-notepad",
+      "bash-file-read-guard",
       "fsync-skip-warning:record-start",
     ])
 
@@ -930,6 +945,7 @@ test("native runtime isolates a throwing flow rule and keeps the composed before
       "background-sleep-block",
       "question-label-truncator",
       "sisyphus-junior-notepad",
+      "bash-file-read-guard",
       "fsync-skip-warning:record-start",
     ])
     await dispose()

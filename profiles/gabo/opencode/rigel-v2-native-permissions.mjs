@@ -247,15 +247,18 @@ export function evaluateToolNameGate(toolGates, toolName) {
 
 /**
  * Map a global `config.tools` key onto the tool-name gate pattern(s) it owns.
- * V1-only families collapse to one family pattern; the three legacy LSP tool
- * names and the V2 `lsp_*` aliases both collapse to `lsp_*` + `Lsp*` so a
- * single global disable covers the whole LSP surface.
+ * V1-only families collapse to one family pattern. The three legacy OpenCode
+ * built-in LSP tools (`LspHover`, `LspCodeActions`, `LspCodeActionResolve`) are
+ * exact PascalCase names that V1 disabled to avoid clashing with OmO's own
+ * `lsp_*` MCP tools; they must NOT collapse onto `lsp_*`, or the migration would
+ * globally deny the entire retained LSP surface (a capability V1 kept enabled).
+ * A `lsp` / `lsp_*` key is the family the OmO lsp MCP tools belong to.
  */
 function globalToolGatePatterns(key) {
   if (key.startsWith("grep_app_")) return ["grep_app_*"]
   if (key.startsWith("task_")) return ["task_*"]
   if (key === "teammate" || key.startsWith("team_")) return ["team_*"]
-  if (key === "lsp" || key.startsWith("lsp_") || key.startsWith("Lsp")) return ["lsp_*", "Lsp*"]
+  if (key === "lsp" || key.startsWith("lsp_")) return ["lsp_*"]
   return [key]
 }
 
@@ -348,11 +351,12 @@ export function createNativeToolPermissionGate({ globalGates = [], resolveAgent 
       const toolName = typeof event?.tool === "string" ? event.tool : undefined
       if (!toolName) return
       const agentKey = await resolveAgentKey(event)
-      // Global `config.tools:false` is an absolute V1 catalog disable: it wins
-      // over any agent allow. Only when it does not hard-disable the tool do
-      // the agent-specific gates apply (last agent match wins).
+      // V1 precedence: an agent `permission` entry overrides the global `tools`
+      // default. The global map is a default-deny catalog that specific agents
+      // re-enable (librarian `grep_app_*: allow`; lead/executor `task_*` and
+      // `teammate` allow), and an agent deny/ask also wins over a global allow.
+      // Only when the agent has no matching entry does the global default apply.
       const globalEffect = evaluateToolNameGate(globalList, toolName)
-      if (globalEffect === "deny") throw permissionError(TOOL_PERMISSION_DENIED, `Rigel tool permission denied: tool=${toolName}${agentKey ? `; agent=${agentKey}` : ""}`)
       const agentEffect = agentKey ? evaluateToolNameGate(agentGatesByKey.get(agentKey) ?? [], toolName) : undefined
       const effect = agentEffect !== undefined ? agentEffect : globalEffect
       if (effect === "deny") throw permissionError(TOOL_PERMISSION_DENIED, `Rigel tool permission denied: tool=${toolName}${agentKey ? `; agent=${agentKey}` : ""}`)

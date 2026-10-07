@@ -167,8 +167,10 @@ test("gates the V1 teammate permission across the whole team_* tool family", asy
 
 // Task 10 decision 8: the materialized `config.tools` metadata turns global
 // boolean disables into tool-name gates for the V1-only families, including
-// grep_app_*, the task/team families, lsp_* plus the legacy Lsp* names, and the
-// exact call_omo_agent / look_at / skill_mcp / interactive_bash tools.
+// grep_app_*, the task/team families, the exact legacy Lsp* built-in names, and
+// the exact call_omo_agent / look_at / skill_mcp / interactive_bash tools.
+// T38: the OmO `lsp_*` MCP family is retained, so the PascalCase `Lsp*` built-in
+// disables must not collapse onto it.
 test("translates global config tools into tool-name gates for the V1-only families", async () => {
   const { translateGlobalTools, evaluateToolNameGate } = await load()
   const toolGates = translateGlobalTools({
@@ -185,13 +187,18 @@ test("translates global config tools into tool-name gates for the V1-only famili
   })
   for (const toolName of [
     "grep_app_searchGitHub",
-    "LspHover", "LspCodeActions", "LspCodeActionResolve", "lsp_diagnostics",
+    "LspHover", "LspCodeActions", "LspCodeActionResolve",
     "task_create", "task_list",
     "team_create", "team_delete",
     "look_at", "call_omo_agent", "skill_mcp", "interactive_bash",
   ]) {
     expect(evaluateToolNameGate(toolGates, toolName)).toBe("deny")
   }
+  // T38 regression: the retained OmO lsp_* MCP tools are NOT denied by the
+  // PascalCase built-in disables; only an explicit `lsp_*` key denies them.
+  expect(evaluateToolNameGate(toolGates, "lsp_diagnostics")).toBeUndefined()
+  expect(evaluateToolNameGate(toolGates, "lsp_symbols")).toBeUndefined()
+  expect(evaluateToolNameGate(translateGlobalTools({ "lsp_*": false }), "lsp_diagnostics")).toBe("deny")
   // The task_* family gate must not swallow the native `task` delegation tool.
   expect(evaluateToolNameGate(toolGates, "task")).toBeUndefined()
   expect(evaluateToolNameGate(toolGates, "read")).toBeUndefined()
@@ -212,16 +219,18 @@ test("treats deny as a thrown error, allow as a pass, and ask as blocked pending
   await expect(ask.before({ tool: "call_omo_agent" })).rejects.toMatchObject({ code: TOOL_PERMISSION_APPROVAL_REQUIRED })
 })
 
-test("keeps a global tools hard-disable absolute over an agent allow", async () => {
+test("lets an agent allow override a global tools default-deny (V1 re-enable)", async () => {
   const { createNativeToolPermissionGate } = await load()
   const gate = createNativeToolPermissionGate({ globalGates: [{ pattern: "team_*", effect: "deny" }] })
   gate.registerAgent("Sisyphus", { toolGates: [{ pattern: "team_*", effect: "allow" }] })
-  // config.tools:false is a hard V1 catalog disable; an agent allow cannot lift it.
-  await expect(gate.before({ tool: "team_create", agent: "sisyphus" })).rejects.toThrow(/denied/)
+  // V1 default-deny catalog plus per-agent re-enable: the agent allow wins.
+  await expect(gate.before({ tool: "team_create", agent: "sisyphus" })).resolves.toBeUndefined()
+  // An agent with no matching entry keeps the global default deny.
   await expect(gate.before({ tool: "team_create", agent: "someone-else" })).rejects.toThrow(/denied/)
+  await expect(gate.before({ tool: "team_create" })).rejects.toThrow(/denied/)
 })
 
-test("applies an agent-specific effect only when global tools does not hard-disable the tool", async () => {
+test("applies an agent-specific effect over the global default", async () => {
   const { createNativeToolPermissionGate } = await load()
   const gate = createNativeToolPermissionGate({ globalGates: [{ pattern: "team_*", effect: "deny" }] })
   gate.registerAgent("Sisyphus", {

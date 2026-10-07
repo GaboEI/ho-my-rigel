@@ -42,9 +42,11 @@ function discoveryFetch(overrides = {}) {
       }
       if (url.endsWith("/.well-known/oauth-authorization-server")) return jsonResponse(METADATA)
       if (url === METADATA.registration_endpoint) {
+        if (overrides.registrationStatus) return jsonResponse({ error: "invalid_client_metadata" }, overrides.registrationStatus)
         return jsonResponse({ client_id: "dynamic-client", client_secret: "dynamic-secret" })
       }
       if (url === METADATA.token_endpoint) {
+        if (overrides.tokenFailure) return jsonResponse(overrides.tokenFailure, overrides.tokenFailureStatus ?? 400)
         const form = new URLSearchParams(init?.body ?? "")
         if (form.get("grant_type") === "authorization_code") {
           return jsonResponse({ access_token: "access-1", refresh_token: "refresh-1", expires_in: 3600 })
@@ -56,12 +58,25 @@ function discoveryFetch(overrides = {}) {
   }
 }
 
-function driveCallback(authorizationUrl) {
+function callbackOrigin(authorizationUrl) {
   // The callback port lives on the redirect_uri parameter, not on the
   // authorization endpoint itself (which is https and has no explicit port).
   const url = new URL(authorizationUrl)
-  const redirectUri = new URL(url.searchParams.get("redirect_uri"))
-  return fetch(`${redirectUri.origin}/callback?code=the-code&state=${encodeURIComponent(url.searchParams.get("state"))}`)
+  return new URL(url.searchParams.get("redirect_uri")).origin
+}
+
+function driveCallbackWith(authorizationUrl, { code = "the-code", state } = {}) {
+  const issued = new URL(authorizationUrl).searchParams.get("state")
+  const effectiveState = state ?? issued
+  return fetch(`${callbackOrigin(authorizationUrl)}/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(effectiveState)}`)
+}
+
+function driveCallback(authorizationUrl) {
+  return driveCallbackWith(authorizationUrl)
+}
+
+function driveCallbackError(authorizationUrl, error = "access_denied") {
+  return fetch(`${callbackOrigin(authorizationUrl)}/callback?error=${encodeURIComponent(error)}`)
 }
 
 describe("oauth primitives", () => {
@@ -170,6 +185,94 @@ describe("native OAuth provider", () => {
     await expect(strict.login()).rejects.toThrow("no registration endpoint")
     void provider
     void fetchImpl
+  })
+
+  test("a callback state mismatch is rejected and no token is persisted", async () => {
+    // given: the browser returns a state the provider never issued
+    const storage = memoryStorage()
+    const { fetchImpl } = discoveryFetch()
+    const provider = createNativeOAuthProvider({
+      serverUrl: "https://mcp.example.com",
+      clientId: "static-client",
+      fetchImpl,
+      storage,
+      openBrowser: (authorizationUrl) => { void driveCallbackWith(authorizationUrl, { state: "not-the-issued-state" }) },
+    })
+    // when / then
+    await expect(provider.login()).rejects.toThrow("OAuth state parameter mismatch")
+    expect(provider.tokens()).toBeNull()
+    expect(storage.map.size).toBe(0)
+  })
+
+  test("a token endpoint error surfaces error and error_description", async () => {
+    // given: the token endpoint rejects the authorization code
+    const storage = memoryStorage()
+    const { fetchImpl } = discoveryFetch({ tokenFailure: { error: "invalid_grant", error_description: "code already used" } })
+    const provider = createNativeOAuthProvider({
+      serverUrl: "https://mcp.example.com",
+      clientId: "static-client",
+      fetchImpl,
+      storage,
+      openBrowser: (authorizationUrl) => { void driveCallback(authorizationUrl) },
+    })
+    // when / then
+    await expect(provider.login()).rejects.toThrow("Token exchange failed: invalid_grant: code already used")
+    expect(provider.tokens()).toBeNull()
+    expect(storage.map.size).toBe(0)
+  })
+
+  test("refresh rejects when the token endpoint answers 400", async () => {
+    // given: every token request fails with a 400 OAuth error body
+    const { fetchImpl } = discoveryFetch({ tokenFailure: { error: "invalid_grant", error_description: "refresh token expired" } })
+    const provider = createNativeOAuthProvider({ serverUrl: "https://mcp.example.com", clientId: "static-client", fetchImpl })
+    // when / then
+    await expect(provider.refresh("bad")).rejects.toThrow("Token exchange failed: invalid_grant: refresh token expired")
+    expect(provider.tokens()).toBeNull()
+  })
+
+  test("dynamic client registration failure is surfaced with the status", async () => {
+    // given: the registration endpoint answers non-ok
+    const { fetchImpl } = discoveryFetch({ registrationStatus: 400 })
+    const provider = createNativeOAuthProvider({
+      serverUrl: "https://mcp.example.com",
+      fetchImpl,
+      openBrowser: () => { /* registration fails before any browser open */ },
+    })
+    // when / then
+    await expect(provider.login()).rejects.toThrow("OAuth dynamic client registration failed (400)")
+    expect(provider.tokens()).toBeNull()
+  })
+
+  test("a callback that never arrives times out with the configured timeout and port", async () => {
+    // given: timeout override, and a browser that deliberately never drives the callback
+    const { fetchImpl } = discoveryFetch()
+    const provider = createNativeOAuthProvider({
+      serverUrl: "https://mcp.example.com",
+      clientId: "static-client",
+      fetchImpl,
+      callbackTimeoutMs: 50,
+      openBrowser: () => { /* deliberately never drives the callback */ },
+    })
+    // when / then
+    await expect(provider.login()).rejects.toThrow(/^OAuth callback timed out after 50ms on port \d+$/)
+    expect(provider.tokens()).toBeNull()
+  })
+
+  test("a callback error query parameter is surfaced", async () => {
+    // given: the browser returns ?error=access_denied instead of a code
+    const storage = memoryStorage()
+    const { fetchImpl } = discoveryFetch()
+    const provider = createNativeOAuthProvider({
+      serverUrl: "https://mcp.example.com",
+      clientId: "static-client",
+      fetchImpl,
+      storage,
+      openBrowser: (authorizationUrl) => { void driveCallbackError(authorizationUrl, "access_denied") },
+    })
+    // when / then
+    await expect(provider.login()).rejects.toThrow("OAuth authorization failed: access_denied")
+    expect(provider.tokens()).toBeNull()
+    expect(storage.map.size).toBe(0)
   })
 })
 

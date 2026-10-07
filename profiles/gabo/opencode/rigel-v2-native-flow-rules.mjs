@@ -54,27 +54,37 @@ import {
   fsyncSkipBeforeRules,
 } from "./rigel-v2-native-flow-after.mjs"
 import { requestSteps as nativeRequestSteps } from "./rigel-v2-native-request-steps.mjs"
+import {
+  createBashFileReadGuardRule,
+  createEmptyTaskResponseRule,
+  createToolOutputTruncatorRule,
+} from "./rigel-v2-native-tool-guards.mjs"
 
 /**
  * Build the four ordered collections over ONE fsync tracker. When no tracker is
  * injected a fresh one is created, so tests and the runtime each hold an
  * isolated instance instead of sharing process state.
  */
-export function createFlowRules({ fsyncSkipState } = {}) {
+export function createFlowRules({ fsyncSkipState, truncateAllToolOutputs = false, taskToolName } = {}) {
   const tracker = fsyncSkipState ?? createFsyncSkipWarningState()
   return Object.freeze({
-    beforeRules: Object.freeze([...flowGuardBeforeRules, createFsyncSkipStartRule(tracker)]),
-    afterRules: Object.freeze([createDelegateTaskRetryRule(), createFsyncSkipWarningRule(tracker)]),
+    beforeRules: Object.freeze([...flowGuardBeforeRules, createBashFileReadGuardRule(), createFsyncSkipStartRule(tracker)]),
+    afterRules: Object.freeze([
+      createDelegateTaskRetryRule(),
+      createFsyncSkipWarningRule(tracker),
+      createEmptyTaskResponseRule({ taskToolName }),
+      createToolOutputTruncatorRule({ truncateAll: truncateAllToolOutputs }),
+    ]),
     requestSteps: nativeRequestSteps,
     eventHandlers: Object.freeze([]),
   })
 }
 
 /** `tool.execute.before` rules, appended after the built-in write guards. */
-export const beforeRules = Object.freeze([...flowGuardBeforeRules, ...fsyncSkipBeforeRules])
+export const beforeRules = Object.freeze([...flowGuardBeforeRules, createBashFileReadGuardRule(), ...fsyncSkipBeforeRules])
 
 /** `tool.execute.after` rules, appended after the built-in result transforms. */
-export const afterRules = flowAfterResultRules
+export const afterRules = Object.freeze([...flowAfterResultRules, createEmptyTaskResponseRule(), createToolOutputTruncatorRule()])
 
 /** Ordered `http.request` rewrite steps, composed into the single request hook. */
 export const requestSteps = nativeRequestSteps

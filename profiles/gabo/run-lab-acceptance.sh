@@ -107,6 +107,15 @@ else
   bad "lab API did not return config"
 fi
 
+# Installed CLI acceptance: drives the launcher materialized by the authorized
+# refresh (not the source file) and proves it resolves inside the lab while V1
+# stays byte-identical.
+if [ -x "$lab_root/rigel/bin/rigel-v2" ] && command -v bun >/dev/null 2>&1; then
+  if bun "$root/profiles/gabo/qa-v2-cli-installed.mjs"; then pass "installed CLI acceptance"; else bad "installed CLI acceptance"; fi
+else
+  bad "installed CLI launcher missing at $lab_root/rigel/bin/rigel-v2"
+fi
+
 after_goals=$(goal_probe)
 after_config_hash=$(sha256sum "$HOME/.config/opencode/opencode.json" 2>/dev/null | cut -d' ' -f1)
 after_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>/dev/null | wc -l; done | tr '\n' ',')

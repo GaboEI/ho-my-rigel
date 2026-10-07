@@ -51,7 +51,7 @@ describe("#given no configuration exists", () => {
     // loader does not materialize schema defaults into the plugin view.
     expect(view.monitor).toBeUndefined()
     expect(view.goal).toBeUndefined()
-    expect(view.experimental).toEqual({ task_system: false, preemptive_compaction: false })
+    expect(view.experimental).toEqual({ task_system: false, preemptive_compaction: false, truncate_all_tool_outputs: false })
     expect(view.disabled).toEqual({ tools: [], agents: [], skills: [], hooks: [], commands: [] })
     expect(view.categories).toEqual({})
     expect(view.sources.every((source) => source.loaded === false)).toBe(true)

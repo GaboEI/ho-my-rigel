@@ -20,9 +20,10 @@
 export default {
   "cli-suffix": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El helper `hasCliSuffix` de `packages/omo-opencode/src/mcp/cli-suffix.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque normaliza separadores y decide entre CLI dist y fuente. Se migra con la resolución del CLI, conservando la política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` que mantiene `lsp` disponible.",
-    futureEvidence: "task:task:38",
+      "El helper `hasCliSuffix` de `packages/omo-opencode/src/mcp/cli-suffix.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque normaliza separadores y decide entre CLI dist y fuente. Se porta a `rigel-v2-native-builtin-mcps.mjs` (`normalizeCliPath`/`hasCliSuffix`) y lo consume el resolvedor del servidor `lsp` al elegir el candidato dist o fuente. La correccion de la documentacion oficial V2 (V2 no ejecuta language servers ni expone tools LSP) obliga a registrar el servidor `lsp` nativamente, no a depender de `lsp: true`.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (hasCliSuffix consumido por resolveLspCommand); `profiles/gabo/opencode/rigel-v2-native-builtin-mcps.test.mjs`; `profiles/gabo/qa-v2-builtin-mcps.mjs` (vivo)",
   },
   context7: {
     classification: "Migrar",
@@ -32,27 +33,31 @@ export default {
   },
   "grep-app": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El MCP remoto tier-1 `grep_app` de `packages/omo-opencode/src/mcp/grep-app.ts` se migra como búsqueda de código en GitHub sin autenticación. La política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` lo mantiene disponible en el runtime nativo V2.",
-    futureEvidence: "task:task:38",
+      "El MCP remoto tier-1 `grep_app` de `packages/omo-opencode/src/mcp/grep-app.ts` se registra nativamente con `context.mcp.transform` (`registerNativeBuiltinMcps` en `rigel-v2-native-builtin-mcps.mjs`) porque el host V2 no lo lista. Conserva la definición V1 `{type:remote,url:https://mcp.grep.app,oauth:false}` y la política `mcpPolicy.omoBuiltinsRetained`. La precedencia V1 de permisos (default-deny global + re-allow por agente) se corrigió para que el librarian pueda buscar (allow) y el resto siga denegado.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (GREP_APP_MCP); `profiles/gabo/opencode/rigel-v2-native-builtin-mcps.test.mjs`; `profiles/gabo/opencode/rigel-v2-native-permissions.mjs` (precedencia); `profiles/gabo/qa-v2-builtin-mcps.mjs` (vivo)",
   },
   lsp: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El MCP local stdio tier-1 `lsp` de `packages/omo-opencode/src/mcp/lsp.ts` se migra con su resolución de CLI dist o fuente y su daemon compartido. La política `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json` lo conserva como builtin retenido.",
-    futureEvidence: "task:task:38",
+      "El MCP local stdio tier-1 `lsp` de `packages/omo-opencode/src/mcp/lsp.ts` se registra nativamente con `context.mcp.transform` (`createLspMcpConfig` en `rigel-v2-native-builtin-mcps.mjs`), conservando la resolución dist/fuente/bootstrap, el env por proyecto/config y el daemon compartido. La documentación oficial V2 (migrate-v1) confirma que V2 acepta `lsp` pero NO ejecuta language servers ni expone tools LSP, así que `lsp: true` no basta: el servidor se registra como V1 lo hacía. El gate de permisos también se corrigió: los built-ins PascalCase `Lsp*` ya no colapsan sobre la familia retenida `lsp_*`.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (createLspMcpConfig); `profiles/gabo/opencode/rigel-v2-native-builtin-mcps.test.mjs`; `profiles/gabo/opencode/rigel-v2-native-permissions.mjs`; `profiles/gabo/qa-v2-builtin-mcps.mjs` (vivo)",
   },
   "runtime-executable": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El resolvedor `resolveRuntimeExecutable` de `packages/omo-opencode/src/mcp/runtime-executable.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque localiza node o bun de forma segura. Se migra con la resolución del CLI, respetando `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json`.",
-    futureEvidence: "task:task:38",
+      "El resolvedor `resolveRuntimeExecutable` de `packages/omo-opencode/src/mcp/runtime-executable.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque localiza node o bun de forma segura. Se porta a `rigel-v2-native-builtin-mcps.mjs` (`whichExecutable`/`resolveRuntimeExecutable`, incluido el rechazo de nombres inseguros) y lo consume el resolvedor del servidor `lsp`.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (resolveRuntimeExecutable consumido por resolveLspCommand); `profiles/gabo/opencode/rigel-v2-native-builtin-mcps.test.mjs`",
   },
   shared: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El resolvedor `createAncestorCliCandidates` de `packages/omo-opencode/src/mcp/shared/ancestor-cli-resolver.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque busca el CLI en directorios ancestros. Se migra con la resolución del CLI, respetando `mcpPolicy.omoBuiltinsRetained` de `profiles/gabo/integration-manifest.json`.",
-    futureEvidence: "task:task:38",
+      "El resolvedor `createAncestorCliCandidates` de `packages/omo-opencode/src/mcp/shared/ancestor-cli-resolver.ts` es soporte de runtime del MCP local tier-1 `lsp`, porque busca el CLI en directorios ancestros. Se porta a `rigel-v2-native-builtin-mcps.mjs` (`createAncestorCliCandidates`/`resolveJavaScriptRuntime`) anclado al repo root materializado en el manifiesto, y lo consume el resolvedor del servidor `lsp`.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (createAncestorCliCandidates consumido por resolveLspCommand); `profiles/gabo/opencode/rigel-v2-native-builtin-mcps.test.mjs`",
   },
   websearch: {
     classification: "Migrar",

@@ -22,6 +22,10 @@ env RIGEL_V2_LAB_ROOT="$lab_root" RIGEL_V2_HOME="$lab_home" RIGEL_V2_CONFIG="$la
   node "$root/profiles/gabo/apply-v2-agent-layer.mjs"
 env RIGEL_V2_LAB_ROOT="$lab_root" RIGEL_V2_HOME="$lab_home" RIGEL_V2_CONFIG="$lab_config" \
   node "$root/profiles/gabo/switch-live-plugin-to-native-v2.mjs"
+# Materialize the Rigel V2 CLI into the lab deployment (launcher under the lab
+# HOME/XDG). This is the only vehicle that installs the CLI; it never touches V1.
+env RIGEL_V2_LAB_ROOT="$lab_root" RIGEL_V2_HOME="$lab_home" RIGEL_V2_CONFIG="$lab_config" \
+  node "$root/profiles/gabo/materialize-v2-cli.mjs"
 systemctl --user start "$service"
 completed=true
 

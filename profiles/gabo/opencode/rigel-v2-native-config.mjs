@@ -429,6 +429,13 @@ function validateExperimental(value, path, diagnostics) {
     if (typeof value.hashline_edit === "boolean") parsed.hashline_edit = value.hashline_edit
     else warn(diagnostics, `config: ${path}: experimental.hashline_edit ignored (invalid value)`)
   }
+  // T38: V1 `experimental.truncate_all_tool_outputs` (off by default). When set,
+  // the native tool-output truncator applies to every tool, not only the V1
+  // TRUNCATABLE_TOOLS list.
+  if ("truncate_all_tool_outputs" in value) {
+    if (typeof value.truncate_all_tool_outputs === "boolean") parsed.truncate_all_tool_outputs = value.truncate_all_tool_outputs
+    else warn(diagnostics, `config: ${path}: experimental.truncate_all_tool_outputs ignored (invalid value)`)
+  }
   return parsed
 }
 
@@ -655,6 +662,22 @@ function profileRecord(layer, profileName) {
   return result
 }
 
+function stringArray(value) {
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
+}
+
+/**
+ * The user-scope MCP env allowlist across every placement the unified schema
+ * admits at the user layer: the layer root, the `[opencode]` harness block, and
+ * the same two spots inside the selected profile block. Mirrors V1
+ * `protectedUserView` (which reads the block) without dropping a root-level key.
+ */
+function collectUserMcpEnvAllowlist(layer, profileName) {
+  const profile = profileRecord(layer, profileName)
+  const placements = [layer, layer["[opencode]"], profile, profile["[opencode]"]]
+  return placements.flatMap((placement) => (isPlainRecord(placement) ? stringArray(placement.mcp_env_allowlist) : []))
+}
+
 function validateLayer(raw, source, diagnostics) {
   if (!isPlainRecord(raw)) {
     warn(diagnostics, `config: ${source.path}: layer ignored (not an object)`)
@@ -744,9 +767,12 @@ export function resolveNativePluginConfig(options = {}) {
     }
     layers.push({ config: layer, path: candidate.path, scope: candidate.scope })
     // V1 security rule: the MCP env allowlist is user-layer only, so a project
-    // layer can never extend it. Union comes only from user-scope layers.
-    if (Array.isArray(layer.mcp_env_allowlist) && candidate.scope === "user") {
-      userMcpEnvAllowlist = [...new Set([...userMcpEnvAllowlist, ...layer.mcp_env_allowlist])]
+    // layer can never extend it. V1 reads it from the harness block
+    // (`protectedUserView` = `[opencode]`), and the unified layer schema also
+    // admits it at the layer root and in the user's own profile block, so a
+    // user-scope layer contributes from all three placements.
+    if (candidate.scope === "user") {
+      userMcpEnvAllowlist = [...new Set([...userMcpEnvAllowlist, ...collectUserMcpEnvAllowlist(layer, profileName)])]
     }
     sources.push({ path: candidate.path, scope: candidate.scope, loaded: true })
   }
@@ -798,6 +824,9 @@ export function resolveNativePluginConfig(options = {}) {
       // the runtime falls back to the V1 0.78 constant.
       preemptive_compaction: config.experimental?.preemptive_compaction ?? false,
       preemptive_compaction_threshold: config.experimental?.preemptive_compaction_threshold,
+      // T38: V1 truncate-all gate (off by default). Rides the manifest so the
+      // truncator rule reads it without parsing omo.jsonc in the runtime.
+      truncate_all_tool_outputs: config.experimental?.truncate_all_tool_outputs ?? false,
     },
     team_mode: config.team_mode,
     // Root hashline_edit is authoritative; the legacy experimental placement is
@@ -891,6 +920,28 @@ export function readNativeMcpPolicy(manifest) {
   return { disabled: normalize(source.disabled), envAllowlist: normalize(source.envAllowlist) }
 }
 
+/**
+ * Read the materialized repo root (T38) used to resolve `packages/lsp-daemon`
+ * for the native builtin `lsp` MCP server. Returns undefined when absent or
+ * non-string, so the caller degrades instead of guessing a path.
+ */
+export function readNativeRepoRoot(manifest) {
+  const value = manifest?.metadata?.global?.repoRoot
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+/**
+ * Read the materialized MCP retention policy (T38): the OmO builtin MCP servers
+ * the profile keeps (`retained`) and the ones it disables (`builtinsDisabled`).
+ * Both normalize to string arrays; an absent block yields empty arrays.
+ */
+export function readNativeMcpBuiltinsPolicy(manifest) {
+  const raw = manifest?.metadata?.global?.mcpPolicy
+  const source = isPlainObject(raw) ? raw : {}
+  const normalize = (value) => Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
+  return { retained: normalize(source.retained), builtinsDisabled: normalize(source.builtinsDisabled) }
+}
+
 export function readNativeMaxTools(manifest) {
   const value = manifest?.metadata?.global?.maxTools
   return Number.isInteger(value) && value >= 1 ? value : undefined
@@ -904,6 +955,80 @@ export function readNativeMaxTools(manifest) {
 export function readNativePreemptiveThreshold(manifest) {
   const value = manifest?.metadata?.global?.preemptiveCompactionThreshold
   return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 1 ? value : undefined
+}
+
+/**
+ * Read the materialized `experimental.truncate_all_tool_outputs` (T38). Defaults
+ * to false (V1 default) when absent or non-boolean.
+ */
+export function readNativeTruncateAllToolOutputs(manifest) {
+  return manifest?.metadata?.global?.truncateAllToolOutputs === true
+}
+
+// The materialized host minimum. `integration-manifest.json` declares the
+// supported platform as a range (e.g. ">=2.0.19"); the generator reduces it to
+// the bare version so the runtime never parses the range itself.
+const HOST_VERSION_SELECTOR = /(\d+(?:\.\d+)*)/
+
+/**
+ * Reduce a declared OpenCode platform selector to the bare minimum version the
+ * generator materializes. Returns undefined for an absent or selector-free
+ * value so the runtime degrades instead of blocking setup on a malformed source.
+ */
+export function deriveNativeMinOpenCodeVersion(integrationManifest) {
+  const declared = integrationManifest?.platform?.opencode
+  if (typeof declared !== "string") return undefined
+  const match = HOST_VERSION_SELECTOR.exec(declared.trim())
+  return match ? match[1] : undefined
+}
+
+/**
+ * Read the materialized minimum host version (`metadata.global.minOpenCodeVersion`).
+ * Absent or non-string yields undefined, so a manifest predating this field keeps
+ * loading exactly as before.
+ */
+export function readNativeMinOpenCodeVersion(manifest) {
+  const value = manifest?.metadata?.global?.minOpenCodeVersion
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+/**
+ * Port of `packages/omo-opencode/src/shared/opencode-version.ts` `compareVersions`
+ * (numeric, prerelease-suffix stripped). Kept in lockstep by the parity test so
+ * the runtime and the V1 CLI cannot disagree on a version boundary.
+ */
+export function compareNativeVersions(left, right) {
+  const parse = (value) => String(value ?? "").replace(/^v/, "").split("-")[0].split(".").map((part) => parseInt(part, 10) || 0)
+  const leftParts = parse(left)
+  const rightParts = parse(right)
+  const length = Math.max(leftParts.length, rightParts.length)
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0
+    const rightPart = rightParts[index] ?? 0
+    if (leftPart < rightPart) return -1
+    if (leftPart > rightPart) return 1
+  }
+  return 0
+}
+
+/**
+ * Host-version gate (V1 `minimum-opencode-version.ts` parity). Reads the
+ * materialized minimum from the manifest and compares it to the host identity
+ * the V2 setup context exposes on `context.app.version`. Degrades silently
+ * (`checked: false`) when either side is absent, so a host that does not publish
+ * its version and a manifest that does not carry a minimum both stay loadable.
+ */
+export function checkNativeHostVersion(manifest, hostVersion) {
+  const minimum = readNativeMinOpenCodeVersion(manifest)
+  if (minimum === undefined) return { checked: false, ok: true }
+  if (typeof hostVersion !== "string" || hostVersion.trim().length === 0) return { checked: false, ok: true }
+  if (compareNativeVersions(hostVersion, minimum) >= 0) return { checked: true, ok: true, minimum }
+  return {
+    checked: true,
+    ok: false,
+    minimum,
+    message: `Detected OpenCode ${hostVersion}, but this Rigel runtime requires OpenCode ${minimum}+. Update OpenCode, then reload the plugin.`,
+  }
 }
 
 /**

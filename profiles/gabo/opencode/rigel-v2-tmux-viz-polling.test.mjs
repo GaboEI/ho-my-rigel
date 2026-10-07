@@ -1,21 +1,23 @@
 import { describe, expect, test } from "bun:test"
 import { createTmuxVizPolling, STABLE_POLLS_REQUIRED, MIN_STABILITY_TIME_MS } from "./rigel-v2-tmux-viz-polling.mjs"
 
-function harness({ tracked, status = null } = {}) {
+function harness({ tracked, status = null, runner, fetchSessionStatus, timeouts } = {}) {
   const sessions = new Map(tracked ?? [])
   const closes = []
+  const logs = []
   let statuses = status
   const polling = createTmuxVizPolling({
     getTrackedSessions: () => sessions,
     closeSessionById: async (sessionID) => { closes.push(sessionID); sessions.delete(sessionID) },
-    runner: { run: async () => ({ exitCode: 0, stdout: "", stderr: "" }) },
+    runner: runner ?? { run: async () => ({ exitCode: 0, stdout: "", stderr: "" }) },
     serverUrl: "http://127.0.0.1:1",
     directory: "/work",
-    fetchSessionStatus: async () => statuses,
-    logger: () => {},
+    fetchSessionStatus: fetchSessionStatus ?? (async () => statuses),
+    logger: (line) => { logs.push(line) },
+    timeouts,
   })
   return {
-    sessions, closes, polling,
+    sessions, closes, logs, polling,
     setStatus: (map) => { statuses = map },
   }
 }
@@ -94,5 +96,71 @@ describe("tmux-viz polling", () => {
     await polling.pollOnce(Date.now())
     expect(replacements[0]).toContain("respawn-pane")
     expect(sessions.get("ses_child").attachActivated).toBe(true)
+  })
+
+  test("a never-activated placeholder past the session timeout is closed and logged", async () => {
+    const now = 5_000_000
+    const harness1 = harness({
+      tracked: [["ses_child", trackedSession({ attachActivated: false, attachActivatedAt: null, createdAt: now - 61_000, lastSeenAt: null })]],
+      timeouts: { sessionTimeout: 60_000 },
+    })
+    await harness1.polling.pollOnce(now)
+    expect(harness1.closes).toEqual(["ses_child"])
+    expect(harness1.logs).toEqual(["[oh-my-rigel] tmux-viz: never-activated pane timed out (1min): ses_child"])
+  })
+
+  test("an attached session whose status disappears past the missing grace is closed as missing", async () => {
+    const t1 = 5_000_000
+    const harness1 = harness({
+      tracked: [["ses_child", trackedSession({ createdAt: t1 - 1_000, attachActivatedAt: t1 - 20_000, lastSeenAt: t1 - 999 })]],
+      timeouts: { sessionTimeout: 60_000, missingGrace: 1_000 },
+    })
+    harness1.setStatus(new Map([["ses_child", "running"]]))
+    await harness1.polling.pollOnce(t1)
+    // still alive: a fresh sighting is not a disappearance
+    expect(harness1.closes).toEqual([])
+    harness1.setStatus(new Map())
+    await harness1.polling.pollOnce(t1 + 1_001)
+    expect(harness1.closes).toEqual(["ses_child"])
+    expect(harness1.logs).toEqual(["[oh-my-rigel] tmux-viz: closing pane for ses_child (stable=false, missing=true, timedOut=false)"])
+  })
+
+  test("an attached session past the session timeout with a recent sighting is closed as timed out", async () => {
+    const now = 5_000_000
+    const harness1 = harness({
+      tracked: [["ses_child", trackedSession({ createdAt: now - 60_001, attachActivatedAt: now - 11_000, lastSeenAt: now - 500 })]],
+      timeouts: { sessionTimeout: 60_000, missingGrace: 1_000 },
+    })
+    await harness1.polling.pollOnce(now)
+    expect(harness1.closes).toEqual(["ses_child"])
+    expect(harness1.logs).toEqual(["[oh-my-rigel] tmux-viz: closing pane for ses_child (stable=false, missing=false, timedOut=true)"])
+  })
+
+  test("a poll re-entered while one is in flight is a no-op", async () => {
+    let calls = 0
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    const harness1 = harness({
+      fetchSessionStatus: async () => { calls += 1; await gate; return new Map() },
+    })
+    const first = harness1.polling.pollOnce(5_000_000)
+    const second = harness1.polling.pollOnce(5_000_000)
+    release()
+    await first
+    await second
+    expect(calls).toBe(1)
+  })
+
+  test("a focused placeholder whose attach respawn exits non-zero stays inactive and is not closed", async () => {
+    const now = 5_000_000
+    const harness1 = harness({
+      tracked: [["ses_child", trackedSession({ attachActivated: false, attachActivatedAt: null, createdAt: now, lastSeenAt: null })]],
+      runner: { run: async () => ({ exitCode: 1, stdout: "", stderr: "respawning failed" }) },
+    })
+    harness1.sessions.get("ses_child").lastWindowState = { agentPanes: [{ paneId: "%1", active: true }], windowActive: true, sessionAttached: true }
+    await harness1.polling.pollOnce(now)
+    expect(harness1.logs.some((line) => line.includes("attach respawn failed"))).toBe(true)
+    expect(harness1.sessions.get("ses_child").attachActivated).toBe(false)
+    expect(harness1.closes).toEqual([])
   })
 })
