@@ -34,7 +34,7 @@ const TEAM = {
 }
 
 function seededStorage() {
-  return memoryStorage({ "rigel-v2/team/builders": structuredClone(TEAM) })
+  return memoryStorage({ "rigel-v2/team/p-default/builders": structuredClone(TEAM) })
 }
 
 function toolEvent(tool, sessionID, input = {}) {
@@ -102,7 +102,7 @@ describe("native team mailbox injector", () => {
     expect(event.messages[0].content).toContain("<team-mailbox team=\"builders\">")
     expect(event.messages[0].content).toContain("please start")
     expect(event.messages[0].content).toContain("found a bug")
-    const team = await storage.get("rigel-v2/team/builders")
+    const team = await storage.get("rigel-v2/team/p-default/builders")
     expect(team.messages.every((message) => message.read === true)).toBe(true)
   })
 

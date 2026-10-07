@@ -2,56 +2,37 @@
  * Native V2 team gating and context injectors (correction H2; V1 parity:
  * `hooks/team-tool-gating/hook.ts`, `hooks/team-mailbox-injector/hook.ts`,
  * `hooks/team-mode-status-injector/hook.ts`), operating on the native team
- * storage model written by `tools/team.tools.mjs` (team name as the key,
- * `leaderSessionID` for the lead, `member.sessionID` for members).
+ * storage model written by `tools/team.tools.mjs`.
+ *
+ * Teams are namespaced per project (`rigel-v2/team/<projectKey>/<name>`). The
+ * gating scans the project namespaces and matches by the CALLING session: a
+ * session participates in exactly one team, so a tool call binds to that team's
+ * record and never to a same-named team in another project.
  *
  * Gating policy (tool.execute.before rule, team_mode gate):
- * - `team_create`: denied when the calling session is already a participant
- *   (lead or member) of any team.
+ * - `team_create`: denied when the calling session is already a participant of
+ *   any team.
  * - `team_delete` / `team_shutdown_request`: lead of the named team only.
- * - `team_approve_shutdown` / `team_reject_shutdown`: lead or member of the
- *   named team.
+ * - `team_approve_shutdown` / `team_reject_shutdown`: participant of the named team.
  * - `team_list`: open.
- * - universal tools (send / task_create / task_list / task_update /
- *   task_get / status): any participant of the named team.
- * - any other `team_*` tool: participant of the named team.
+ * - universal tools: any participant of the named team.
  * A denial throws, which blocks the tool call in the V2 execute.before chain.
- *
- * Injectors (context hook): for a member session, unread routed messages are
- * prepended to the last real user message as a `<team-mailbox>` block and
- * marked read (the injection IS the delivery, V1 poll-and-inject parity). For
- * any participant (lead or member), a `<team-status>` block with the team
- * status and member states is prepended. Injectors are no-ops for
- * non-participants, so ordinary sessions pay nothing.
  */
 
-const TEAM_PREFIX = "rigel-v2/team/"
+import { TEAM_RECORD_ROOT } from "./rigel-v2-team-project-scope.mjs"
 
-async function listTeams(storage) {
+async function scanTeamEntries(storage) {
   if (!storage || typeof storage.scan !== "function") return []
-  const result = await storage.scan({ prefix: TEAM_PREFIX })
+  const result = await storage.scan({ prefix: TEAM_RECORD_ROOT })
   return (result?.entries ?? [])
-    .map((entry) => entry.value)
-    .filter((value) => value && typeof value === "object")
+    .filter((entry) => entry && typeof entry.key === "string" && entry.value && typeof entry.value === "object")
+    .map((entry) => ({ key: entry.key, team: entry.value }))
 }
 
 function participantOf(team, sessionID) {
   if (team.leaderSessionID === sessionID) return "lead"
   if ((team.members ?? []).some((member) => member?.sessionID === sessionID)) return "member"
   return undefined
-}
-
-async function resolveParticipant(storage, sessionID) {
-  for (const team of await listTeams(storage)) {
-    const role = participantOf(team, sessionID)
-    if (role) return { role, team }
-  }
-  return { role: undefined }
-}
-
-async function teamByName(storage, name) {
-  if (typeof name !== "string" || !name.trim()) return undefined
-  return storage.get(`${TEAM_PREFIX}${name.trim()}`)
 }
 
 export function resolveNativeTeamParticipant(team, sessionID) {
@@ -88,35 +69,36 @@ export function createNativeTeamGatingRule({ storage } = {}) {
       const toolName = typeof event?.tool === "string" ? event.tool : ""
       if (!toolName.startsWith("team_")) return
       const sessionID = event?.sessionID
-      const participant = await resolveParticipant(storage, sessionID)
+      const entries = await scanTeamEntries(storage)
 
       if (toolName === "team_create") {
-        if (participant.role !== undefined) {
-          throw new Error(`team_create denied: session is already a participant of team ${participant.team.name}`)
-        }
+        const participation = entries.find((entry) => participantOf(entry.team, sessionID) !== undefined)
+        if (participation) throw new Error(`team_create denied: session is already a participant of team ${participation.team.name}`)
         return
       }
 
-      const team = await teamByName(storage, event?.input?.team_name ?? event?.input?.name)
+      const requested = event?.input?.team_name ?? event?.input?.name
+      const named = entries.filter((entry) => entry.team.name === requested)
+      const participant = named.find((entry) => participantOf(entry.team, sessionID) !== undefined)
 
       if (toolName === "team_delete" || toolName === "team_shutdown_request") {
-        if (!team || participantOf(team, sessionID) !== "lead") {
+        if (!named.some((entry) => participantOf(entry.team, sessionID) === "lead")) {
           throw new Error(`${toolName} is lead-only`)
         }
         return
       }
 
       if (toolName === "team_approve_shutdown" || toolName === "team_reject_shutdown") {
-        if (!team || participantOf(team, sessionID) === undefined) {
-          throw new Error(`${toolName}: caller must be a participant of team ${team?.name ?? "(unknown)"}`)
+        if (!participant) {
+          throw new Error(`${toolName}: caller must be a participant of team ${requested ?? "(unknown)"}`)
         }
         return
       }
 
       if (toolName === "team_list") return
 
-      if (!team || participantOf(team, sessionID) === undefined) {
-        throw new Error(`${toolName} requires participation in team ${team?.name ?? "(unknown)"}`)
+      if (!participant) {
+        throw new Error(`${toolName} requires participation in team ${requested ?? "(unknown)"}`)
       }
     },
   }
@@ -128,14 +110,14 @@ export function createNativeTeamMailboxInjector({ storage } = {}) {
   }
   return async (event) => {
     if (!Array.isArray(event?.messages) || typeof event.sessionID !== "string") return
-    for (const team of await listTeams(storage)) {
+    for (const { key, team } of await scanTeamEntries(storage)) {
       const member = (team.members ?? []).find((entry) => entry?.sessionID === event.sessionID)
       if (!member) continue
       const unread = (team.messages ?? []).filter((message) => message?.to === member.name && message.read === false)
       if (unread.length === 0) continue
       const block = `<team-mailbox team="${team.name}">\n${unread.map((message) => `- from ${message.from ?? "unknown"}: ${message.text}`).join("\n")}\n</team-mailbox>`
       if (prependToLastUserMessage(event, block)) {
-        await storage.set(`${TEAM_PREFIX}${team.name}`, {
+        await storage.set(key, {
           ...team,
           messages: (team.messages ?? []).map((message) => message?.to === member.name && message.read === false ? { ...message, read: true } : message),
         })
@@ -151,7 +133,7 @@ export function createNativeTeamStatusInjector({ storage } = {}) {
   }
   return async (event) => {
     if (!Array.isArray(event?.messages) || typeof event.sessionID !== "string") return
-    for (const team of await listTeams(storage)) {
+    for (const { team } of await scanTeamEntries(storage)) {
       if (participantOf(team, event.sessionID) === undefined) continue
       const members = (team.members ?? [])
         .map((member) => `- ${member.name}: ${member.status}${member.error ? ` (${member.error})` : ""}`)

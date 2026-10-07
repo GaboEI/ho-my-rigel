@@ -74,6 +74,8 @@ import { registerBuiltinCommands } from "./rigel-v2-native-builtin-commands.mjs"
 import { createNativeContextLimitRecovery, createNativeIdleContinuations, createNativeIdleGate } from "./rigel-v2-native-phase4-events.mjs"
 import { createNativeTeamEventHandlers } from "./rigel-v2-team-events.mjs"
 import { createNativeTeamGatingRule, createNativeTeamMailboxInjector, createNativeTeamStatusInjector } from "./rigel-v2-team-gating.mjs"
+import { createGitWorktreeRunner } from "./rigel-v2-team-worktrees.mjs"
+import { createTeamScopeRegistry } from "./rigel-v2-team-scope-registry.mjs"
 import { createNativeMonitorStatusInjector } from "./rigel-v2-monitor-status.mjs"
 import { registerClaudeCodeMcps } from "./rigel-v2-claude-code-mcp.mjs"
 import { registerNativeBuiltinMcps, resolveOpenCodeConfigDir } from "./rigel-v2-native-builtin-mcps.mjs"
@@ -630,11 +632,28 @@ export default {
     // (idle wake hint, member status, member error, lead orphan) join the same
     // shared event loop instead of opening a second subscription. Handlers are
     // error-isolated inside the module, so one failure never aborts the loop.
+    // Per-member worktrees. One manager built from the project canonical root is
+    // shared by the team tools (create/delete/approved shutdown) and the
+    // lead-orphan handler. `session.move` is the native equivalent of V1
+    // launching a member with cwd=its worktree.
+    // Per-repo team scope registry: teams, the cleanup journal and worktrees are
+    // keyed by the SESSION's repo (resolved per tool call and per event), so one
+    // plugin instance serving several repos never collides or cross-cleans.
+    const teamScopeRegistry = nativeGates.team_mode === true && typeof context?.storage?.set === "function"
+      ? createTeamScopeRegistry({
+          storage: context.storage,
+          runGit: createGitWorktreeRunner(),
+          log: (line) => console.error(line),
+          bindSession: typeof context?.session?.move === "function"
+            ? async ({ sessionID, directory }) => { await context.session.move({ sessionID, directory, delivery: "queue" }) }
+            : undefined,
+        })
+      : undefined
     const teamEventHandlers = nativeGates.team_mode === true && typeof context?.storage?.set === "function"
-      ? createNativeTeamEventHandlers({ storage: context.storage, session: context.session })
+      ? createNativeTeamEventHandlers({ storage: context.storage, session: context.session, scopeRegistry: teamScopeRegistry })
       : []
-    // Team gating (execute.before rule) and the mailbox/status context
-    // injectors live on the same team_mode gate as the event handlers.
+    // Gating and injectors scan the project namespaces and act only on the team
+    // the calling session belongs to.
     const teamGatingRule = teamEventHandlers.length > 0
       ? createNativeTeamGatingRule({ storage: context.storage })
       : undefined
@@ -1509,6 +1528,7 @@ export default {
       syncTodos: taskTodoSync?.syncTodos,
       maxTools: readNativeMaxTools(manifest),
       existingToolNames: coreToolNames,
+      teamScopeRegistry,
     })
     goalController = conditionalTools.goalController
     let goalCommandRegistration

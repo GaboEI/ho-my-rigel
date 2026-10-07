@@ -67,6 +67,11 @@ export function buildConditionalToolDefinitions({
   goalStore,
   goalController,
   teamStorage,
+  teamScopeRegistry,
+  teamResolveScope,
+  teamWorktrees,
+  teamWorktreeReconciler,
+  teamProjectKey,
   syncTodos,
   getSessionID,
   onUnavailable = () => {},
@@ -118,7 +123,7 @@ export function buildConditionalToolDefinitions({
 
   if (gates.team_mode === true) {
     if (teamStorage) {
-      const tools = createTeamTools({ storage: teamStorage, getSessionID })
+      const tools = createTeamTools({ storage: teamStorage, getSessionID, resolveScopeForSession: teamResolveScope, worktreeManager: teamWorktrees, worktreeReconciler: teamWorktreeReconciler, projectKey: teamProjectKey })
       for (const name of TEAM_TOOL_NAMES) {
         definitions[name] = tools[name]
         names.push(name)
@@ -158,6 +163,10 @@ export async function registerConditionalNativeTools({
   syncTodos,
   getSessionID,
   maxTools,
+  teamWorktrees,
+  teamWorktreeReconciler,
+  teamProjectKey,
+  teamScopeRegistry,
   existingToolNames = [],
   onRegistered,
   log = console.error,
@@ -188,6 +197,17 @@ export async function registerConditionalNativeTools({
     ? createPtyCommandRunner({ pty, location, baseUrl })
     : undefined)
   const storage = context?.storage
+  // Resolve the calling session's project from its own location, so a plugin
+  // instance serving several repos isolates each one.
+  const teamResolveScope = teamScopeRegistry && typeof context?.session?.get === "function"
+    ? async (sessionID) => {
+        if (typeof sessionID !== "string" || !sessionID) throw new Error("team tool requires a calling session id")
+        const info = await context.session.get({ sessionID })
+        const directory = info?.data?.location?.directory ?? info?.location?.directory ?? info?.directory
+        if (!directory) throw new Error("team session location is unavailable")
+        return teamScopeRegistry.forRepoRoot(directory)
+      }
+    : undefined
   // The task list id must follow the active project directory, not the service
   // process cwd. `directory` is the V2 setup location passed by the runtime.
   const listId = resolveTaskListId({ cwd: directory })
@@ -212,6 +232,11 @@ export async function registerConditionalNativeTools({
     taskLock: taskLock ?? createTaskLock(),
     goalStore: resolvedGoalStore,
     teamStorage: storage,
+    teamScopeRegistry,
+    teamResolveScope,
+    teamWorktrees,
+    teamWorktreeReconciler,
+    teamProjectKey,
     goalController,
     syncTodos,
     getSessionID,

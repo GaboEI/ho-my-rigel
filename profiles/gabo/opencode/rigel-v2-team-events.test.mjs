@@ -142,6 +142,55 @@ describe("native team event handlers", () => {
     expect(team.status).toBe("orphaned")
   })
 
+  test("an orphaned team schedules non-blocking worktree reclamation for every member", async () => {
+    // given
+    const storage = memoryStorage()
+    const tools = await seedTeam(storage)
+    const scheduled = []
+    const worktrees = { cleanupNonBlocking: ({ members }) => { scheduled.push(members.map((member) => member.name)); return Promise.resolve({ removed: [], errors: [] }) } }
+    const handlers = createNativeTeamEventHandlers({ storage, session: {}, worktrees })
+    // when
+    await handlers[3]({ type: "session.deleted", sessionID: "lead-session" })
+    // then
+    const team = await tools.team_status.execute({ team_name: "builders" })
+    expect(team.status).toBe("orphaned")
+    expect(scheduled).toEqual([["scout", "digger"]])
+  })
+
+  test("a throwing orphan cleanup is isolated and can never propagate into the shared event loop", async () => {
+    // given
+    const storage = memoryStorage()
+    await seedTeam(storage)
+    const worktrees = { cleanupNonBlocking: () => { throw new Error("cleanup boom") } }
+    const handlers = createNativeTeamEventHandlers({ storage, session: {}, worktrees })
+    // when
+    let propagated = null
+    try {
+      await handlers[3]({ type: "session.deleted", sessionID: "lead-session" })
+    } catch (error) {
+      propagated = error
+    }
+    // then
+    expect(propagated).toBeNull()
+  })
+
+  test("an orphaned team records a durable cleanup journal entry and runs pending cleanup", async () => {
+    // given
+    const storage = memoryStorage()
+    await seedTeam(storage)
+    const calls = []
+    const reconciler = {
+      record: async ({ teamName, reason }) => { calls.push(["record", teamName, reason]) },
+      runPending: async ({ teamName }) => { calls.push(["run", teamName]); return { cleaned: true } },
+    }
+    const handlers = createNativeTeamEventHandlers({ storage, session: {}, reconciler })
+    // when
+    await handlers[3]({ type: "session.deleted", sessionID: "lead-session" })
+    // then
+    expect(calls).toContainEqual(["record", "builders", "orphan"])
+    expect(calls.some((call) => call[0] === "run")).toBe(true)
+  })
+
   test("a throwing handler is logged and never propagates into the shared event loop", async () => {
     // given: a storage whose scan rejects, so the idle-wake-hint body throws for real
     const logs = []

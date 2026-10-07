@@ -150,10 +150,10 @@ export default {
   },
   "team-mode": {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "La coordinacion multiagente de `features/team-mode/` vive sobre el modelo nativo de storage (`rigel-v2/team/<name>`): las 12 herramientas team_*, los 4 handlers de eventos (idle wake hint, member status, member error, lead orphan), el gating por rol y los inyectores de mailbox y estado. Gap exacto: los worktrees por miembro no tienen puerto. Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
-    futureEvidence: "`tools/team.tools.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-gating.mjs`; `rigel-v2-team-events.test.mjs`; `rigel-v2-team-gating.test.mjs`; `rigel-v2-native-conditional-tools.test.mjs`",
+      "La coordinacion multiagente de `features/team-mode/` vive sobre el modelo nativo de storage (`rigel-v2/team/<name>`): las 12 herramientas team_*, los 4 handlers de eventos (idle wake hint, member status, member error, lead orphan), el gating por rol y los inyectores de mailbox y estado. Cierra el ultimo gap: cada miembro recibe un worktree git exclusivo (rama `rigel-team/<team>/<member>`), la ruta se persiste en el record del team y la sesion del miembro se enlaza a su worktree via `session.move`; el shutdown aprobado y el lead-orphan limpian worktrees, ramas y directorios sin bloquear, con reintento acotado y registro observable. Un diario persistente de cleanup y la reconciliacion al arrancar evitan residuos si el proceso muere a mitad del cleanup.",
+    futureEvidence: "`rigel-v2-team-worktrees.mjs`; `rigel-v2-team-worktrees.test.mjs`; `tools/team.tools.mjs`; `tools/team.tools.test.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-events.test.mjs`; `rigel-v2-native-conditional-tools.mjs`; `rigel-v2-native.mjs`",
   },
   "tmux-subagent": {
     classification: "Migrar",
