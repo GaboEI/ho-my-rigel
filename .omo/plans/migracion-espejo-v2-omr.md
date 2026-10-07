@@ -261,7 +261,8 @@ Tu siguiente paso: aprobar este plan y autorizar la Fase 0.
   - Commit: `feat(profiles): think-mode and variant adaptation for v2`
 
 
-- [ ] 26. Worktrees por miembro de team mode
+- [x] 26. Worktrees por miembro de team mode
+  - Estado (cerrado y publicado 2026-10-07): publicado en `origin/v2-mirror` (`f7926514f`). Evidencia: `.omo/evidence/20261007-t26-team-worktrees/task-26.txt` y nota de boveda [[2026-10-07-fase-5-tarea-26]].
   - Objetivo: efecto V1 completo: cada miembro edita en su worktree aislado, sin colisiones concurrentes.
   - Alcance V1: `features/team-mode/team-runtime/create.ts` (creacion de worktrees por miembro), `packages/team-core/src/team-worktree/` (worktree add/remove sobre git), `features/team-mode/team-runtime/delete-team.ts` (limpieza). Efectos observables: al crear un team, cada miembro recibe un worktree dedicado; las ediciones del miembro ocurren en ese arbol; al apagar (shutdown aprobado u orphan), los worktrees se eliminan sin dejar ramas ni directorios huerfanos.
   - API oficial V2 -> estrategia: reescribir sobre el modelo de storage nativo de teams (`rigel-v2/team/<name>`) + el detector de worktrees ya probado (`rigel-v2-ulw-execute-worktree.mjs`) + ejecucion de comandos git via el runner del runtime. La creacion/cleanup se engancha a las herramientas de ciclo de vida team existentes (`tools/team.tools.mjs`) y al lead orphan handler (`rigel-v2-team-events.mjs`).
@@ -270,7 +271,8 @@ Tu siguiente paso: aprobar este plan y autorizar la Fase 0.
   - QA: viva en el lab con team real; evidencia `<dir>/task-26.txt`.
   - Commit: `feat(profiles): per-member worktrees for native team runs`
 
-- [ ] 27. Validacion de bloques de pensamiento y reparacion de prefill
+- [x] 27. Validacion de bloques de pensamiento y reparacion de prefill
+  - Estado (cerrado y publicado 2026-10-07): publicado en `origin/v2-mirror` (`493a3023c`). Alcance ejecutado (correccion de auditoria): pares de herramienta y cola assistant-prefill; el validador proactivo de thinking V1 fue eliminado (`9a16b54e4`) y no se restaura, y reasoning queda bajo el transform nativo V2. Evidencia: `.omo/evidence/20261007-t27-thinking-prefill/task-27.txt` y nota de boveda [[2026-10-07-fase-5-tarea-27]].
   - Objetivo: efectos V1 de `plugin/messages-transform.ts`: descartar/normalizar bloques de pensamiento invalidos en `event.messages` y reparar la cola assistant-prefill rota antes del proveedor.
   - Alcance V1: `plugin/messages-transform.ts` (thinking-block validation + tool-pair validation + assistant-prefill repair) y `features/btw-side` si consume el mismo punto.
   - API oficial V2 -> estrategia: adaptar sobre el hook `context` (`event.messages` mutable, ya probado por el consumidor del colector en `rigel-v2-native.mjs`); reglas puras en modulo propio (`rigel-v2-native-message-repair.mjs`) con la misma precedencia que V1 (validacion antes de reparacion).
@@ -383,7 +385,8 @@ Tu siguiente paso: aprobar este plan y autorizar la Fase 0.
 
 ### Fase 6 - Puerta de espejo (gate: criterio de espejo completo)
 
-- [ ] 24. Oráculo diferencial V1 vs nativo
+- [x] 24. Oráculo diferencial V1 vs nativo
+  - Estado (cerrado y publicado 2026-10-07): publicado en `origin/v2-mirror` (`f51c7a2ca`). Evidencia: nota de boveda [[2026-10-07-fase-6-tarea-24]].
   - Objetivo: equivalencia demostrada, no supuesta.
   - Alcance: banco de escenarios scriptados (delegación, ultrawork, reglas, recuperación de errores, permisos, fallback, compactación, skills, goal); cada escenario corre contra V1 (plugin real en sandbox) y contra el runtime nativo; comparador de observables (payload al proveedor normalizado, mutaciones de resultados, decisiones de bloqueo, handoff) con tolerancias declaradas por escenario.
   - No debe: no comparar bytes absolutos de prompts autorados (prohibido); comparar comportamiento/observables.
