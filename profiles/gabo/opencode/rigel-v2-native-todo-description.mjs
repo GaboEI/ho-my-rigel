@@ -28,6 +28,26 @@ import { normalizeToolDefinition } from "./rigel-v2-native-core.mjs"
 /** The V1 tool name this surface overrides. */
 export const TODO_DESCRIPTION_TOOL_NAME = "todowrite"
 
+/**
+ * The description overrides this runtime applies, keyed by tool name. This is
+ * the explicit seam that replaces V1's `tool.definition` hook: the V1 hook
+ * mutated whatever definition the host routed through it, while the V2 runtime
+ * only ever rewrites the definitions it builds itself.
+ */
+export const NATIVE_TOOL_DESCRIPTION_OVERRIDES = Object.freeze({ todowrite: TODOWRITE_DESCRIPTION })
+
+/**
+ * Apply the native description override to a tool definition, returning the
+ * definition unchanged when no override matches. The lookup is keyed by
+ * `definition.name`, so a definition the runtime did not build (for example a
+ * host-owned `read`) is never touched.
+ */
+export function applyNativeToolDescriptionOverride(definition) {
+  if (!definition || typeof definition.name !== "string") return definition
+  const override = NATIVE_TOOL_DESCRIPTION_OVERRIDES[definition.name]
+  return override === undefined ? definition : { ...definition, description: override }
+}
+
 const TODO_STATUS_VALUES = ["pending", "in_progress", "completed", "cancelled"]
 const TODO_PRIORITY_VALUES = ["low", "medium", "high"]
 
@@ -56,10 +76,11 @@ export function formatTodoWriteResult(todos) {
  * is replaced by the protected detailed snapshot instead of erasing real work.
  */
 export function createTodoDescriptionTool({ store, beforeWrite } = {}) {
-  return normalizeToolDefinition({
+  // The description is supplied by the override seam, not hardcoded here, so
+  // removing the override removes the V1 text and the contract test fails.
+  const definition = applyNativeToolDescriptionOverride({
     name: TODO_DESCRIPTION_TOOL_NAME,
     options: { codemode: false },
-    description: TODOWRITE_DESCRIPTION,
     input: {
       type: "object",
       properties: {
@@ -98,5 +119,17 @@ export function createTodoDescriptionTool({ store, beforeWrite } = {}) {
       return { content: formatTodoWriteResult(todos) }
     },
   })
+  return normalizeToolDefinition(definition)
+}
+
+/**
+ * Register the runtime-owned `todowrite` definition on the V2 tool editor. The
+ * runtime only ADDS its own definition; it never calls `editor.update` or
+ * `editor.remove`, so a host tool (for example `read`) is never mutated.
+ */
+export function registerNativeTodoTool(editor, { store, beforeWrite } = {}) {
+  const definition = applyNativeToolDescriptionOverride(createTodoDescriptionTool({ store, beforeWrite }))
+  editor.add(definition)
+  return definition
 }
 

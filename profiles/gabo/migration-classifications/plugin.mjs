@@ -202,11 +202,11 @@ export default {
   },
   "tool-definition": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "REFUTADO por la documentacion oficial V2 (verificacion del Juez 2026-10-05): `ctx.tool.transform` expone un `ToolEditor` con `update`/`add`/`remove`, asi que el override de descripcion no necesita el seam `tool.definition` de V1 ni la via `http.request` (que no llego al modelo, probado en T1). El efecto (todo-description-override) se adapta aplicando el override en el registro nativo de las definiciones que el runtime crea. Dueno: T31 del plan maestro.",
+      "El unico override de V1 (`hooks/todo-description-override`: `todowrite` -> `TODOWRITE_DESCRIPTION`) se aplica ahora al CONSTRUIR la definicion que el runtime nativo crea (`NATIVE_TOOL_DESCRIPTION_OVERRIDES` + `applyNativeToolDescriptionOverride` en `rigel-v2-native-todo-description.mjs`, registrada por `registerNativeTodoTool`), no mutando una definicion del host. El contrato positivo/negativo del editor prueba que `todowrite` lleva el texto V1 byte-identico y que una tool del host pre-sembrada queda intacta (cero `update`/`remove`). El gate `tool.definition` deja de reportarse: no existe emisor en el runtime y la frontera documentada se actualiza.",
     futureEvidence:
-      "`rigel-v2-native-request-steps.mjs`; `rigel-v2-native-request-steps.test.mjs`; `.omo/evidence/20261005-task-20/t15-request-steps-verdict.md`",
+      "`rigel-v2-native-todo-description.mjs`; `rigel-v2-native-todo-description.test.mjs`; `rigel-v2-native.mjs`; `qa-v2-t31-surface-walls.mjs`; `.omo/evidence/20261008-t31-surface-walls/`",
   },
   "tool-execute-after": {
     classification: "Migrar",

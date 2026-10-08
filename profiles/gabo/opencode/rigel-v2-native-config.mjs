@@ -1015,6 +1015,19 @@ export function readNativeMinOpenCodeVersion(manifest) {
 }
 
 /**
+ * Read the materialized bundled OmO build version
+ * (`metadata.global.bundledVersion`). The native update check compares this
+ * against the published package's npm dist-tags (V1 `getBundledVersion` parity).
+ * Absent or non-string yields undefined, so the check degrades to a no-op
+ * instead of guessing a version, the same way V1 skipped when no version was
+ * resolvable.
+ */
+export function readNativeBundledVersion(manifest) {
+  const value = manifest?.metadata?.global?.bundledVersion
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+/**
  * Port of `packages/omo-opencode/src/shared/opencode-version.ts` `compareVersions`
  * (numeric, prerelease-suffix stripped). Kept in lockstep by the parity test so
  * the runtime and the V1 CLI cannot disagree on a version boundary.

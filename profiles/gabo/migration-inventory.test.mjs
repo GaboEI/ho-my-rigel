@@ -33,6 +33,9 @@ const ALLOWED_STATUSES = new Set([
 // so the duplicate entry requires both rows to render it.
 const EXPECTED_STATUS_ROWS = [
   ["goal", "Migrado"],
+  // The final two surface walls must render as migrated in the ledger.
+  ["auto-update-checker", "Migrado"],
+  ["tool-definition", "Migrado"],
   ["glob", "Migrado"],
   ["grep", "Migrado"],
   ["interactive-bash-session", "Migrado parcialmente"],

@@ -15,7 +15,10 @@ export { reasoningEffortFromThinking }
 const CHILD_TASK_MARKER = "<rigel-native-child-task>"
 const ROSTER_MARKER = "<rigel-native-delegation-roster>"
 const ULTRAWORK_MARKER = "<ultrawork-mode>"
-const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, DIRECTORY_AGENTS_MARKER]
+// The update notice is a system-level injection like the roster, so it
+// carries a marker and is stripped before re-injection to stay a single block.
+const UPDATE_MARKER = "<rigel-native-update-notice>"
+const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, UPDATE_MARKER, DIRECTORY_AGENTS_MARKER]
 
 function safeSingleLine(value, limit = 120) {
   // Agent names come from user configuration. Keep their visible value useful
@@ -185,6 +188,7 @@ export function createNativeContextHook({
   onCategorySkillReminderConsumed,
   sisyphusPromptPlan,
   onSisyphusReconcile,
+  getUpdateNotice,
 } = {}) {
   if (typeof getDelegationRoster !== "function") {
     throw new TypeError("A live V2 delegation roster reader is required")
@@ -251,6 +255,10 @@ export function createNativeContextHook({
     for (const text of [initialDirectoryGuidance, roster, categorySkillReminder]) {
       if (text) system.push({ type: "text", text })
     }
+    // The update notice rides the same system channel as the roster, after
+    // the root-session gate, so a delegated child never receives it (V1 parity).
+    const updateNotice = typeof getUpdateNotice === "function" ? getUpdateNotice() : ""
+    if (updateNotice) system.push({ type: "text", text: updateNotice })
     event.system = system
     if (!Array.isArray(event.messages)) return
     const { decision, directive } = keywordSeam.decide({

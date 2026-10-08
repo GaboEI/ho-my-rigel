@@ -27,6 +27,21 @@ const profileRoot = take("--profile-root")
 // repo root and the MCP retention policy are materialized into the manifest.
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url))
 const sourceRoot = path.resolve(moduleDirectory, "../..")
+
+// The native runtime compares the bundled OmO build version against the
+// published package's npm dist-tags (V1 `getBundledVersion` parity). The
+// deployed runtime is staged flat under the lab state root and carries no
+// package.json of its own, so the version is materialized here for the runtime
+// to read from the manifest. An unreadable source degrades to an absent field.
+function readBundledVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package.json"), "utf8"))
+    return typeof pkg.version === "string" && pkg.version ? pkg.version : undefined
+  } catch (error) {
+    console.error(`Rigel native agent manifest: could not read bundled version: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
 const integrationManifest = JSON.parse(fs.readFileSync(path.join(moduleDirectory, "integration-manifest.json"), "utf8"))
 const manifestMcpPolicy = integrationManifest?.mcpPolicy ?? {}
 if (!inputPath || !outputPath) {
@@ -178,6 +193,9 @@ try {
         // (derived from integration-manifest.json platform.opencode), read at
         // setup from `context.app.version`.
         minOpenCodeVersion: deriveNativeMinOpenCodeVersion(integrationManifest),
+        // The bundled OmO build version the update check compares against
+        // the published package's npm dist-tags.
+        bundledVersion: readBundledVersion(),
         categories: { ...(pluginView.categories ?? {}) },
         disabled: { ...(pluginView.disabled ?? {}) },
         // The resolved OpenClaw block is absent when no layer sets it. The

@@ -41,10 +41,11 @@ export default {
   },
   "auto-update-checker": {
     classification: "Adaptar",
-    status: "Pendiente de ejecución",
+    status: "Migrado",
     rationale:
-      "REFUTADO por la documentacion oficial V2 (verificacion del Juez 2026-10-05): el efecto es alcanzable con superficies oficiales (`ctx.app.version`, `plugin.check`/`plugin.update` y `context.ui.toast.show`/`context.attention.notify` en companion CLI plugins), asi que la etiqueta previa de incompatibilidad queda refutada. El efecto V1 (aviso de version nueva en el arranque) se adapta: chequeo diario con cache en storage + aviso por `context.system`. Dueno: T31 del plan maestro.",
-    futureEvidence: "OpenCode V2 Plugins API: Overview/API/Hooks, sin servicio de actualización ni toast; incompatibilidad explícita, no un puntero a tarea cerrada.",
+      "Efecto V1 portado: aviso no bloqueante de una version publicada mas nueva, consultando el registry npm al arranque con cache durable en `ctx.storage` y como maximo un chequeo por dia (el intento se registra, asi un fallo no re-chequea en bucle). El paquete y el registry son los de V1 (`oh-my-openagent` dist-tags) y la version actual es la del build empaquetado materializada en el manifiesto; el runtime nunca instala. El aviso llega al body del proveedor por `event.system` (patron del roster, con marcador propio e idempotente, solo en sesion raiz). Fallo de red o version irresoluble degradan a silencio funcional con log y recibo durable (`update-check.json`). Adaptado de `hooks/auto-update-checker/{hook,checker,version-channel,constants}.ts`.",
+    futureEvidence:
+      "`rigel-v2-native-update-core.mjs`; `rigel-v2-native-update-state.mjs`; `rigel-v2-native-update-checker.mjs`; `rigel-v2-native-update-checker.test.mjs`; `rigel-v2-native-prompt.mjs`; `qa-v2-t31-surface-walls.mjs`; `.omo/evidence/20261008-t31-surface-walls/`",
   },
   "category-skill-reminder": {
     classification: "Migrar",

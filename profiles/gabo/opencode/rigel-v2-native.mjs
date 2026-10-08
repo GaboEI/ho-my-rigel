@@ -34,7 +34,7 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { checkNativeHostVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativeOpenclaw, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
+import { checkNativeHostVersion, readNativeBundledVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativeOpenclaw, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
@@ -46,7 +46,9 @@ import { registerConditionalNativeTools } from "./rigel-v2-native-conditional-to
 import { formatGoalResponse, parseGoalCommand } from "./tools/goal.tools.mjs"
 import { createV2SessionTodoStore, createTaskTodoSync } from "./tools/session-todo-store.mjs"
 import { clearTodoPending, resolveBridgeStateRoot, wrapTodoStoreWithPending } from "./rigel-v2-native-todo-pending.mjs"
-import { createTodoDescriptionTool } from "./rigel-v2-native-todo-description.mjs"
+import { registerNativeTodoTool } from "./rigel-v2-native-todo-description.mjs"
+import { createNativeUpdateChecker } from "./rigel-v2-native-update-checker.mjs"
+import { createNativeUpdateState } from "./rigel-v2-native-update-state.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
 import { createHashlineEditTool, createHashlineReadEnhancer } from "./rigel-v2-native-hashline.mjs"
 import { createNativeCategorySkillReminder } from "./rigel-v2-native-category-skill-reminder.mjs"
@@ -609,6 +611,33 @@ export default {
     // on, the read enhancer tags V2 read output with LINE#ID and an equivalent
     // `hashline_edit` tool validates the anchor hash before writing.
     const nativeGates = readNativeGates(manifest)
+    // The auto-update-checker effect. V1 checked the published plugin's npm
+    // dist-tags once per startup and toasted a newer version. The native runtime
+    // fetches the same registry at most once per day, caches the result in
+    // `ctx.storage` and injects a system notice through the `context` hook. It is
+    // started here but never awaited (non-blocking), never installs anything, and
+    // degrades to silence with an observable log plus a durable receipt when the
+    // network fails or no version is resolvable.
+    const updateState = createNativeUpdateState({
+      storage: context?.storage,
+      // QA seam only: a distinct storage key per scenario lets the live lab
+      // exercise the newer/equal/failure paths without fighting the daily cache.
+      key: process.env.RIGEL_UPDATE_STATE_KEY || "status",
+      onError: (error) => console.error(`[oh-my-rigel] update-check storage: ${error instanceof Error ? error.message : String(error)}`),
+    })
+    const updateChecker = createNativeUpdateChecker({
+      state: updateState,
+      fetchImpl: typeof fetch === "function" ? fetch : undefined,
+      registryUrl: process.env.RIGEL_UPDATE_REGISTRY_URL
+        || `https://registry.npmjs.org/-/package/${process.env.RIGEL_UPDATE_PACKAGE || "oh-my-openagent"}/dist-tags`,
+      packageName: process.env.RIGEL_UPDATE_PACKAGE || "oh-my-openagent",
+      currentVersion: process.env.RIGEL_UPDATE_CURRENT_VERSION || readNativeBundledVersion(manifest),
+      onReceipt: (event) => writeStateReceipt("update-check.json", event),
+      logger: (message) => console.error(`[oh-my-rigel] ${message}`),
+    })
+    void updateChecker.refresh().catch((error) => {
+      console.error(`[oh-my-rigel] update check failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
     const hashlineEnabled = nativeGates.hashline_edit === true
     const hashline = hashlineEnabled ? createHashlineReadEnhancer() : undefined
     const hashlineEditTool = hashlineEnabled ? createHashlineEditTool({ directory: location.directory }) : undefined
@@ -1306,19 +1335,21 @@ export default {
       if (hashlineEditTool) {
         editor.add({ name: "hashline_edit", options: { codemode: false }, ...normalizeToolDefinition(hashlineEditTool) })
       }
-      // Real `todo-description-override` (T20): register the working `todowrite`
-      // tool whose description is the exact V1 TODOWRITE_DESCRIPTION, so the
-      // model receives the V1 todo-format contract in its tool schema. This is
-      // the V2 equivalent of V1's `tool.definition` rewrite; the tool is backed
-      // by the runtime's own per-session todo store. Registered in this single
-      // transform callback so it lands in the same tool set as the others.
-      editor.add(createTodoDescriptionTool({
+      // Register the working `todo-description-override`
+      // `todowrite` tool whose description is the exact V1 TODOWRITE_DESCRIPTION,
+      // so the model receives the V1 todo-format contract in its tool schema. This
+      // is the V2 equivalent of V1's `tool.definition` rewrite; the override is
+      // applied at definition-build (only to definitions the runtime owns) and the
+      // tool is backed by the runtime's own per-session todo store. Registered in
+      // this single transform callback so it lands in the same tool set as the
+      // others, and it never mutates a host-owned tool.
+      registerNativeTodoTool(editor, {
         store: bridgedTodoStore,
         // The same preserver that restored the snapshot also guards the
         // next `todowrite`, so a late all-bootstrap write cannot erase the
         // restored detailed todos.
         beforeWrite: (sessionID, todos) => compactionTodoPreserver.beforeTodoWrite(sessionID, todos),
-      }))
+      })
       // slashcommand (Ola 6): the model-facing command discovery. V2 owns the
       // command catalog, so the native tool reads ctx.command.list() instead of
       // walking project directories like V1.
@@ -1424,6 +1455,9 @@ export default {
       // swap (or an un-baked model) observable instead of silent.
       sisyphusPromptPlan: readSisyphusPromptPlan(manifest),
       onSisyphusReconcile: (event) => writeStateReceipt(SISYPHUS_PROMPT_RECEIPT, event),
+      // The update notice is injected into `event.system` on the root
+      // session only, after the roster, so it never reaches a delegated child.
+      getUpdateNotice: () => updateChecker.getNotice(),
     })
     const contextCollector = createNativeContextCollector()
     const consumePendingContext = createNativeContextMessageConsumer(contextCollector)

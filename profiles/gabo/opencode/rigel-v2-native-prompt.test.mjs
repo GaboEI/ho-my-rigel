@@ -1004,3 +1004,54 @@ test("a re-processed body never duplicates the directive", async () => {
   const content = userContent(await second.request.clone().json())
   expect((content.match(/ULTRAWORK MODE ENABLED!/g) ?? [])).toHaveLength(1)
 })
+
+test("context hook injects the update notice into the root system channel exactly once", async () => {
+  // given
+  const notice = "<rigel-native-update-notice>\nA newer version of oh-my-openagent is available: 2.0.0 (current: 1.0.0)."
+  const hook = createNativeContextHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    getUpdateNotice: () => notice,
+  })
+  const makeEvent = () => ({
+    sessionID: "ses_root",
+    agent: "Sisyphus - ultraworker",
+    model: { providerID: "openai", modelID: "gpt-6" },
+    system: [{ type: "text", text: "base" }],
+    messages: [{ role: "user", content: "hello" }],
+    options: {},
+  })
+
+  // when: the notice is offered on two consecutive turns that share the system array
+  const first = makeEvent()
+  await hook(first)
+  const second = makeEvent()
+  second.system = first.system
+  await hook(second)
+
+  // then: the marker is stripped before re-injection, so exactly one block survives
+  const markers = second.system.filter((part) => typeof part?.text === "string" && part.text.includes("<rigel-native-update-notice>"))
+  expect(markers).toHaveLength(1)
+})
+
+test("context hook never injects the update notice into a delegated child session", async () => {
+  // given
+  const hook = createNativeContextHook({
+    getDelegationRoster: async () => [{ name: "explore", mode: "subagent" }],
+    isRootSession: () => false,
+    getUpdateNotice: () => "<rigel-native-update-notice>\nnewer",
+  })
+  const event = {
+    sessionID: "ses_child",
+    agent: "explore",
+    model: { providerID: "openai", modelID: "gpt-6" },
+    system: [{ type: "text", text: "base" }],
+    messages: [{ role: "user", content: "hi" }],
+    options: {},
+  }
+
+  // when
+  await hook(event)
+
+  // then
+  expect(event.system.some((part) => part?.text?.includes("<rigel-native-update-notice>"))).toBe(false)
+})
