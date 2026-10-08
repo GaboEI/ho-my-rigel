@@ -53,6 +53,8 @@ import { registerNativeTodoTool } from "./rigel-v2-native-todo-description.mjs"
 import { createNativeUpdateChecker } from "./rigel-v2-native-update-checker.mjs"
 import { createNativeUpdateState } from "./rigel-v2-native-update-state.mjs"
 import { createServerApi } from "./rigel-v2-native-http.mjs"
+import { createOpenGatewayProviderTransform } from "./rigel-v2-native-opengateway.mjs"
+import { createBtwContextInjector, resolveBtwReceiptPath, writeBtwInjectionReceipt } from "./rigel-v2-native-btw-context.mjs"
 import { createHashlineEditTool, createHashlineReadEnhancer } from "./rigel-v2-native-hashline.mjs"
 import { createNativeCategorySkillReminder } from "./rigel-v2-native-category-skill-reminder.mjs"
 import { createPersistentTerminalPort } from "./tools/terminal-driver.mjs"
@@ -498,6 +500,19 @@ export default {
       retained: readNativeMcpBuiltinsPolicy(manifest).retained,
       env: process.env,
     })
+    // V1 `features/opengateway-provider`: when an OpenGateway credential is
+    // present (env `OPENGATEWAY_API_KEY` or the isolated auth store), register
+    // the provider and the packaged catalog through the V2 provider transform.
+    // Absent credential is a byte-identical no-op: `install` returns before the
+    // transform runs. Never throws into setup.
+    const openGateway = createOpenGatewayProviderTransform({
+      log: (message) => console.error(`[oh-my-rigel] ${message}`),
+    })
+    try {
+      await openGateway.install(context)
+    } catch (error) {
+      console.error(`[oh-my-rigel] OpenGateway provider install failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     // Real skill-body injection for delegated children: resolve each requested
     // name through the discovered registry and inject the body. Disabled or
     // target-restricted names resolve to nothing and are reported, never faked.
@@ -1624,6 +1639,32 @@ export default {
     const monitorStatusInjector = nativeGates.monitor === true
       ? createNativeMonitorStatusInjector({ getRegistry: () => nativeToolRegistry })
       : undefined
+    // V1 `features/btw-side`: a side session carries the `omo_btw_side` metadata
+    // and this injector adds its bounded parent context to the outgoing request.
+    // A session without the metadata is left byte-identical. It is composed into
+    // the main context hook (below) so the runtime keeps ONE `context`
+    // registration, which the model-visible context seam owns.
+    const btwContextInjector = createBtwContextInjector({
+      readSession: async (sessionID) => {
+        if (typeof context?.session?.get === "function") {
+          const result = await context.session.get({ sessionID })
+          return result?.data ?? result
+        }
+        return undefined
+      },
+      readParentMessages: async (parentSessionID) => {
+        if (typeof context?.session?.context === "function") {
+          return await context.session.context({ sessionID: parentSessionID })
+        }
+        return []
+      },
+      writeReceipt: (receipt) => writeBtwInjectionReceipt(
+        resolveBtwReceiptPath(),
+        receipt,
+        (entry) => console.error(`[oh-my-rigel] btw-context ${JSON.stringify(entry)}`),
+      ),
+      log: (entry) => console.error(`[oh-my-rigel] btw-context ${JSON.stringify(entry)}`),
+    })
     const contextRegistration = await context.session.hook("context", async (event) => {
       // T27: tool-pair validation and assistant-prefill tail repair on the
       // model-visible messages. Reasoning is owned by the V2 provider transform
@@ -1642,6 +1683,9 @@ export default {
       await teamMailboxInjector?.(event)
       await teamStatusInjector?.(event)
       await monitorStatusInjector?.(event)
+      // V1 `features/btw-side`: bounded parent-context injection for a side
+      // session; a no-op for any session without the btw metadata.
+      await btwContextInjector(event)
       // T34: observe the outgoing agent-loop request for the preemptive
       // threshold. Isolated so a trigger failure never tears down the hook.
       if (preemptiveCompaction) {

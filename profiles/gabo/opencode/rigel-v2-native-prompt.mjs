@@ -9,6 +9,7 @@ import {
 } from "./rigel-v2-native-keyword-seam.mjs"
 import { buildReasoningOptions, reasoningEffortFromThinking } from "./rigel-v2-native-reasoning-options.mjs"
 import { createSisyphusPromptReconciler } from "./rigel-v2-native-sisyphus-prompt.mjs"
+import { GPT_EDIT_GUIDANCE_MARKER, gptEditGuidanceBlock } from "./rigel-v2-native-gpt-edit-guidance.mjs"
 
 export { reasoningEffortFromThinking }
 
@@ -18,7 +19,7 @@ const ULTRAWORK_MARKER = "<ultrawork-mode>"
 // The update notice is a system-level injection like the roster, so it
 // carries a marker and is stripped before re-injection to stay a single block.
 const UPDATE_MARKER = "<rigel-native-update-notice>"
-const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, UPDATE_MARKER, DIRECTORY_AGENTS_MARKER]
+const INJECTION_MARKERS = [ROSTER_MARKER, ULTRAWORK_MARKER, UPDATE_MARKER, DIRECTORY_AGENTS_MARKER, GPT_EDIT_GUIDANCE_MARKER]
 
 function safeSingleLine(value, limit = 120) {
   // Agent names come from user configuration. Keep their visible value useful
@@ -259,6 +260,13 @@ export function createNativeContextHook({
     // the root-session gate, so a delegated child never receives it (V1 parity).
     const updateNotice = typeof getUpdateNotice === "function" ? getUpdateNotice() : ""
     if (updateNotice) system.push({ type: "text", text: updateNotice })
+    // Model-keyed file-edit guidance (V1 `gpt-apply-patch-guard`): the native
+    // runtime registers `edit`/`write` (no `apply_patch`), so every GPT-family
+    // model receives the generic guidance and a non-GPT model none. Injected on
+    // the same root-session system channel as the notice, marker-wrapped so a
+    // repeated pass rebuilds rather than accumulates.
+    const gptEditGuidance = gptEditGuidanceBlock(modelID, { hasApplyPatchTool: false })
+    if (gptEditGuidance) system.push({ type: "text", text: gptEditGuidance })
     event.system = system
     if (!Array.isArray(event.messages)) return
     const { decision, directive } = keywordSeam.decide({

@@ -18,6 +18,10 @@ export function defaultIo() {
     cwd: process.cwd(),
     home: os.homedir(),
     spawn: (command, args, options) => spawnSync(command, args, options),
+    // Injected so a command can be driven hermetically in tests (a stub fetch)
+    // and so the CLI never composes its own global. `get-local-version` is the
+    // only consumer today; it queries the npm dist-tags endpoint.
+    fetch: typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : undefined,
   }
 }
 

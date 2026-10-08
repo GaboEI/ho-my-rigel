@@ -18,7 +18,7 @@ import path from "node:path"
  */
 export const RUNTIME_ENTRIES = Object.freeze([
   "rigel-v2-native.mjs",
-  "rigel-v2-native-cli-notification.mjs",
+  "rigel-v2-native-cli.mjs",
 ])
 
 export function discoverRuntimeModules(sourceOpenDir, entries = RUNTIME_ENTRIES) {

@@ -131,7 +131,7 @@ export default {
   },
   "interactive-bash-session": {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "La sesión V1 en `hooks/interactive-bash-session/hook.ts` gestiona el ciclo de vida tmux de interactive_bash; se migra al runtime nativo V2 cuando tmux está disponible, replicando el tracker y el estado por sesión.",
     futureEvidence: "`tools/interactive-bash.tools.mjs`; `rigel-v2-native-conditional-tools.mjs`",
@@ -153,9 +153,10 @@ export default {
   },
   "legacy-plugin-toast": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El aviso V1 en `hooks/legacy-plugin-toast/hook.ts` detecta y migra un entrypoint de plugin legacy; se migra al arranque del runtime nativo V2 reutilizando el motor de migración de configuración y avisando por toast.",
-    futureEvidence: "task:25",
+      "El aviso V1 en `hooks/legacy-plugin-toast/hook.ts` detectaba y migraba un entrypoint legacy; como el contrato V2 NORMALIZA la config en memoria sin reescribirla, el port conserva la deteccion + el aviso y elimina la reescritura de archivo. `rigel-v2-native-legacy-plugin-notice.mjs` (puro) detecta `oh-my-opencode`/`@*`; `rigel-v2-native-cli-legacy-notice.mjs` suscribe `session.created` (raiz only), muestra el toast V1 (`warning`, 10000 ms) y escribe un recibo durable; jamas escribe un config. Contrato positivo/negativo (deteccion, hijo, una vez por proceso).",
+    futureEvidence: "`rigel-v2-native-legacy-plugin-notice.mjs`; `rigel-v2-native-cli-legacy-notice.mjs`; `rigel-v2-native-legacy-plugin-notice.test.mjs`; `rigel-v2-native-cli-legacy-notice.test.mjs`; `rigel-v2-native-cli.mjs` (composicion ./tui)",
   },
   "model-fallback": {
     classification: "Migrar",
@@ -174,9 +175,10 @@ export default {
   },
   "native-edition-nudge": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El nudge V1 en `hooks/native-edition-nudge/hook.ts` decide y muestra un aviso de una sola vez hacia la edición nativa; se migra al arranque del runtime nativo V2 con estado persistente y toast de inicio.",
-    futureEvidence: "task:25",
+      "El nudge V1 en `hooks/native-edition-nudge/hook.ts` decide y muestra un aviso de una sola vez. `rigel-v2-native-nudge-core.mjs` porta la escalera de supresion completa (opted-out, ya-migrado, no-interactivo, hijo, mostrado-este-proceso, estado-no-escribible, corrupto+3d, tope de por vida=4, no-elegible, mostrar con [3,7,14]d clamp 14d) y `rigel-v2-native-nudge-state.mjs` el estado durable v1; `rigel-v2-native-cli-nudge.mjs` compone el toast de inicio (encendido por defecto, kill switch `nativeEditionNudge.enabled=false`). Contrato positivo/negativo por rama + estado.",
+    futureEvidence: "`rigel-v2-native-nudge-core.mjs`; `rigel-v2-native-nudge-state.mjs`; `rigel-v2-native-cli-nudge.mjs`; `rigel-v2-native-nudge.test.mjs`; `rigel-v2-native-cli-nudge.test.mjs`",
   },
 
   "bash-file-read-guard": {
@@ -300,6 +302,7 @@ export default {
   },
   "tasks-todowrite-disabler": {
     classification: "Equivale a builtin V2",
+    status: "Migrado",
     rationale:
       "El bloqueo V1 en `hooks/tasks-todowrite-disabler/hook.ts` desactiva todowrite cuando el sistema de tareas está activo; V2 no publica todowrite, así que el comportamiento queda cubierto por el host y el sistema de tareas migrado conserva el flujo.",
     futureEvidence: "contract:qa-v2-compaction-hook-contract.mjs",

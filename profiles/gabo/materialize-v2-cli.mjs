@@ -101,6 +101,21 @@ fs.rmSync(cliDest, { recursive: true, force: true })
 fs.mkdirSync(cliDest, { recursive: true, mode: 0o700 })
 fs.copyFileSync(path.join(cliSource, "rigel-v2-cli.mjs"), path.join(cliDest, "rigel-v2-cli.mjs"))
 copyTree(path.join(cliSource, "cli"), path.join(cliDest, "cli"))
+// 1b. Stage the native runtime modules the CLI command modules import as
+// `../../opencode/*` and root helpers as `../../<name>`. The deployed entry sits
+// at `rigel/cli/rigel-v2-cli.mjs` and its registry/commands under
+// `rigel/cli/cli/`, so a command's `../../` resolves to `rigel/cli/`: the shared
+// runtime tree and root helpers are staged there. This keeps the exact relative
+// specifier valid in both the source checkout and the materialized deployment.
+const cliDeployedBase = path.join(labRoot, "rigel", "cli")
+const cliRuntimeSource = path.join(cliSource, "opencode")
+if (fs.existsSync(cliRuntimeSource)) {
+  copyTree(cliRuntimeSource, path.join(cliDeployedBase, "opencode"))
+}
+for (const helper of ["notification-activation-config.mjs"]) {
+  const from = path.join(cliSource, helper)
+  if (fs.existsSync(from)) fs.copyFileSync(from, path.join(cliDeployedBase, helper))
+}
 
 // 2. Link the workspace node_modules so bun resolves @oh-my-opencode/* adapters.
 const nodeModules = path.join(cliDest, "node_modules")

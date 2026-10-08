@@ -36,9 +36,10 @@
 export default {
   boulder: {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "El inspector de estado boulder de `packages/omo-opencode/src/cli/boulder/boulder.ts` se adapta al registro de continuidad nativo de V2, ya que el CLI de OpenCode no ofrece un comando de progreso boulder.",
-    futureEvidence: "task:22",
+      "El inspector de estado boulder de `packages/omo-opencode/src/cli/boulder/boulder.ts` se adapta al registro de continuidad nativo de V2 (`.omo/boulder.json`, schema_version 2, escrito por `rigel-v2-ulw-execute.mjs`), ya que el CLI de OpenCode no ofrece un comando de progreso boulder. El comando nativo `boulder` (`profiles/gabo/cli/commands/boulder.mjs`) lee el store real, resuelve el plan con preferencia de worktree, calcula progreso/elapsed/tarea actual y expone `--json`; ausente -> exit 1, ilegible -> exit 2.",
+    futureEvidence: "`profiles/gabo/cli/commands/boulder.mjs`; `profiles/gabo/cli/commands/boulder.test.mjs`; `rigel-v2-ulw-execute.mjs` (store real)",
   },
   cleanup: {
     classification: "Adaptar",
@@ -56,9 +57,10 @@ export default {
   },
   "cli-installer": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "El instalador no interactivo de `packages/omo-opencode/src/cli/cli-installer.ts` se adapta al instalador del runtime nativo, conservando la selección de proveedores y la generación de configuración.",
-    futureEvidence: "contract:qa-v2-lab-install-contract.mjs",
+    futureEvidence: "contract:qa-v2-lab-install-contract.mjs; contract:rigel-v2-cli.test.mjs",
   },
   "cli-program": {
     classification: "Migrar",
@@ -90,9 +92,10 @@ export default {
   },
   doctor: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El diagnóstico de cuatro categorías de `packages/omo-opencode/src/cli/doctor/` se mantiene como subconjunto necesario del CLI, portando sus comprobaciones al runtime nativo de V2.",
-    futureEvidence: "task:25",
+      "El diagnóstico de cuatro categorías de `packages/omo-opencode/src/cli/doctor/` se porta al CLI nativo como cuatro categorías (SYSTEM / CONFIG / TOOLS / MODELS) mas los extras necesarios del fork: `profiles/gabo/cli/commands/doctor.mjs` comprueba el binario V2 y la version minima, la validez del config JSONC, las herramientas de PATH (sg/comment-checker/gh) y los MCP, y el catalogo/overrides de modelos, todo sobre un `io` inyectable y solo rutas del lab (nunca V1). `--json`/`--status`/`--verbose`; exit 1 si alguna categoria falla.",
+    futureEvidence: "`profiles/gabo/cli/commands/doctor.mjs`; `profiles/gabo/cli/commands/commands.test.mjs`",
   },
   "fallback-chain-resolution": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -110,15 +113,17 @@ export default {
   },
   "get-local-version": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La detección de versión instalada frente a la publicada de `packages/omo-opencode/src/cli/get-local-version/get-local-version.ts` se mantiene como subconjunto necesario del CLI nativo.",
-    futureEvidence: "task:25",
+      "La deteccion de version local frente a la publicada se porta al CLI nativo: `profiles/gabo/cli/commands/get-local-version.mjs` reutiliza exactamente el registro/paquete que el propio fork sigue para su update-check (`oh-my-openagent` por defecto, override `RIGEL_UPDATE_PACKAGE`/`RIGEL_UPDATE_REGISTRY_URL`), resuelve el canal con el primitivo portado (`extractChannel`) y reporta `{currentVersion, latestVersion, isUpToDate, channel, status}` con el mismo `--json`. Un fallo de red degrada a `status: error` con exit 1, nunca lanza.",
+    futureEvidence: "`profiles/gabo/cli/commands/get-local-version.mjs`; `profiles/gabo/cli/commands/get-local-version.test.mjs`; `rigel-v2-native-update-core.mjs` (mismos primitivos)",
   },
   install: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El instalador de `packages/omo-opencode/src/cli/install.ts` se mantiene como subconjunto necesario del CLI, portando la selección de proveedores y el registro del plugin al runtime nativo de V2.",
-    futureEvidence: "contract:qa-v2-lab-install-contract.mjs",
+    futureEvidence: "contract:qa-v2-lab-install-contract.mjs; contract:rigel-v2-cli.test.mjs; contract:cli/commands/install.mjs",
   },
   "install-ast-grep-sg": {
     classification: "Adaptar",
@@ -255,15 +260,17 @@ export default {
   },
   "tui-install-prompts": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "Los prompts interactivos de `packages/omo-opencode/src/cli/tui-install-prompts.ts` se adaptan al instalador nativo, conservando las mismas decisiones de proveedor y plataforma.",
-    futureEvidence: "contract:qa-v2-lab-install-contract.mjs",
+    futureEvidence: "contract:qa-v2-lab-install-contract.mjs; contract:rigel-v2-cli.test.mjs",
   },
   "tui-installer": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "El instalador interactivo de `packages/omo-opencode/src/cli/tui-installer.ts` se adapta al flujo nativo del runtime V2, sin dependencia del plugin V1.",
-    futureEvidence: "contract:qa-v2-lab-install-contract.mjs",
+    futureEvidence: "contract:qa-v2-lab-install-contract.mjs; contract:rigel-v2-cli.test.mjs",
   },
   "worktree-sweep": {
     classification: "Migrar",

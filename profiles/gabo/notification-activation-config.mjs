@@ -168,3 +168,30 @@ export function registerNotificationCliPlugin(cliConfig, { runtimeDir, options, 
   next.plugins = plugins
   return next
 }
+
+/**
+ * Register the composed companion CLI plugin (`./tui`) exactly once and, when
+ * the notification config is enabled, disable the host's always-on builtin
+ * notifier so the two never double-announce.
+ *
+ * Unlike {@link registerNotificationCliPlugin}, this always registers the
+ * package: the companion now composes several independent surfaces (notification,
+ * legacy-name notice, native-edition nudge, task toasts), and the
+ * non-notification surfaces are default-on. Each surface applies its own gate, so
+ * registering the package while the notification block is disabled is not a
+ * double-announce risk. Idempotent: re-running yields the same array, and
+ * unrelated plugins keep their position.
+ */
+export function registerCompanionCliPlugin(cliConfig, { runtimeDir, options, notificationEnabled = false, disableBuiltin = true } = {}) {
+  const next = { ...(cliConfig && typeof cliConfig === "object" ? cliConfig : {}) }
+  const current = Array.isArray(next.plugins) ? next.plugins : []
+  const plugins = current.filter((entry) => {
+    if (isOurRuntimeEntry(entry, runtimeDir)) return false
+    if (entry === DISABLED_BUILTIN_NOTIFICATION) return false
+    return true
+  })
+  plugins.push({ package: runtimeDir, options: { notification: options } })
+  if (notificationEnabled && disableBuiltin) plugins.push(DISABLED_BUILTIN_NOTIFICATION)
+  next.plugins = plugins
+  return next
+}

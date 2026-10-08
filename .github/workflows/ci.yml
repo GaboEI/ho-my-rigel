@@ -585,6 +585,65 @@ jobs:
           JOB_SUMMARY_NEXT: Inspect the first omo-senpi build, sync, directive, or package test failure for this OS.
         run: GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" bash .github/scripts/write-job-summary.sh
 
+  # Pins the Oh My Rigel fork's native V2 runtime suite into CI. The suite is
+  # hermetic (profiles/gabo/opencode, no host state); the live laboratory lane
+  # (run-lab-acceptance.sh) stays a local, service-gated step.
+  rigel-compatibility:
+    needs: [ci-mode]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        if: needs.ci-mode.outputs.run_heavy == 'true'
+        with:
+          node-version: "24"
+
+      - uses: oven-sh/setup-bun@v2
+        if: needs.ci-mode.outputs.run_heavy == 'true'
+        with:
+          bun-version: "1.4.2"
+
+      - uses: actions/cache@v6
+        if: needs.ci-mode.outputs.run_heavy == 'true'
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.2-${{ hashFiles('bun.lock') }}
+
+      - name: Install dependencies
+        if: needs.ci-mode.outputs.run_heavy == 'true'
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run Oh My Rigel native V2 acceptance suite
+        id: rigel-tests
+        if: needs.ci-mode.outputs.run_heavy == 'true'
+        run: bun test --timeout 20000 profiles/gabo/opencode
+
+      # A leg whose test steps were all skipped must never look like a pass.
+      - name: Check that this leg ran its tests
+        if: always()
+        shell: bash
+        env:
+          LEG_OS: ubuntu-latest
+          LEG_JOB_STATUS: ${{ job.status }}
+          TEST_OUTCOMES: ${{ steps.rigel-tests.outcome }}
+          RUN_HEAVY: ${{ needs.ci-mode.outputs.run_heavy }}
+          FULL_MATRIX: ${{ needs.ci-mode.outputs.full_matrix }}
+          RUNTIME_TOUCHING: ${{ needs.ci-mode.outputs.runtime_touching }}
+        run: node script/ci-leg-tests-guard.mjs --os "$LEG_OS" --job-status "$LEG_JOB_STATUS" --outcomes "$TEST_OUTCOMES" --run-heavy "$RUN_HEAVY" --full-matrix "$FULL_MATRIX" --runtime-touching "$RUNTIME_TOUCHING"
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          JOB_SUMMARY_TITLE: Oh My Rigel native V2 acceptance
+          JOB_SUMMARY_STATUS: ${{ job.status }}
+          JOB_SUMMARY_DETAILS: |
+            - Pins the fork's native V2 runtime suite (`profiles/gabo/opencode`) into CI.
+            - Runs the hermetic unit/contract layer; the live lab acceptance lane stays local, gated on `opencode-v2-lab.service`.
+          JOB_SUMMARY_NEXT: Inspect the first failing native V2 runtime or contract test in profiles/gabo/opencode.
+        run: GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" bash .github/scripts/write-job-summary.sh
+
   lazycodex-published-smoke:
     needs: [ci-mode]
     runs-on: ubuntu-latest

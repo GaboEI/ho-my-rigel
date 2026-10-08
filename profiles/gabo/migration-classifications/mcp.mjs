@@ -27,9 +27,10 @@ export default {
   },
   context7: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El MCP remoto tier-1 `context7` de `packages/omo-opencode/src/mcp/context7.ts` se migra como conexión externa singleton, aunque el perfil lo desactive. La política `mcpPolicy.context7` y `mcpPolicy.omoBuiltinsDisabled` de `profiles/gabo/integration-manifest.json` exige un único Context7 de OmO y su desactivación en el builtin, sin perder la capacidad.",
-    futureEvidence: "gate:disabled_mcps",
+      "El MCP remoto tier-1 `context7` de `packages/omo-opencode/src/mcp/context7.ts` se migra como conexión externa singleton, aunque el perfil lo desactive. La política `mcpPolicy.context7` y `mcpPolicy.omoBuiltinsDisabled` de `profiles/gabo/integration-manifest.json` exige un único Context7 de OmO y su desactivación en el builtin, sin perder la capacidad; el runtime nativo no emite el builtin y el validador falla si aparece un Context7 duplicado.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (context7 no emitido, política); `profiles/gabo/integration-manifest.json` (mcpPolicy.context7 singleton); `profiles/gabo/validate-profile.mjs` (rechaza Context7 duplicado); `profiles/gabo/omo.jsonc` (disabled_mcps)",
   },
   "grep-app": {
     classification: "Migrar",
@@ -61,8 +62,9 @@ export default {
   },
   websearch: {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El MCP remoto tier-1 `websearch` de `packages/omo-opencode/src/mcp/websearch.ts` se migra con proveedor Exa o Tavily y clave opcional. La política `mcpPolicy.websearch` de `profiles/gabo/integration-manifest.json` fija Tavily como proveedor del perfil.",
-    futureEvidence: "gate:websearch.provider",
+      "El MCP remoto tier-1 `websearch` de `packages/omo-opencode/src/mcp/websearch.ts` se cubre con la superficie host-provided de V2 (`context.websearch`) y la política `mcpPolicy.websearch` de `profiles/gabo/integration-manifest.json` fija Tavily como proveedor del perfil; el runtime nativo no emite un servidor websearch propio.",
+    futureEvidence: "`profiles/gabo/opencode/rigel-v2-native-builtin-mcps.mjs` (websearch host-provided, no emitido); `profiles/gabo/integration-manifest.json` (mcpPolicy.websearch); `profiles/gabo/omo.jsonc` (websearch.provider tavily)",
   },
 }

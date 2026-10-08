@@ -22,9 +22,10 @@
 export default {
   "available-categories": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "`plugin/available-categories.ts` solo construye la lista `AvailableCategory[]` que alimenta el prompt de agentes; no expone comportamiento propio y viaja con la capacidad de categorías que lo consume.",
-    futureEvidence: "contract:rigel-v2-native-categories.mjs",
+    futureEvidence: "contract:rigel-v2-native-categories.mjs; contract:rigel-v2-native-categories.test.mjs",
   },
   "build-team-idle-wake-hint-client": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -42,11 +43,10 @@ export default {
   },
   "chat-message": {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "`plugin/chat-message.ts` resuelve la variante del primer mensaje, la sesion y la deteccion de keywords; V2 no expone `chat.message`, asi que se adapta a la frontera `http.request`. La deteccion de keywords (`ultrawork`/`ulw`, team, `hyperplan` y combo), el enrutado por modelo y la inyeccion de los cuerpos V1 se portan en `rigel-v2-native-keyword-seam.mjs` y `rigel-v2-native-prompt.mjs`; la variante por turno del primer mensaje sigue siendo el muro documentado y no se reimplemento.",
-    futureEvidence:
-      "`rigel-v2-native-prompt.mjs`; `rigel-v2-native-keyword-seam.mjs`; `rigel-v2-native-prompt.test.mjs`; `.omo/evidence/20261005-task-20/t12-keyword-seam.md`",
+    futureEvidence: "contract:rigel-v2-native-prompt.mjs; contract:rigel-v2-native-keyword-seam.mjs; contract:rigel-v2-native-prompt.test.mjs",
   },
   "chat-params": {
     classification: "Migrar",
@@ -141,9 +141,10 @@ export default {
   },
   "normalize-tool-arg-schemas": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "`plugin/normalize-tool-arg-schemas.ts` solo coacciona los esquemas de argumentos de herramientas a una forma normalizada; es plomería de registro sin comportamiento de runtime propio.",
-    futureEvidence: "contract:rigel-v2-native-core.mjs (normalizeToolDefinition)",
+    futureEvidence: "contract:rigel-v2-native-core.mjs (normalizeToolDefinition); contract:rigel-v2-native-tool-args.test.mjs",
   },
   "recent-synthetic-idles": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -168,9 +169,10 @@ export default {
   },
   "session-compacting": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "`plugin/session-compacting.ts` preserva contexto y todos en la compactación, pero V2 no tiene mapeo verificado para `experimental.session.compacting`; se adapta en la frontera `http.request` del resumen.",
-    futureEvidence: "task:21",
+    futureEvidence: "contract:rigel-v2-native-compaction-context.mjs; contract:rigel-v2-native-compaction-context.test.mjs; contract:qa-v2-compaction-hook-contract.mjs",
   },
   "session-status-normalizer": {
     classification: "Interno de build (sin superficie de runtime)",
@@ -181,16 +183,17 @@ export default {
   },
   "skill-context": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "`plugin/skill-context.ts` solo descubre y fusiona skills para construir el contexto compartido con la creación de herramientas; es soporte de construcción sin superficie de runtime.",
-    futureEvidence: "contract:rigel-v2-native.mjs (skillRegistry)",
+    futureEvidence: "contract:rigel-v2-native-skills.mjs; contract:rigel-v2-native-skills.test.mjs",
   },
   "stop-continuation": {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "`plugin/stop-continuation.ts` detiene keyword detector, guard de continuacion, enforcer de todos y goal para una sesion. En V2: el keyword se limpia en la frontera del request (`rigel-v2-keyword-seam.mjs`), el guard marca la sesion detenida, cancela descendientes y escribe el marcador `stop` (`rigel-v2-native-request-steps.mjs` + `rigel-v2-background-manager.mjs`), y el apagado del goal (`goal.clearGoal`) esta implementado en el `onStop` del runtime (`rigel-v2-native.mjs`, mutacion del ledger). Gap restante: el enforcer de todos y el estado boulder (T22, Fase 5).",
-    futureEvidence: "`rigel-v2-native-request-steps.mjs`; `rigel-v2-background-manager.mjs`; `rigel-v2-native.mjs` (onStop + goalController.clearGoal); T22 (Fase 5) para el enforcer de todos y boulder",
+    futureEvidence: "contract:rigel-v2-native-request-steps.mjs; contract:rigel-v2-background-manager.mjs; contract:rigel-v2-native.mjs (onStop + goalController.clearGoal)",
   },
   "system-transform": {
     classification: "Adaptar",
@@ -238,9 +241,10 @@ export default {
   },
   "tool-registry-factories": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "`plugin/tool-registry-factories.ts` solo agrupa las fábricas de herramientas en un objeto inyectable; es plomería de construcción sin comportamiento de runtime propio.",
-    futureEvidence: "contract:rigel-v2-native-tools.mjs",
+    futureEvidence: "contract:rigel-v2-native-tools.mjs; contract:rigel-v2-native-tools.test.mjs",
   },
   "tool-registry-gated-tools": {
     classification: "Migrar",
@@ -265,21 +269,24 @@ export default {
   },
   "ultrawork-db-model-override": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "`plugin/ultrawork-db-model-override.ts` programa un override de modelo a nivel de base de datos para ultrawork; se adapta a la mutación del cuerpo real de la petición en la frontera `http.request` de V2.",
-    futureEvidence: "task:23",
+    futureEvidence: "contract:rigel-v2-native-request-steps.mjs; contract:rigel-v2-native-request-steps.test.mjs; contract:rigel-v2-native-reasoning-options.mjs",
   },
   "ultrawork-model-override": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "`plugin/ultrawork-model-override.ts` detecta ultrawork y aplica el override de modelo y variante por mensaje; se adapta a la frontera `http.request` porque V2 fija la variante antes de esa frontera.",
-    futureEvidence: "task:23",
+    futureEvidence: "contract:rigel-v2-native-reasoning-options.mjs; contract:rigel-v2-native-reasoning-options.test.mjs; contract:qa-v2-reasoning-variant-mechanism.mjs",
   },
   "ultrawork-variant-availability": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "`plugin/ultrawork-variant-availability.ts` solo consulta los proveedores para validar que una variante de ultrawork existe; es soporte de construcción del override de modelo.",
-    futureEvidence: "task:23",
+    futureEvidence: "contract:rigel-v2-native-model-chains.mjs; contract:rigel-v2-native-categories.mjs",
   },
   "unstable-agent-babysitter": {
     classification: "Migrar",

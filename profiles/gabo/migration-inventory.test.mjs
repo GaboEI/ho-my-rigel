@@ -38,17 +38,57 @@ const EXPECTED_STATUS_ROWS = [
   ["tool-definition", "Migrado"],
   ["glob", "Migrado"],
   ["grep", "Migrado"],
-  ["interactive-bash-session", "Migrado parcialmente"],
-  ["monitor", "Migrado parcialmente"],
-  ["monitor", "Migrado parcialmente"],
+  ["interactive-bash-session", "Migrado"],
+  ["monitor", "Migrado"],
+  ["monitor", "Migrado"],
   ["session-manager", "Migrado"],
   ["session-notification", "Migrado"],
-  ["task", "Migrado parcialmente"],
+  ["task", "Migrado"],
   ["opencode-skill-loader", "Migrado"],
   ["Goal", "Migrado"],
+  // Rows closed in the T25 closure pass, each pinned so a regeneration cannot
+  // silently downgrade the audited terminal status.
+  ["continuations", "Migrado"],
+  ["Team mode", "Migrado"],
+  ["boulder-state", "Migrado"],
+  ["claude-tasks", "Migrado"],
+  ["delegate-task", "Migrado"],
+  ["background-task", "Migrado"],
+  ["background-notification", "Migrado"],
+  ["chat-message", "Migrado"],
+  ["stop-continuation", "Migrado"],
+  ["session-compacting", "Migrado"],
+  ["context7", "Migrado"],
+  ["websearch", "Migrado"],
+  ["default Ultrawork", "Migrado"],
+  ["keyword Ultrawork / ULW", "Migrado"],
+  ["background-task handoff", "Migrado"],
+  // T25 final closure: the last real runtime gaps, each pinned so a
+  // regeneration cannot silently downgrade the audited terminal status.
+  ["legacy-plugin-toast", "Migrado"],
+  ["native-edition-nudge", "Migrado"],
+  ["native-edition-nudge", "Migrado"],
+  ["btw-side", "Migrado"],
+  ["opengateway-provider", "Migrado"],
+  ["task-toast-manager", "Migrado"],
+  ["tui-sidebar", "Migrado"],
+  ["gpt-apply-patch-guard", "Migrado"],
+  ["boulder", "Migrado"],
+  ["doctor", "Migrado"],
+  ["get-local-version", "Migrado"],
 ]
 
-// Row shape: | `name` | classification | status | rationale | future evidence |
+// Terminal statuses: a closed row renders one of these. Anything else is an
+// open row and must be named in OPEN_GAPS_T25.
+const TERMINAL_STATUSES = new Set(["Migrado", "Equivale a builtin V2", "unwired upstream"])
+
+// T25 open-debt register. A non-terminal row is only allowed if it is named
+// here, so a regeneration can never introduce a NEW silent pending/partial row.
+// T25 closed every open row: the register is empty, and a new non-terminal row
+// now fails the suite until it is either migrated or explicitly re-registered.
+const OPEN_GAPS_T25 = []
+
+
 // The rationale is greedy so a stray " | " inside it does not split the row.
 const ROW = /^\| `([^`]+)` \| ([^|]+?) \| ([^|]+?) \| (.+) \| (.+) \|$/
 
@@ -123,6 +163,14 @@ describe("migration inventory ledger", () => {
         if (actual < count) unmet.push(`${name}: ${status} (${actual}/${count})`)
       }
       expect(unmet).toEqual([])
+    })
+
+    test("#then no row outside the T25 open-debt register is left non-terminal", () => {
+      const nonTerminal = rows
+        .filter((row) => !TERMINAL_STATUSES.has(row.status))
+        .map((row) => row.name)
+        .sort()
+      expect(nonTerminal).toEqual(OPEN_GAPS_T25)
     })
 
     test("#then every row carries a rationale and a future-evidence entry", () => {

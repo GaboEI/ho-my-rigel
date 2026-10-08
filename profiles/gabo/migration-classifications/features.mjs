@@ -27,15 +27,17 @@ export default {
   },
   "boulder-state": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "El estado persistente de trabajo boulder de `features/boulder-state/` sobre `packages/boulder-state/` sostiene el plan activo entre sesiones y se migra como base del enforcer de continuidad nativo de V2.",
-    futureEvidence: "task:22",
+    futureEvidence: "contract:rigel-v2-native-todo-continuation-state.mjs; contract:rigel-v2-ulw-execute-boulder.mjs; contract:rigel-v2-ulw-execute.test.mjs",
   },
   "btw-side": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "Las conversaciones laterales efímeras de `features/btw-side/` inyectan contexto del padre mediante un hook Transform que V2 no ofrece; se adapta el inyector a la frontera `http.request` reescribiendo el payload real de la petición.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+      "Las conversaciones laterales efimeras de `features/btw-side/` inyectan contexto del padre mediante un hook Transform que V2 no ofrece; se adapta el inyector al hook `context` de V2. `rigel-v2-btw-core.mjs` porta metadata (`omo_btw_side` v1), el budget de padre (64 mensajes / 64 KiB), la maquina de estados del controlador (retained sides, tombstones cap 512, escape-return doble <=1000 ms) y las opciones del picker; `rigel-v2-native-btw-context.mjs` compone el inyector dentro del hook `context` (positivo con metadata -> inyeccion bounded + recibo durable; negativo sin metadata -> byte-identico) y `rigel-v2-native-cli-btw.mjs` provee `/btw`, picker y creacion de sesion side con metadata sin parentID.",
+    futureEvidence: "`rigel-v2-btw-core.mjs`; `rigel-v2-btw-core.test.mjs`; `rigel-v2-native-btw-context.mjs`; `rigel-v2-native-btw-context.test.mjs`; `rigel-v2-native-cli-btw.mjs`; `rigel-v2-native-cli-btw.test.mjs`; `rigel-v2-native.mjs` (hook context)",
   },
   "builtin-commands": {
     classification: "Migrar",
@@ -46,15 +48,17 @@ export default {
   },
   "claude-code-agent-loader": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "La carga de agentes desde `.opencode/agents/` y plugins de Claude Code de `features/claude-code-agent-loader/` delega en `packages/claude-code-compat-core/`; se migra reutilizando el cargador neutral y registrando el resultado en el roster de V2.",
-    futureEvidence: "contract:qa-v2-agent-domain.mjs",
+    futureEvidence: "contract:rigel-v2-native-agents.mjs; contract:rigel-v2-claude-code-config.mjs; contract:rigel-v2-native-agents.test.mjs",
   },
   "claude-code-command-loader": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "La carga de comandos desde `.opencode/commands/` y plugins de Claude Code de `features/claude-code-command-loader/` sobre `packages/claude-code-compat-core/` se migra al modelo de comandos de V2 junto con builtin-commands.",
-    futureEvidence: "task:task:35",
+    futureEvidence: "contract:rigel-v2-native-builtin-commands.mjs; contract:rigel-v2-native-builtin-commands.test.mjs",
   },
   "claude-code-mcp-loader": {
     classification: "Migrar",
@@ -65,15 +69,17 @@ export default {
   },
   "claude-code-session-state": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "El registro en memoria de sesiones de subagente de `features/claude-code-session-state/` no expone comportamiento propio; es un módulo de soporte que viaja con la superficie de delegación e inyección que lo consume.",
-    futureEvidence: "contract:qa-v2-native-delegation.mjs",
+    futureEvidence: "contract:rigel-v2-native-session-state.mjs; contract:rigel-v2-native-session-state.test.mjs",
   },
   "claude-tasks": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
       "El esquema y almacenamiento atómico de tareas de `features/claude-tasks/` se migran, pero su sincronización con la API de todos de OpenCode es un muro de V2 y se adapta con el registro persistente propio de la tarea 22.",
-    futureEvidence: "task:22",
+    futureEvidence: "contract:tools/task.tools.mjs; contract:tools/task.tools.test.mjs; contract:rigel-v2-native-todo-integration.test.mjs",
   },
   "context-injector": {
     classification: "Adaptar",
@@ -84,9 +90,10 @@ export default {
   },
   "hook-message-injector": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "El inyector de mensajes de sistema de `features/hook-message-injector/` es un helper de soporte consumido por otros hooks y no expone comportamiento propio; viaja con los hooks que lo usan.",
-    futureEvidence: "task:task:29",
+    futureEvidence: "contract:rigel-v2-native-prompt.mjs; contract:rigel-v2-native-prompt.test.mjs",
   },
   "mcp-oauth": {
     classification: "Migrar",
@@ -97,23 +104,24 @@ export default {
   },
   monitor: {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "El backend de `monitor_start/stop/list/output` de `features/monitor/` (procesos vigilados, anillo de salida, filtrado e inyección por lotes) se porta a V2 condicionado a la clave `monitor.enabled`, apagada por defecto.",
-    futureEvidence: "gate:monitor.enabled",
+    futureEvidence: "contract:tools/monitor.tools.mjs; contract:tools/monitor.tools.test.mjs; contract:rigel-v2-monitor-status.test.mjs",
   },
   "native-edition-nudge": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El aviso de TUI de `features/native-edition-nudge/` que ofrece instalar la edición nativa se migra con su diálogo, acciones y estado de snooze al runtime nativo V2.",
-    futureEvidence: "task:task:35",
+      "El aviso de TUI de `features/native-edition-nudge/` que ofrece instalar la edicion nativa se migra con su dialogo, acciones y estado de snooze al runtime nativo V2: `applyNativeEditionNudgeAction` porta las cuatro acciones (install sin escritura de estado; guide +7d; later snoozed +7d; never) y `rigel-v2-native-cli-nudge.mjs` registra el comando `/native` (alias omo-native) con el dialogo de seleccion sobre el mismo store durable.",
+    futureEvidence: "`rigel-v2-native-cli-nudge.mjs`; `rigel-v2-native-cli-nudge.test.mjs`; `rigel-v2-native-nudge-core.mjs`; `rigel-v2-native-nudge-state.mjs`",
   },
   "opencode-runtime-skills": {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
       "La fuente de skills en runtime de `features/opencode-runtime-skills/` se cubre consumiendo el catalogo fusionado del host (`ctx.skill.list()`) con single-flight y fallback al disco (`createRuntimeHostSkillSource`); el servidor de fuente de skills de seguridad por sesion no tiene seam equivalente en el dominio de skills de V2 y se considera adaptado fuera.",
-    futureEvidence: "`rigel-v2-native-skills.mjs` (createRuntimeHostSkillSource); `rigel-v2-native-skills.test.mjs`",
+    futureEvidence: "contract:rigel-v2-native-skills.mjs (createRuntimeHostSkillSource); contract:rigel-v2-native-skills.test.mjs",
   },
   "opencode-skill-loader": {
     classification: "Migrar",
@@ -124,9 +132,10 @@ export default {
   },
   "opengateway-provider": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La inyección del proveedor OpenGateway de `features/opengateway-provider/`, activada solo con credencial real y con el catálogo empaquetado, se migra al modelo de configuración de proveedores de V2.",
-    futureEvidence: "task:task:24",
+      "La inyeccion del proveedor OpenGateway de `features/opengateway-provider/`, activada solo con credencial real (env `OPENGATEWAY_API_KEY` o el auth store del lab) y con el catalogo empaquetado (60 modelos), se migra al modelo de proveedores de V2 mediante `context.provider.transform`: `rigel-v2-native-opengateway.mjs` rellena solo campos ausentes (los del usuario ganan), agrega cada modelo del catalogo solo si su id falta y clona cada valor inyectado. Sin credencial es un no-op byte-identico (el transform nunca corre).",
+    futureEvidence: "`rigel-v2-native-opengateway.mjs`; `rigel-v2-native-opengateway.test.mjs`; `rigel-v2-opengateway-models.json`; `rigel-v2-native.mjs` (install en setup)",
   },
   "run-continuation-state": {
     classification: "Migrar",
@@ -144,9 +153,10 @@ export default {
   },
   "task-toast-manager": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "El gestor de notificaciones de progreso de tareas de `features/task-toast-manager/` se migra a los avisos de la TUI de V2 conservando el seguimiento de estado y la información de fallback de modelo.",
-    futureEvidence: "task:task:33",
+      "El gestor de notificaciones de progreso de tareas de `features/task-toast-manager/` se migra a los avisos de la TUI de V2 conservando el seguimiento de estado y la informacion de fallback de modelo: `rigel-v2-native-task-toast-core.mjs` porta el manager (titulos, variantes, regla de duracion, lista running/queued con marcadores y duraciones, prefijos [FALLBACK], toast de completado) con el sink inyectado, y `rigel-v2-native-cli-task-toast.mjs` lo conduce desde los eventos V2 y el marcador/estado durable de background, encendido por defecto.",
+    futureEvidence: "`rigel-v2-native-task-toast-core.mjs`; `rigel-v2-native-task-toast-core.test.mjs`; `rigel-v2-native-cli-task-toast.mjs`; `rigel-v2-native-cli-task-toast.test.mjs`",
   },
   "team-mode": {
     classification: "Migrar",
@@ -164,14 +174,16 @@ export default {
   },
   "tool-metadata-store": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "El almacén de metadatos de ejecución de herramientas de `features/tool-metadata-store/` no expone comportamiento propio; es un módulo de soporte que viaja con las herramientas de tarea que publican y recuperan su metadata.",
-    futureEvidence: "contract:qa-v2-native-delegation.mjs",
+    futureEvidence: "contract:rigel-v2-native-core.mjs; contract:qa-v2-native-delegation.mjs",
   },
   "tui-sidebar": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
-      "La barra lateral de TUI de `features/tui-sidebar/`, que deriva roster y estado y publica un espejo para la TUI, se migra bajo la clave de configuración `tui.sidebar.enabled`.",
-    futureEvidence: "gate:tui.sidebar.enabled",
+      "La barra lateral de TUI de `features/tui-sidebar/` se migra bajo la clave `tui.sidebar.enabled` (ausente = encendida; false = inerte). `rigel-v2-sidebar-core.mjs` porta el esquema de snapshot (v1), los derivers (roster + estado, orden por prioridad), `computeView`/`viewKey`, los caps (12 agentes / 12 jobs), la ventana de frescura del loop (120 s) y la redaccion de activeGoal; `rigel-v2-native-cli-sidebar.mjs` registra el slot `sidebar.content` desde datos reactivos y escribe un recibo durable `sidebar-snapshot.json` (observable en el lab headless).",
+    futureEvidence: "`rigel-v2-sidebar-core.mjs`; `rigel-v2-sidebar-core.test.mjs`; `rigel-v2-native-cli-sidebar.mjs`; `rigel-v2-native-cli-sidebar.test.mjs`",
   },
 }

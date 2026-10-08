@@ -24,10 +24,10 @@ export default {
   },
   "Team mode": {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "El team mode (gate `team_mode.enabled`) corre en V2 con las 12 herramientas team_*, los 4 handlers de eventos, el gating por rol y los inyectores de mailbox/estado sobre el storage nativo. Gap exacto: worktrees por miembro (la visualizacion tmux ya esta reescrita). Parcial aceptado por decision de mantenedor 2026-10-05 para el cierre de Fase 4; destino: clasificacion en Fase 5.",
-    futureEvidence: "`tools/team.tools.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-gating.mjs`; `rigel-v2-native.mjs` (wiring gate team_mode)",
+      "El team mode (gate `team_mode.enabled`) corre completo en V2: las 12 herramientas team_*, los 4 handlers de eventos, el gating por rol y los inyectores de mailbox/estado sobre el storage nativo, mas el worktree git exclusivo por miembro con limpieza durable y reconciliacion fail-closed al arrancar (T26, `f7926514f`). El aislamiento por proyecto usa la clave canonica del repo y un journal por projectKey.",
+    futureEvidence: "`tools/team.tools.mjs`; `rigel-v2-team-events.mjs`; `rigel-v2-team-gating.mjs`; `rigel-v2-team-worktrees.mjs`; `rigel-v2-team-worktrees.test.mjs`; `rigel-v2-team-worktree-reconcile.mjs`; `rigel-v2-team-scope-registry.mjs`; `rigel-v2-native.mjs` (wiring gate team_mode)",
   },
   Goal: {
     classification: "Migrar",
@@ -38,8 +38,9 @@ export default {
   },
   continuations: {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "La continuidad de todos y compactación (sección de keyword detector y continuidad del plan) se adapta: V2 no expone `session.todo` ni `todowrite`, por lo que la tarea 22 define un registro propio ligado al sessionID.",
-    futureEvidence: "task:22",
+      "La continuidad de todos y compactacion se adapta al modelo nativo de V2: un registro propio ligado al sessionID (puente de estado en disco, conteos sin contenido), el enforcer de continuidad con sus gates, y el preserver de compactacion que captura y restaura el snapshot de todos (T22, `b8e0033da`). V2 no expone `session.todo` ni `todowrite`, por lo que el registro propio es la equivalencia.",
+    futureEvidence: "`rigel-v2-native-todo-continuation.mjs`; `rigel-v2-native-todo-continuation-gate.mjs`; `rigel-v2-native-todo-continuation-state.mjs`; `rigel-v2-native-compaction-todo-preserver.mjs`; `rigel-v2-native-todo-continuation-wiring.test.mjs`; `rigel-v2-native-todo-preserver-wiring.test.mjs`",
   },
 }

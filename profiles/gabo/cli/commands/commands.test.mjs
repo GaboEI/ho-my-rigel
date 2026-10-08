@@ -60,12 +60,27 @@ describe("#given the version command", () => {
 })
 
 describe("#given the doctor command", () => {
-  test("#when the validator passes #then it reports OK and when it fails #then exit 1", async () => {
-    const ok = captureIo({ spawn: () => ({ status: 0, stdout: "gabo profile validation passed", stderr: "" }) })
-    expect(await doctorCommand.run([], ok)).toBe(0)
-    const bad = captureIo({ spawn: () => ({ status: 1, stdout: "", stderr: "boom" }) })
-    expect(await doctorCommand.run([], bad)).toBe(1)
-    expect(bad.text()).toContain("boom")
+  test("#when every category is healthy #then it reports OK and --json emits the four categories", async () => {
+    const home = tempDir("rigel-doctor-home-")
+    const config = join(tempDir("rigel-doctor-cfg-"), "opencode.json")
+    writeFileSync(config, JSON.stringify({ plugin: ["/opt/rigel/rigel-v2-native"], mcp: { lsp: {} } }, null, 2))
+    const env = { RIGEL_V2_CONFIG: config, XDG_CACHE_HOME: join(home, "cache") }
+    const healthy = () => ({ status: 0, stdout: "2.0.22\n", stderr: "" })
+    const io = captureIo({ home, env, spawn: healthy })
+    expect(await doctorCommand.run([], io)).toBe(0)
+    expect(io.text()).toContain("Rigel V2 doctor: OK")
+    const jsonIo = captureIo({ home, env, spawn: healthy })
+    expect(await doctorCommand.run(["--json"], jsonIo)).toBe(0)
+    const payload = JSON.parse(jsonIo.text())
+    expect(payload.results.map((result) => result.name)).toEqual(["SYSTEM", "CONFIG", "TOOLS", "MODELS"])
+    expect(payload.exitCode).toBe(0)
+    expect(payload.target).toBe("opencode")
+  })
+
+  test("#when the binary is missing and the runtime is unregistered #then it exits 1", async () => {
+    const io = captureIo({ env: { RIGEL_V2_CONFIG: join(tempDir("rigel-doctor-none-"), "absent.json") }, spawn: () => ({ status: 1, stdout: "", stderr: "not found" }) })
+    expect(await doctorCommand.run([], io)).toBe(1)
+    expect(io.text()).toContain("SYSTEM: fail")
   })
 })
 

@@ -4,15 +4,17 @@
 export default {
   "agent-builder": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "agent-builder.ts compone el AgentConfig con buildAgent a partir de factories y overrides de categoria durante la generacion, y su salida queda horneada en el manifiesto V2 sin superficie de runtime propia.",
-    futureEvidence: "contract:rigel-v2-native-agents.test.mjs",
+    futureEvidence: "contract:rigel-v2-native-agents.mjs; contract:rigel-v2-native-agents.test.mjs; generate-v2-agents.mjs",
   },
   "agent-skill-resolution": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "agent-skill-resolution.ts resuelve las skills declaradas por el agente e inserta su contenido en el prompt al armar la configuracion, por lo que solo actua en la generacion del manifiesto.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-skills.mjs; contract:rigel-v2-native-skills-injection.test.mjs",
   },
   atlas: {
     classification: "Migrar",
@@ -30,45 +32,52 @@ export default {
   },
   "dynamic-agent-category-skills-guide": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-category-skills-guide.ts ensambla las secciones de guia de categorias y skills del prompt de Sisyphus en tiempo de generacion y no tiene superficie de runtime.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "dynamic-agent-core-sections": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-core-sections.ts arma las secciones base del prompt, desde identidad hasta tablas de delegacion, durante la generacion del agente.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "dynamic-agent-policy-sections": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-policy-sections.ts arma las secciones de politicas y bloques duros del prompt en tiempo de generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "dynamic-agent-prompt-builder": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-prompt-builder.ts es un barrel que reexporta los constructores de secciones y solo participa en el armado del prompt de generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "dynamic-agent-prompt-types": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-prompt-types.ts define los tipos de las secciones dinamicas del prompt y no aporta comportamiento de runtime.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "dynamic-agent-tool-categorization": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "dynamic-agent-tool-categorization.ts clasifica herramientas para el prompt de generacion y no expone superficie de runtime.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-categories.mjs; contract:rigel-v2-native-categories.test.mjs",
   },
   "env-context": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "env-context.ts produce el bloque de timezone y locale que se anexa al prompt al generar la configuracion, por lo que su valor queda horneado en el manifiesto.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-agent-manifest.mjs",
   },
   explore: {
     classification: "Migrar",
@@ -86,15 +95,17 @@ export default {
   },
   "gpt-apply-patch-guard": {
     classification: "Adaptar",
+    status: "Migrado",
     rationale:
-      "gpt-apply-patch-guard.ts solo aporta guias de edicion para modelos GPT; en V2 la guia se adapta a la frontera de herramientas de edicion disponible.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+      "Las guias de edicion para modelos GPT de `agents/gpt-apply-patch-guard.ts` (constantes byte-identicas) se portan a un selector puro por modelo (`rigel-v2-native-gpt-edit-guidance.mjs`) que elige la guia `apply_patch` solo cuando el harness expone esa tool y la guia generica en caso contrario; el runtime nativo, que registra `edit`/`write`, inyecta la generica en el canal `system` del hook `context` (marcador idempotente) y ninguna para un modelo no-GPT. Contrato de inclusion/exclusion por modelo en el seam real.",
+    futureEvidence: "`rigel-v2-native-gpt-edit-guidance.mjs`; `rigel-v2-native-gpt-edit-guidance.test.mjs`; `rigel-v2-native-gpt-edit-guidance-wiring.test.mjs`; `rigel-v2-native-prompt.mjs` (hook context)",
   },
   "gpt-prompt-identity": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "gpt-prompt-identity.ts mapea el modelo a la identidad textual usada por los prompts de Sisyphus y Sisyphus-Junior en tiempo de generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   hephaestus: {
     classification: "Migrar",
@@ -105,9 +116,10 @@ export default {
   },
   "kimi-tool-loop-guard": {
     classification: "Migrar",
+    status: "Migrado",
     rationale:
       "kimi-tool-loop-guard.ts es una guia textual que evita llamadas repetidas; se migra como parte del prompt del agente hacia la frontera de herramientas V2.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-prompt.test.mjs",
   },
   librarian: {
     classification: "Migrar",
@@ -167,63 +179,73 @@ export default {
   },
   "sisyphus-agent-config": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-agent-config.ts construye las variantes de AgentConfig de Sisyphus por modelo en tiempo de generacion, sin superficie de runtime.",
-    futureEvidence: "contract:rigel-v2-native-agents.test.mjs",
+    futureEvidence: "contract:rigel-v2-native-agents.mjs; contract:rigel-v2-native-agents.test.mjs; generate-v2-agents.mjs",
   },
   "sisyphus-agent-factory": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-agent-factory.ts enruta al prompt de Sisyphus segun el modelo y compone el AgentConfig durante la generacion del manifiesto.",
-    futureEvidence: "contract:rigel-v2-native-agents.test.mjs",
+    futureEvidence: "contract:rigel-v2-native-agents.mjs; contract:rigel-v2-native-agents.test.mjs; generate-v2-agents.mjs",
   },
   "sisyphus-dynamic-prompt": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt.ts orquesta el armado dinamico del prompt de Sisyphus y aplica overrides de Gemini en tiempo de generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-builder": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-builder.ts encadena los renderizadores de secciones del prompt dinamico de Sisyphus durante la generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-execution": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-execution.ts renderiza la seccion de ejecucion y delegacion del prompt de Sisyphus durante la generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-exploration": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-exploration.ts renderiza la seccion de exploracion y busqueda paralela del prompt de Sisyphus en la generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-role": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-role.ts renderiza las secciones de rol e intent gate del prompt de Sisyphus en tiempo de generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-sections": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-sections.ts recolecta las secciones que arman el prompt de Sisyphus durante la generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-dynamic-prompt-style": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-dynamic-prompt-style.ts renderiza la seccion de tono y restricciones del prompt de Sisyphus durante la generacion.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-gemini-fallback-overrides": {
     classification: "Interno de build (sin superficie de runtime)",
+    status: "Migrado",
     rationale:
       "sisyphus-gemini-fallback-overrides.ts inserta overrides de Gemini en el prompt ya armado durante la generacion del agente.",
-    futureEvidence: "contract:qa-v2-native-prompt-contract.mjs",
+    futureEvidence: "contract:rigel-v2-native-sisyphus-prompt.mjs; contract:rigel-v2-native-sisyphus-prompt.test.mjs",
   },
   "sisyphus-junior": {
     classification: "Migrar",

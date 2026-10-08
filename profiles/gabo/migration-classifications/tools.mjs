@@ -22,10 +22,10 @@ export default {
   },
   "delegate-task": {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "El enrutado por categoría y subagente de `tools/delegate-task/tools.ts` se adapta al `rigel_task` nativo, que resuelve categorías y agentes llamables y delega con modelo por categoría en `rigel-v2-native.mjs`.",
-    futureEvidence: "`rigel-v2-native-categories.mjs`; `rigel-v2-background-key.mjs`; `rigel-v2-native.mjs`",
+      "El enrutado por categoría y subagente de `tools/delegate-task/tools.ts` se adapta al `rigel_task` nativo, que resuelve categorías y agentes llamables y delega con modelo por categoría en `rigel-v2-native.mjs`; la paridad de categorías, la clave de concurrencia background y la cadena explícita se cubren en los modulos citados.",
+    futureEvidence: "`rigel-v2-native-categories.mjs`; `rigel-v2-native-categories.test.mjs`; `rigel-v2-background-key.mjs`; `rigel-v2-native-explicit-chain.mjs`; `rigel-v2-native.mjs`; `qa-v2-native-delegation.mjs`",
   },
   glob: {
     classification: "Migrar",
@@ -64,10 +64,10 @@ export default {
   },
   monitor: {
     classification: "Migrar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "La familia `monitor_start/stop/list/output` de `tools/monitor/create-monitor-tools.ts` se porta a V2, condicionada a la clave de configuración `monitor.enabled` (apagada por defecto).",
-    futureEvidence: "gate:monitor.enabled",
+      "La familia `monitor_start/stop/list/output` de `tools/monitor/create-monitor-tools.ts` se porta a V2 (`tools/monitor.tools.mjs` + `monitor-engine.mjs` + `monitor-delivery.mjs`), condicionada a la clave de configuración `monitor.enabled` (apagada por defecto). El estado de los monitores se inyecta en el turno del orquestador por el hook `context` y el gate apagado es un no-op verificado.",
+    futureEvidence: "`tools/monitor.tools.mjs`; `tools/monitor-engine.mjs`; `tools/monitor-delivery.mjs`; `tools/monitor.tools.test.mjs`; `rigel-v2-monitor-status.mjs`; `rigel-v2-monitor-status.test.mjs`; `rigel-v2-monitor-status-wiring.test.mjs`",
   },
   "session-manager": {
     classification: "Migrar",
@@ -99,9 +99,9 @@ export default {
   },
   task: {
     classification: "Adaptar",
-    status: "Migrado parcialmente",
+    status: "Migrado",
     rationale:
-      "La familia `task_create/get/list/update` de `tools/task/` se adapta al motor de tareas nativo de V2, con los gates de configuración respetados en runtime.",
-    futureEvidence: "`tools/task.tools.mjs`; `rigel-v2-native-conditional-tools.mjs`; `tools/task.tools.test.mjs`",
+      "La familia `task_create/get/list/update` de `tools/task/` se adapta al motor de tareas nativo de V2 (`tools/task.tools.mjs`), con los gates de configuración respetados en runtime mediante las herramientas condicionales; el espejo de todos ligado a la sesión se prueba en la integración.",
+    futureEvidence: "`tools/task.tools.mjs`; `rigel-v2-native-conditional-tools.mjs`; `tools/task.tools.test.mjs`; `rigel-v2-native-todo-integration.test.mjs`; `rigel-v2-native-todo-wiring.test.mjs`",
   },
 }

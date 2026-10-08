@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url"
 import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
 import {
   parseJsonc,
-  registerNotificationCliPlugin,
+  registerCompanionCliPlugin,
   resolveNotificationOptions,
   resolveProfileOpenCodeBlock,
 } from "./notification-activation-config.mjs"
@@ -72,18 +72,15 @@ for (const file of runtimeModules) {
   fs.copyFileSync(path.join(sourceOpen, file), destination)
 }
 fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native.mjs"), path.join(runtime, "index.js"))
-// Second entrypoint: the companion CLI plugin (`@opencode/plugin/tui`). A local
-// plugin directory is resolved by file name (`tui` -> `tui.js`), so it is
-// deployed as `tui.js` beside `index.js`. It is only deployed when the
-// notification config is explicitly enabled: with it absent, neither the file
-// nor the `./tui` export exists, so the host cannot load the companion at all.
+// Second entrypoint: the composed companion CLI plugin (`@opencode/plugin/tui`).
+// A local plugin directory is resolved by file name (`tui` -> `tui.js`), so it
+// is deployed as `tui.js` beside `index.js`. It is always deployed: the
+// companion composes several surfaces (notification, legacy-name notice,
+// native-edition nudge, task toasts) and each applies its own gate, so an
+// unconfigured notification block no longer removes the whole companion.
 const cliEntryName = "tui.js"
 const cliEntryDestination = path.join(runtime, cliEntryName)
-if (notificationOptions.enabled) {
-  fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native-cli-notification.mjs"), cliEntryDestination)
-} else {
-  fs.rmSync(cliEntryDestination, { force: true })
-}
+fs.copyFileSync(path.join(sourceOpen, "rigel-v2-native-cli.mjs"), cliEntryDestination)
 // Task 12: stage the keyword-detector prompt bodies the native request seam
 // reads. The original prompts target OmO's V1 `task` tool, but V2 reserves that
 // name and the native runtime exposes `rigel_task`, so translate only actual
@@ -112,8 +109,7 @@ if (typeof comboBanner !== "string" || !comboBanner.trim()) {
 }
 fs.writeFileSync(path.join(runtime, "prompts/ultrawork-combo-banner.md"), `${comboBanner}\n`, { mode: 0o600 })
 fs.copyFileSync(agentManifest, path.join(runtime, "rigel-v2-native-agent-manifest.mjs"))
-const runtimeExports = { ".": "./index.js" }
-if (notificationOptions.enabled) runtimeExports["./tui"] = `./${cliEntryName}`
+const runtimeExports = { ".": "./index.js", "./tui": `./${cliEntryName}` }
 fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ name: "rigel-v2-native", type: "module", exports: runtimeExports }, null, 2) + "\n", { mode: 0o600 })
 for (const file of ["index.js", cliEntryName, ...runtimeModules, "rigel-v2-native-agent-manifest.mjs", ...promptFiles.map(([name]) => `prompts/${name}`), "prompts/ultrawork-combo-banner.md"]) {
   const target = path.join(runtime, file)
@@ -137,15 +133,20 @@ state.protectedFingerprint = protectedFingerprint
 state.nativeV2ActivatedAt = new Date().toISOString()
 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 })
 
-// Register the companion CLI plugin in the isolated CLI config and disable the
-// host's always-on built-in notifier - only when the notification config is
-// explicitly enabled (resolved above). Otherwise any previous registration and
-// the builtin disable marker are removed, so an unconfigured profile leaves the
-// host builtin untouched.
+// Register the composed companion CLI plugin in the isolated CLI config and
+// disable the host's always-on built-in notifier - the latter only when the
+// notification config is explicitly enabled (resolved above). The companion
+// itself is always registered: its non-notification surfaces are default-on and
+// gate themselves. An unconfigured profile therefore still leaves the host
+// builtin notifier untouched.
 const cliConfigFile = path.join(path.dirname(configFile), "cli.json")
 const cliBefore = fs.existsSync(cliConfigFile) ? readJson(cliConfigFile) : { plugins: [] }
-const cliAfter = registerNotificationCliPlugin(cliBefore, { runtimeDir: runtime, options: notificationOptions })
+const cliAfter = registerCompanionCliPlugin(cliBefore, {
+  runtimeDir: runtime,
+  options: notificationOptions,
+  notificationEnabled: notificationOptions.enabled,
+})
 fs.writeFileSync(cliConfigFile, JSON.stringify(cliAfter, null, 2) + "\n", { mode: 0o600 })
 
 console.log("Rigel native OpenCode V2 runtime registered.")
-console.log(`Rigel session notifications ${notificationOptions.enabled ? "enabled" : "disabled"} in ${cliConfigFile}.`)
+console.log(`Rigel companion CLI surfaces registered in ${cliConfigFile} (builtin notifier ${notificationOptions.enabled ? "disabled" : "left untouched"}).`)

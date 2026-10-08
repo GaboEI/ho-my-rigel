@@ -154,6 +154,52 @@ check("worktreeSweep.nonRepoRefused", notRepo.status === 1, `exit ${notRepo.stat
 const astGrep = cli(["ast-grep", "--dry-run", "--json"])
 check("astGrep.dryRun", astGrep.status === 0 && astGrep.stdout.includes("ast-grep"), astGrep.stdout.slice(0, 120))
 
+// 3b. T25 commands: get-local-version, doctor, boulder (driven from the installed
+// launcher, not the source file).
+const glv = cli(["get-local-version", "--json"])
+let glvPayload = null
+try { glvPayload = JSON.parse(glv.stdout) } catch {}
+check(
+  "getLocalVersion.jsonShape",
+  [0, 1].includes(glv.status) && glvPayload !== null && typeof glvPayload.status === "string" && "currentVersion" in glvPayload && "channel" in glvPayload,
+  glv.stdout.slice(0, 140) || `exit ${glv.status}`,
+)
+const glvDown = cli(["get-local-version", "--registry", "http://127.0.0.1:9", "--json"])
+check("getLocalVersion.unreachableDegrades", glvDown.status === 1, `exit ${glvDown.status}`)
+
+const doctor = cli(["doctor", "--json"])
+let doctorPayload = null
+try { doctorPayload = JSON.parse(doctor.stdout) } catch {}
+check(
+  "doctor.jsonShape",
+  doctorPayload !== null && Array.isArray(doctorPayload.results) && doctorPayload.results.length === 4 && typeof doctorPayload.exitCode === "number",
+  doctor.stdout.slice(0, 140) || `exit ${doctor.status}`,
+)
+
+const boulderDir = tempDir("rigel-cli-boulder-")
+const boulderMissing = cli(["boulder", "--directory", boulderDir, "--json"])
+check("boulder.missingStateRefused", boulderMissing.status === 1, `exit ${boulderMissing.status}`)
+fs.mkdirSync(path.join(boulderDir, ".omo"), { recursive: true })
+fs.writeFileSync(
+  path.join(boulderDir, ".omo", "boulder.json"),
+  JSON.stringify({
+    schema_version: 2,
+    active_work_id: "plan-1",
+    works: {
+      "plan-1": {
+        work_id: "plan-1",
+        plan_name: "plan",
+        active_plan: "plan.md",
+        status: "active",
+        started_at: new Date().toISOString(),
+        session_ids: ["opencode:ses_1"],
+      },
+    },
+  }),
+)
+const boulderOk = cli(["boulder", "--directory", boulderDir, "--json"])
+check("boulder.readsState", boulderOk.status === 0 && boulderOk.stdout.includes("works"), boulderOk.stdout.slice(0, 140) || `exit ${boulderOk.status}`)
+
 // 4. refresh-model-capabilities positive against a stub host.
 const server = createServer((_request, response) => {
   response.writeHead(200, { "content-type": "application/json" })

@@ -765,11 +765,11 @@ test("native runtime registers its ordered tool hook chain and disposes every re
     "compaction",
     "execute.before",
     "execute.after",
-    "prompt",
-    "context",
-    "model.request",
-    "compaction",
-    "http.request",
+      "prompt",
+      "context",
+      "model.request",
+      "compaction",
+      "http.request",
     ])
 
     // Driving the after chain returns the boundary report: every rule ran in
