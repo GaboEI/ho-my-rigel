@@ -938,3 +938,173 @@ describe("Rigel V2 background manager named-RED mutation harness", () => {
     rmSync(root, { recursive: true, force: true })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Upstream a0b2e96c3: a terminal errored child finalizes exactly once. The V2
+// terminal edge is `session.execution.failed` (the session then idles with no
+// plugin-visible idle event); the reader must surface the real error and a
+// repeated/duplicate terminal event must not double-finalize.
+// ---------------------------------------------------------------------------
+
+describe("#given a managed child whose terminal execution failed", () => {
+  test("#when the failure is final (no served fallback) #then exactly one failed handoff fires with the described error", async () => {
+    // given
+    const handoffs = []
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        onSession("ses_stall")
+        return { sessionID: "ses_stall" }
+      },
+      runHandoff: async (item) => { handoffs.push(item) },
+      readStoppedError: async () => ({ type: "provider.invalid-request", message: "child provider boom 400", status: 400 }),
+    })
+    const decision = manager.admit({ taskId: "t-stall", parentSessionID: "p", agent: { name: "x" }, prompt: "a", modelKey: "m" })
+    await decision.ready
+
+    // when
+    const result = await manager.handleChildFailure({ sessionID: "ses_stall" })
+    await manager.whenIdle()
+
+    // then
+    expect(result.action).toBe("none")
+    expect(handoffs.map((item) => item.status)).toEqual(["failed"])
+    expect(handoffs[0].child.error).toBe("provider.invalid-request: child provider boom 400")
+
+    // a repeated terminal event for the finalized record never re-fires
+    expect((await manager.handleChildFailure({ sessionID: "ses_stall" })).action).toBe("ignored")
+    await manager.whenIdle()
+    expect(handoffs.length).toBe(1)
+    await manager.dispose()
+  })
+
+  test("#when a duplicate terminal event arrives while the first is in flight #then only one failed handoff fires", async () => {
+    // given a read that stays pending so the second event lands mid-flight
+    const handoffs = []
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        onSession("ses_dup")
+        return { sessionID: "ses_dup" }
+      },
+      runHandoff: async (item) => { handoffs.push(item) },
+      readStoppedError: async () => { await gate; return "terminal error" },
+    })
+    const decision = manager.admit({ taskId: "t-dup", parentSessionID: "p", agent: { name: "x" }, prompt: "a", modelKey: "m" })
+    await decision.ready
+
+    // when
+    const first = manager.handleChildFailure({ sessionID: "ses_dup" })
+    const second = await manager.handleChildFailure({ sessionID: "ses_dup" })
+    release()
+    const firstResult = await first
+    await manager.whenIdle()
+
+    // then
+    expect(second).toEqual({ action: "ignored", reason: "in-flight" })
+    expect(firstResult.action).toBe("none")
+    expect(handoffs.length).toBe(1)
+    await manager.dispose()
+  })
+
+  test("#when the child session is cleared #then a terminal event is a no-op", async () => {
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        onSession("ses_gone")
+        return { sessionID: "ses_gone" }
+      },
+      runHandoff: async () => {},
+      readStoppedError: async () => "boom",
+    })
+    const decision = manager.admit({ taskId: "t-gone", parentSessionID: "p", agent: { name: "x" }, prompt: "a", modelKey: "m" })
+    await decision.ready
+    manager.clearSession("ses_gone")
+    expect((await manager.handleChildFailure({ sessionID: "ses_gone" })).action).toBe("ignored")
+    await manager.dispose()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Upstream 8e705a122: wire the failure classifier into the background child
+// ---------------------------------------------------------------------------
+
+describe("#given a failed background child and a configured fallback chain", () => {
+  test("#when the failure is retryable #then it re-launches on the next served model and no failure handoff fires", async () => {
+    const starts = []
+    const handoffs = []
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        const id = `ses_${descriptor.taskId}`
+        starts.push({ taskId: descriptor.taskId, model: descriptor.model })
+        onSession(id)
+        return { sessionID: id }
+      },
+      runHandoff: async (item) => { handoffs.push(item) },
+      readStoppedError: async () => ({ name: "RateLimitError", message: "rate limit" }),
+      resolveFallbackChain: () => [
+        { providers: ["openai"], model: "gpt-6-astra" },
+        { providers: ["deepseek"], model: "deepseek-flash" },
+      ],
+    })
+    manager.admit({ taskId: "t1", parentSessionID: "p", agent: { name: "x" }, prompt: "work", modelKey: "m" })
+    await manager.whenIdle()
+    const first = manager.getTask("t1")
+
+    const result = await manager.handleChildFailure({
+      sessionID: first.sessionID,
+      connectedProviders: ["openai", "deepseek"],
+      modelsByProvider: { openai: ["gpt-6-luna-fast"], deepseek: ["deepseek-flash"] },
+    })
+    await manager.whenIdle()
+
+    expect(result.action).toBe("retry")
+    expect(result.model).toEqual({ providerID: "deepseek", id: "deepseek-flash" })
+    expect(handoffs).toEqual([])
+    expect(manager.getTask(result.taskId).retryAttempt).toBe(2)
+    await manager.dispose()
+  })
+
+  test("#when the agent is gone #then it re-launches on FALLBACK_AGENT", async () => {
+    const agents = []
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        const id = `ses_${descriptor.taskId}`
+        agents.push(descriptor.agent?.name)
+        onSession(id)
+        return { sessionID: id }
+      },
+      runHandoff: async () => {},
+      resolveFallbackChain: () => [{ providers: ["openai"], model: "gpt-6-astra" }],
+    })
+    manager.admit({ taskId: "t1", parentSessionID: "p", agent: { name: "x" }, prompt: "work", modelKey: "m" })
+    await manager.whenIdle()
+    const first = manager.getTask("t1")
+    const result = await manager.handleChildFailure({ sessionID: first.sessionID, errorInfo: "Agent not found: x" })
+    await manager.whenIdle()
+    expect(result.action).toBe("fallback-agent")
+    expect(result.agent).toBe("general")
+    expect(agents).toEqual(["x", "general"])
+    await manager.dispose()
+  })
+
+  test("#when nothing is retryable #then the child is finalized through the failure handoff", async () => {
+    const handoffs = []
+    const manager = createBackgroundManager({
+      startChild: async (descriptor, onSession) => {
+        onSession("ses_f")
+        return { sessionID: "ses_f" }
+      },
+      runHandoff: async (item) => { handoffs.push(item) },
+      readStoppedError: async () => "terminal quota exhausted",
+      resolveFallbackChain: () => [{ providers: ["openai"], model: "gpt-6-astra" }],
+    })
+    manager.admit({ taskId: "t1", parentSessionID: "p", agent: { name: "x" }, prompt: "work", modelKey: "m" })
+    await manager.whenIdle()
+    const result = await manager.handleChildFailure({ sessionID: "ses_f" })
+    await manager.whenIdle()
+    expect(result.action).toBe("none")
+    expect(handoffs.map((item) => item.status)).toEqual(["failed"])
+    expect(handoffs[0].child.error).toBe("terminal quota exhausted")
+    await manager.dispose()
+  })
+})

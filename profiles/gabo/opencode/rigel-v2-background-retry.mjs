@@ -162,6 +162,32 @@ function isReachable(entry, connectedSet) {
   return entry.providers.some((provider) => connectedSet.has(String(provider).toLowerCase()))
 }
 
+function providerListsModel(providerModels, modelID) {
+  const wanted = canonicalizeModelID(modelID)
+  return providerModels.some((entry) => {
+    const id = typeof entry === "string" ? entry : entry?.id
+    return typeof id === "string" && canonicalizeModelID(id) === wanted
+  })
+}
+
+/**
+ * Upstream 8e705a122: drop connected providers whose cached model list is known
+ * and does not contain the model. A provider that is not connected, or has no
+ * cached list, is kept, so a cold or partial cache never blocks a fallback.
+ */
+export function filterProvidersServingModel(args = {}) {
+  const { providers, model, connectedSet, modelsByProvider } = args
+  const transform = typeof args.transformModelForProvider === "function" ? args.transformModelForProvider : transformModelForProvider
+  if (!Array.isArray(providers)) return []
+  if (!connectedSet || !modelsByProvider) return providers
+  return providers.filter((provider) => {
+    if (!connectedSet.has(String(provider).toLowerCase())) return true
+    const providerModels = modelsByProvider[provider]
+    if (!Array.isArray(providerModels) || providerModels.length === 0) return true
+    return providerListsModel(providerModels, transform(provider, model))
+  })
+}
+
 /**
  * Select the provider for a fallback entry, mirroring V1
  * `selectFallbackProviderWithCache`: first connected provider in the entry's
@@ -206,6 +232,7 @@ export function selectNextFallback({
   attemptCount = 0,
   currentModel,
   connectedSet = null,
+  modelsByProvider,
   transform = transformModelForProvider,
 }) {
   if (!Array.isArray(fallbackChain)) {
@@ -219,8 +246,19 @@ export function selectNextFallback({
     if (!candidate) break
     selectedAttemptCount++
     if (!isReachable(candidate, connectedSet)) continue
+    // Upstream 8e705a122: a connected provider that provably does not serve the
+    // model is dropped, so the entry advances instead of spawning a child that
+    // dies with "Model not found".
+    const servingProviders = filterProvidersServingModel({
+      providers: candidate.providers,
+      model: candidate.model,
+      connectedSet,
+      modelsByProvider,
+      transformModelForProvider: transform,
+    })
+    if (!isReachable({ ...candidate, providers: servingProviders }, connectedSet)) continue
     const candidateProviderID = selectFallbackProviderFromConnected(
-      candidate.providers,
+      servingProviders,
       currentModel?.providerID,
       connectedSet,
     )
@@ -277,6 +315,7 @@ export function decideBackgroundRetry({
   attemptCount = 0,
   fallbackChain,
   connectedProviders,
+  modelsByProvider,
   transform,
 } = {}) {
   if (isAgentNotFoundError(errorInfo) && currentAgent !== FALLBACK_AGENT) {
@@ -310,6 +349,7 @@ export function decideBackgroundRetry({
     attemptCount,
     currentModel,
     connectedSet,
+    modelsByProvider,
     ...(transform ? { transform } : {}),
   })
   if (!selection.found) {

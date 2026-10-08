@@ -1,4 +1,5 @@
 import { relative, resolve, isAbsolute } from "node:path"
+import { patchToolArgs } from "./rigel-v2-native-tool-args.mjs"
 
 /**
  * Native OpenCode V2 port of the V1 `prometheus-md-only` hook.
@@ -160,7 +161,7 @@ export function createNativePrometheusMdOnly({ resolveAgent, directory } = {}) {
       if (TASK_TOOLS.has(tool)) {
         const prompt = args.prompt
         if (typeof prompt === "string" && prompt && !prompt.includes(PLANNING_CONTEXT_OPEN)) {
-          args.prompt = PLANNING_CONSULT_WARNING + prompt
+          patchToolArgs(event, (target) => { target.prompt = PLANNING_CONSULT_WARNING + prompt })
         }
         return
       }

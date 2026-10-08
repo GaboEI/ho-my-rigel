@@ -276,9 +276,15 @@ export function taskResult({ sessionID, agent, background, result, taskId }) {
  * because V2 already completed the original tool turn when a background child
  * settles; a synthetic tool result would misrepresent that lifecycle.
  */
-export function backgroundHandoffPrompt({ sessionID, agent, status, result }) {
+export function backgroundHandoffPrompt({ sessionID, agent, status, result, error }) {
+  const agentLabel = typeof agent === "string"
+    ? agent
+    : agent && typeof agent === "object" && typeof agent.name === "string" ? agent.name : "unknown"
   const detail = status === "succeeded"
     ? (result || "(The child completed without visible text.)")
     : `(The child ${status ?? "ended"} before returning a result.)`
-  return `<rigel-native-background-result>\nagent: ${agent}\nsessionID: ${sessionID}\nstatus: ${status ?? "unknown"}\n${detail}\n</rigel-native-background-result>`
+  // A failed handoff must name the cause; the flag-only detail left the parent
+  // unable to tell a provider error from an abort.
+  const cause = status === "failed" && error ? `\nerror: ${typeof error === "string" ? error : JSON.stringify(error)}` : ""
+  return `<rigel-native-background-result>\nagent: ${agentLabel}\nsessionID: ${sessionID}\nstatus: ${status ?? "unknown"}${cause}\n${detail}\n</rigel-native-background-result>`
 }

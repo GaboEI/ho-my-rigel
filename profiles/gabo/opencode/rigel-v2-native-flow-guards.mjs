@@ -32,6 +32,7 @@ import {
   decideQuestionLabelTruncation,
 } from "./rigel-v2-flow-logic.mjs"
 import { canonicalAgentKey } from "./rigel-v2-native-category-skill-reminder.mjs"
+import { patchToolArgs } from "./rigel-v2-native-tool-args.mjs"
 
 export const NOTEPAD_WRITE_GUARD_NAME = "notepad-write-guard"
 export const QUESTION_LABEL_TRUNCATOR_NAME = "question-label-truncator"
@@ -97,7 +98,7 @@ export const questionLabelTruncator = {
     const input = readInput(event)
     const truncated = decideQuestionLabelTruncation(tool, input)
     if (truncated === null || truncated === input || !isPlainObject(input)) return
-    input.questions = truncated.questions
+    patchToolArgs(event, (args) => { args.questions = truncated.questions })
   },
 }
 
@@ -127,7 +128,7 @@ export function createSisyphusJuniorNotepadRule({ taskToolName } = {}) {
         prompt: input.prompt,
       })
       if (directive === null) return
-      input.prompt = directive
+      patchToolArgs(event, (args) => { args.prompt = directive })
     },
   }
 }

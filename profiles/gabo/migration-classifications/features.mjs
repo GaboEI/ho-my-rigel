@@ -21,9 +21,9 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "El motor de ciclo de vida de tareas de `features/background-agent/` se porta al runtime nativo V2 sobre eventos de sesion y un registro propio. `rigel-v2-background-manager.mjs` compone la cola FIFO por clave y el reintento (`rigel-v2-background-queue.mjs`, `rigel-v2-background-retry.mjs`), el handoff no bloqueante (`rigel-v2-background-handoff.mjs`, tope MAX_WAKE_ATTEMPTS=3) y el marcador de continuacion en disco (`rigel-v2-background-marker.mjs`, `.omo/run-continuation/<parent>.json`, fuente `background-task`) sin ningun timer ni poller. `rigel-v2-native.mjs` encola el handoff (sin await) en el bucle de eventos y limpia los hijos en `session.deleted` mediante el registro de T11.",
+      "El motor de ciclo de vida de tareas de `features/background-agent/` se porta al runtime nativo V2 sobre eventos de sesion y un registro propio. `rigel-v2-background-manager.mjs` compone la cola FIFO por clave y el reintento (`rigel-v2-background-queue.mjs`, `rigel-v2-background-retry.mjs`), el handoff no bloqueante (`rigel-v2-background-handoff.mjs`, tope MAX_WAKE_ATTEMPTS=3) y el marcador de continuacion en disco (`rigel-v2-background-marker.mjs`, `.omo/run-continuation/<parent>.json`, fuente `background-task`) sin ningun timer ni poller. `rigel-v2-native.mjs` encola el handoff (sin await) en el bucle de eventos y limpia los hijos en `session.deleted` mediante el registro de T11. Ademas, una sesion hija cuyo turno assistant termina errado se finaliza (upstream a0b2e96c3) en su borde terminal real: V2 emite `session.execution.failed` (la sesion pasa a idle sin evento idle visible para el plugin, por lo que no hay borde idle que contar), `rigel-v2-background-stopped.mjs` porta el lector de error (`getStoppedSessionErrorInfo`, tolerante a la forma V2 plana con `type` y a la V1 `info.role`, saltando los marcadores `idle`/`system`/`model-switched`) y `handleChildFailure` lee ese error, clasifica el reintento y finaliza por `enqueueHandoff(..., 'failed')` con guarda de reentrada (finaliza una sola vez ante eventos repetidos). El clasificador `classifyRetry` ya tiene llamador de produccion (`handleChildFailure`, cableado en el borde `session.execution.failed`) y el filtro de proveedores que sirven el modelo (upstream 8e705a122) corre en `rigel-v2-background-retry.mjs` con `modelsByProvider`, sin doble reintento con el `delegate-task-retry` de primer plano.",
     futureEvidence:
-      "`rigel-v2-background-manager.mjs`; `rigel-v2-background-queue.mjs`; `rigel-v2-background-retry.mjs`; `rigel-v2-background-handoff.mjs`; `rigel-v2-background-marker.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-background-queue.test.mjs`; `rigel-v2-background-retry.test.mjs`",
+      "`rigel-v2-background-manager.mjs`; `rigel-v2-background-queue.mjs`; `rigel-v2-background-retry.mjs`; `rigel-v2-background-handoff.mjs`; `rigel-v2-background-marker.mjs`; `rigel-v2-background-stopped.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-background-queue.test.mjs`; `rigel-v2-background-retry.test.mjs`; `rigel-v2-background-stopped.test.mjs`",
   },
   "boulder-state": {
     classification: "Migrar",
@@ -132,8 +132,8 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "Los dos orígenes vivos V1, `background-task` y `stop`, se conservan en `.omo/run-continuation/<session>.json`; el manager actualiza el primero y el guard de parada escribe o libera el segundo antes de cancelar descendientes.",
-    futureEvidence: "`rigel-v2-background-marker.mjs`; `rigel-v2-background-manager.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-native-request-steps.test.mjs`",
+      "Los dos orígenes vivos V1, `background-task` y `stop`, se conservan en `.omo/run-continuation/<session>.json`; el manager actualiza el primero y el guard de parada escribe o libera el segundo antes de cancelar descendientes. La finalizacion de una sesion hija idle sobre un turno errado (upstream a0b2e96c3) comparte el mismo manager y su contador se limpia con el registro (`clearSession`/`session.deleted`).",
+    futureEvidence: "`rigel-v2-background-marker.mjs`; `rigel-v2-background-manager.mjs`; `rigel-v2-background-stopped.mjs`; `rigel-v2-background-manager.test.mjs`; `rigel-v2-background-stopped.test.mjs`; `rigel-v2-native-request-steps.test.mjs`",
   },
   "skill-mcp-manager": {
     classification: "Migrar",

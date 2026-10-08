@@ -74,6 +74,12 @@ function modelRef(value, variant) {
   return { providerID: match[1], id: match[2], ...(typeof variant === "string" ? { variant } : {}) }
 }
 
+/** Base agent key: lowercase, display suffix (` - ...`) stripped. */
+function canonicalAgentId(id) {
+  const raw = String(id ?? "").trim().toLocaleLowerCase()
+  return raw ? raw.split(/\s+-\s+/)[0].trim() : ""
+}
+
 const PERMISSION_EFFECT_VALUES = new Set(["allow", "deny", "ask"])
 
 function acceptedLegacyEntry(key, value) {
@@ -159,15 +165,34 @@ function chainHeadRef(chain) {
  * fails closed. Returns a map of agent id -> model ref.
  *
  * `listModels` is optional: when absent the manifest models are used unchanged.
+ *
+ * `explicitAgentModels` is an optional Map of agent id -> `{ model, variant }`
+ * for agents the user pinned. An explicit model is used verbatim and the built-in
+ * chain is never walked for that agent (upstream 5a9bb74a4).
  */
-export function resolveProactiveAgentModels(agents, listModels) {
+export function resolveProactiveAgentModels(agents, listModels, explicitAgentModels) {
   const resolved = new Map()
   if (!agents || typeof agents !== "object") return resolved
   const inventory = Array.isArray(listModels) ? listModels : undefined
+  const explicit = explicitAgentModels instanceof Map ? explicitAgentModels : undefined
+  // Manifest ids are display names (`Hephaestus - Deep Agent`); user overrides are
+  // keyed by the base id (`hephaestus`). Canonicalize both so the explicit model
+  // is found regardless of which form the caller used.
+  const explicitByCanonical = new Map()
+  if (explicit) {
+    for (const [key, value] of explicit.entries()) explicitByCanonical.set(canonicalAgentId(key), value)
+  }
   for (const [id, definition] of Object.entries(agents)) {
     const source = definition && typeof definition === "object" ? definition : {}
     const current = modelRef(source.model, source.variant)
     const chain = agentChain(id)
+    const explicitEntry = explicit?.get(id) ?? explicitByCanonical.get(canonicalAgentId(id))
+    if (explicitEntry?.model) {
+      // The user's model is the pre-selection preference; the manifest model is
+      // the last resort if the user ref is malformed.
+      resolved.set(id, modelRef(explicitEntry.model, explicitEntry.variant) ?? current ?? chainHeadRef(chain))
+      continue
+    }
     let next
     if (Array.isArray(inventory) && Array.isArray(chain) && chain.length > 0) {
       next = resolveFallbackModel({ chain, availableModels: inventory })
@@ -193,12 +218,20 @@ function canonicalAgentEntries(agents) {
     .map((entry) => [entry.id, byId.get(entry.id)])
 }
 
-export async function registerNativeAgents(agentDomain, manifest, { listModels, onAgentRequest, onAgentPermissions } = {}) {
+export async function registerNativeAgents(agentDomain, manifest, { listModels, explicitAgentModels, disabledAgents, onAgentRequest, onAgentPermissions } = {}) {
   if (typeof agentDomain?.transform !== "function" || typeof agentDomain?.reload !== "function") {
     throw new Error("OpenCode V2 agent.transform/agent.reload is unavailable")
   }
   const agents = manifest?.agents
   if (!agents || typeof agents !== "object") throw new Error("Rigel native agent manifest is invalid")
+  // V1 `disabled_agents` removes an agent from the roster entirely; the native
+  // runtime honors the same list so a disabled agent is never registered (and a
+  // session can never be switched onto it).
+  const disabled = new Set(
+    (Array.isArray(disabledAgents) ? disabledAgents : [])
+      .map((id) => canonicalAgentId(id))
+      .filter(Boolean),
+  )
   // The global static overlay is materialized by the generator as
   // manifest.metadata.global.permission; absent metadata is an empty overlay.
   const globalRules = translateV1Permissions(manifest?.metadata?.global?.permission).rules
@@ -213,11 +246,12 @@ export async function registerNativeAgents(agentDomain, manifest, { listModels, 
       console.error(`[oh-my-rigel] Native V2 agent inventory unavailable; using manifest models: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  const proactiveModels = resolveProactiveAgentModels(agents, Array.isArray(inventory) ? inventory : undefined)
+  const proactiveModels = resolveProactiveAgentModels(agents, Array.isArray(inventory) ? inventory : undefined, explicitAgentModels)
   const registered = []
   await agentDomain.transform((editor) => {
     for (const [id, definition] of canonicalAgentEntries(agents)) {
       const source = definition && typeof definition === "object" ? definition : {}
+      if (disabled.has(canonicalAgentId(id))) continue
       // Hephaestus is selectable only when the V1 registration gate holds: a
       // required provider connected (skipped when the inventory is absent, the
       // V1 first-run equivalent) and a supported GPT model resolved. A blocked

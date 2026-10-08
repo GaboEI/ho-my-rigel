@@ -69,7 +69,7 @@ const PROFILE_KEYS = new Set(["categories", "disabled_skills", "[opencode]", "[n
 
 const TARGET_KEYS = new Set([
   "monitor", "goal", "experimental", "team_mode", "skills", "disabled_tools", "disabled_agents", "disabled_mcps",
-  "disabled_skills", "disabled_commands", "categories", "ralph_loop", "hashline_edit", "openclaw",
+  "disabled_skills", "disabled_commands", "categories", "agents", "ralph_loop", "hashline_edit", "openclaw",
 ])
 
 const MAX_PROJECT_CONFIG_DIRECTORY_DEPTH = 256
@@ -524,7 +524,10 @@ function validateCategoryEntry(value, path, categoryName, diagnostics) {
     if (Array.isArray(value.models)) parsed.models = [...value.models]
     else warn(diagnostics, `config: ${path}: categories.${categoryName}.models ignored (invalid value)`)
   }
-  if ("fallback_models" in value) parsed.fallback_models = value.fallback_models
+  if ("fallback_models" in value) {
+    if (Array.isArray(value.fallback_models)) parsed.fallback_models = [...value.fallback_models]
+    else warn(diagnostics, `config: ${path}: categories.${categoryName}.fallback_models ignored (invalid value)`)
+  }
   if ("reasoning" in value) {
     if (typeof value.reasoning === "string" || isPlainRecord(value.reasoning)) parsed.reasoning = value.reasoning
     else warn(diagnostics, `config: ${path}: categories.${categoryName}.reasoning ignored (invalid value)`)
@@ -581,6 +584,13 @@ function parseConfigView(view, diagnostics) {
     } else if (key === "categories") {
       const section = validateCategories(value, view.path, diagnostics)
       if (section !== undefined) parsed.categories = section
+    } else if (key === "agents") {
+      // Upstream 5a9bb74a4 needs the user's per-agent overrides (`agents.<id>.model`
+      // / `agents.<id>.fallback_models`) to suppress the built-in chain. Carry the
+      // block sanely so the generator can materialize `agentOverrides`; the shape
+      // is validated downstream by `readNativeAgentOverrides`.
+      if (isPlainRecord(value)) parsed.agents = sanitizeValue(value)
+      else warn(diagnostics, `config: ${view.path}: agents ignored (invalid value)`)
     } else if (key === "ralph_loop") {
       if (isPlainRecord(value)) parsed.ralph_loop = value
     } else if (key === "openclaw") {
@@ -606,6 +616,7 @@ function mergeConfigViews(base, override) {
     disabled_commands: mergeUniqueStrings(base.disabled_commands, override.disabled_commands),
     disabled_mcps: mergeUniqueStrings(base.disabled_mcps, override.disabled_mcps),
     categories: deepMerge(base.categories, override.categories),
+    agents: deepMerge(base.agents, override.agents),
   }
 }
 
@@ -854,6 +865,9 @@ export function resolveNativePluginConfig(options = {}) {
     // User-layer only (V1 parity): never merged from project layers.
     mcp_env_allowlist: userMcpEnvAllowlist,
     categories: config.categories ?? {},
+    // Upstream 5a9bb74a4: the raw user `agents` block, carried so the generator can
+    // materialize the per-agent "explicit model" overrides into the manifest.
+    agents: config.agents ?? {},
     // The resolved OpenClaw block is undefined when no layer sets it. The
     // generator materializes it into the manifest; the runtime never parses
     // omo.jsonc itself.
@@ -895,6 +909,28 @@ export function readNativeGates(manifest) {
 export function readUserCategories(manifest) {
   const categories = manifest?.metadata?.global?.categories
   return isPlainObject(categories) ? { ...categories } : {}
+}
+
+/**
+ * Read the per-agent user overrides the generator materialized from the user
+ * `agents` block. Only the fields upstream 5a9bb74a4 needs are kept: an explicit
+ * `model` (plus its `variant`) and the user's `fallback_models` chain. An agent
+ * with no override is absent, so the runtime keeps the built-in chain. Returns a
+ * fresh plain object so a caller cannot mutate the manifest.
+ */
+export function readNativeAgentOverrides(manifest) {
+  const overrides = manifest?.metadata?.global?.agentOverrides
+  if (!isPlainObject(overrides)) return {}
+  const result = {}
+  for (const [id, value] of Object.entries(overrides)) {
+    if (!isPlainObject(value)) continue
+    const entry = {}
+    if (typeof value.model === "string" && value.model.trim()) entry.model = value.model.trim()
+    if (typeof value.variant === "string" && value.variant) entry.variant = value.variant
+    if (Array.isArray(value.fallback_models) && value.fallback_models.length > 0) entry.fallback_models = [...value.fallback_models]
+    if (Object.keys(entry).length > 0) result[id] = entry
+  }
+  return result
 }
 
 /**

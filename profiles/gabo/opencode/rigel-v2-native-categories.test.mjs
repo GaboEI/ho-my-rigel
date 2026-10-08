@@ -104,3 +104,35 @@ test("never cross-routes a category rung to an undeclared provider", async () =>
     model: { list: async () => ({ data: [{ providerID: "some-other", id: "gpt-6-luna-fast", enabled: true }] }) },
   }, { directory: "/project" }, "quick")).rejects.toThrow('Category "quick" requires one of its canonical fallback models')
 })
+
+// Upstream 5a9bb74a4: an explicit user model suppresses the built-in chain.
+test("a user category model suppresses the built-in chain and marks the category explicit", async () => {
+  const result = await resolveCategory({
+    model: { list: async () => ({ data: [
+      { providerID: "openai", id: "gpt-6-luna-fast", enabled: true },
+      { providerID: "deepseek", id: "deepseek-flash", enabled: true },
+    ] }) },
+  }, { directory: "/project" }, "quick", {
+    userCategories: { quick: { model: "deepseek/deepseek-flash", fallback_models: ["openai/gpt-6-luna-fast(off)"] } },
+  })
+  expect(result.explicit).toBe(true)
+  // The user's model wins over quick's built-in first rung (openai/gpt-6-luna-fast).
+  expect(result.model).toEqual({ providerID: "deepseek", id: "deepseek-flash" })
+  expect(result.fallbackChain).toEqual([{ providers: ["openai"], model: "gpt-6-luna-fast", variant: "off" }])
+})
+
+test("a built-in category without a user model is not explicit and carries no fallback_models chain", async () => {
+  const result = await resolveCategory({
+    model: { list: async () => ({ data: [{ providerID: "openai", id: "gpt-6-luna-fast", enabled: true }] }) },
+  }, { directory: "/project" }, "quick")
+  expect(result.explicit).toBe(false)
+  expect(result.fallbackChain).toBeUndefined()
+})
+
+test("an explicit user model with no reachable model names the user model in the error", async () => {
+  await expect(resolveCategory({
+    model: { list: async () => ({ data: [{ providerID: "openai", id: "gpt-6-luna-fast", enabled: true }] }) },
+  }, { directory: "/project" }, "quick", {
+    userCategories: { quick: { model: "anthropic/claude-opus-5-5" } },
+  })).rejects.toThrow('was pinned to the user model(s) (anthropic/claude-opus-5-5)')
+})

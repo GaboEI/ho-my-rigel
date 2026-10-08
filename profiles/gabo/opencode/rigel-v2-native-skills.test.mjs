@@ -298,3 +298,49 @@ describe("#given the runtime host-skill source", () => {
     expect(await readRuntimeHostSkills({})).toBeUndefined()
   })
 })
+
+describe("#given skills whose on-disk discovery order the filesystem controls", () => {
+  test("#when two same-scope skills are discovered #then registration lists them in code-unit name order", async () => {
+    // given - same scope (project); .claude/skills is scanned before .agents/skills,
+    // so the raw discovery order is zeta, alpha (not name order)
+    const root = makeRoot()
+    const projectDir = path.join(root, "work")
+    writeSkill(projectDir, ".claude/skills/zeta", "zeta", { frontmatter: "name: zeta\ndescription: Zeta", body: "ZETA" })
+    writeSkill(projectDir, ".agents/skills/alpha", "alpha", { frontmatter: "name: alpha\ndescription: Alpha", body: "ALPHA" })
+    const env = { HOME: root, XDG_CONFIG_HOME: path.join(root, "empty") }
+    const added = []
+    const context = {
+      location: { directory: projectDir },
+      skill: { transform: async (callback) => { callback({ add: (info) => added.push(info), list: () => [] }); return { dispose() {} } } },
+      options: { skillsHome: root, skillsEnv: env },
+    }
+
+    // when
+    const registry = await registerNativeSkills(context, { directory: projectDir, home: root, env })
+
+    // then - deterministic order, independent of which directory was scanned first
+    expect(added.map((info) => info.name)).toEqual(["alpha", "zeta"])
+    expect(registry.registered).toEqual(["alpha", "zeta"])
+  })
+
+  test("#when a higher-scope skill sorts last by name #then scope priority still dominates the name tie-break", async () => {
+    // given - opencode-project (priority 6) name zzz vs project (priority 5) name aaa
+    const root = makeRoot()
+    const projectDir = path.join(root, "work")
+    writeSkill(projectDir, ".opencode/skills/zzz", "zzz", { frontmatter: "name: zzz\ndescription: Zzz", body: "ZZZ" })
+    writeSkill(projectDir, ".agents/skills/aaa", "aaa", { frontmatter: "name: aaa\ndescription: Aaa", body: "AAA" })
+    const env = { HOME: root, XDG_CONFIG_HOME: path.join(root, "empty") }
+    const added = []
+    const context = {
+      location: { directory: projectDir },
+      skill: { transform: async (callback) => { callback({ add: (info) => added.push(info), list: () => [] }); return { dispose() {} } } },
+      options: { skillsHome: root, skillsEnv: env },
+    }
+
+    // when
+    await registerNativeSkills(context, { directory: projectDir, home: root, env })
+
+    // then - a pure name sort would have produced [aaa, zzz]
+    expect(added.map((info) => info.name)).toEqual(["zzz", "aaa"])
+  })
+})

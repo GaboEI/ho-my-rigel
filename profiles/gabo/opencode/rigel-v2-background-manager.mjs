@@ -28,7 +28,7 @@
 
 import { randomUUID } from "node:crypto"
 import { createBackgroundQueue } from "./rigel-v2-background-queue.mjs"
-import { decideBackgroundRetry } from "./rigel-v2-background-retry.mjs"
+import { FALLBACK_AGENT, decideBackgroundRetry } from "./rigel-v2-background-retry.mjs"
 import {
   clearBackgroundMarker,
   readBackgroundMarker,
@@ -36,6 +36,7 @@ import {
 } from "./rigel-v2-background-marker.mjs"
 import { createNoopBackgroundState } from "./rigel-v2-background-state.mjs"
 import { MAX_WAKE_ATTEMPTS, createHandoffPump } from "./rigel-v2-background-handoff.mjs"
+import { describeSessionError } from "./rigel-v2-background-stopped.mjs"
 
 export { readBackgroundMarker, writeBackgroundMarker, clearBackgroundMarker, MAX_WAKE_ATTEMPTS }
 
@@ -150,6 +151,33 @@ function modelRefOf(record) {
   return record?.modelRef && typeof record.modelRef === "object" ? record.modelRef : undefined
 }
 
+function modelRefKey(value) {
+  if (!value || typeof value !== "object") return ""
+  const provider = value.providerID ?? value.provider
+  const id = value.id ?? value.modelID
+  if (typeof provider === "string" && typeof id === "string") return `${provider}/${id}`
+  return typeof id === "string" ? id : ""
+}
+
+function agentNameOf(agent) {
+  if (typeof agent === "string") return agent
+  return typeof agent?.name === "string" ? agent.name : undefined
+}
+
+function currentModelOf(record) {
+  const ref = record?.effectiveModel ?? record?.modelRef
+  if (ref && typeof ref === "object") {
+    const providerID = ref.providerID ?? ref.provider
+    const modelID = ref.id ?? ref.modelID
+    if (typeof providerID === "string" && typeof modelID === "string") return { providerID, modelID }
+  }
+  if (typeof record?.modelKey === "string" && record.modelKey.includes("/")) {
+    const [providerID, ...rest] = record.modelKey.split("/")
+    return { providerID, modelID: rest.join("/") }
+  }
+  return undefined
+}
+
 /**
  * Create an independent background-child manager.
  *
@@ -174,6 +202,8 @@ export function createBackgroundManager({
   startChild,
   runHandoff,
   abortChild,
+  readStoppedError,
+  resolveFallbackChain,
   onError,
   abortSignal,
   now,
@@ -268,7 +298,7 @@ export function createBackgroundManager({
   function snapshotWakes(parentSessionID) {
     return tasksOf(parentSessionID)
       .filter((record) => record.pendingWake)
-      .map((record) => ({ taskId: record.taskId, sessionID: record.sessionID ?? null, status: record.resultStatus ?? null, agent: record.agent }))
+      .map((record) => ({ taskId: record.taskId, sessionID: record.sessionID ?? null, status: record.resultStatus ?? null, agent: record.agent, cause: record.resultCause ?? null }))
   }
 
   /** Persist the durable state and refresh the continuation marker. */
@@ -320,6 +350,9 @@ export function createBackgroundManager({
       return false
     }
     record.status = "running"
+    // The prompt is dropped from the record once the child owns it, but a retry
+    // (upstream 8e705a122) must be able to re-run the SAME work on the next model.
+    if (record.prompt !== undefined && record.retryPrompt === undefined) record.retryPrompt = record.prompt
     record.prompt = undefined
     persist(record.parentSessionID)
     return true
@@ -462,7 +495,7 @@ export function createBackgroundManager({
    * Queue a parent-wake handoff for a tracked child. Returns synchronously: the
    * pump runs behind a microtask, so the V2 event loop is never blocked.
    */
-  function enqueueHandoff(sessionID, status) {
+  function enqueueHandoff(sessionID, status, cause) {
     if (disposed) return false
     const taskId = bySession.get(sessionID)
     const record = taskId ? tasks.get(taskId) : undefined
@@ -471,9 +504,107 @@ export function createBackgroundManager({
     detachFromQueue(record)
     record.pendingWake = true
     record.resultStatus = status
-    pump.enqueue({ sessionID, taskId, status, child: { parentSessionID: record.parentSessionID, agent: record.agent } })
+    record.resultCause = cause
+    pump.enqueue({
+      sessionID,
+      taskId,
+      status,
+      child: { parentSessionID: record.parentSessionID, agent: record.agent, ...(cause ? { error: cause } : {}) },
+    })
     persist(record.parentSessionID)
     return true
+  }
+
+  /**
+   * Upstream a0b2e96c3 plus the missing production caller for `classifyRetry`:
+   * the V2-native equivalent of the V1 "finalize a session that stopped on an
+   * error" fix. V1 polled idle sessions because it had no failure edge; V2 emits
+   * `session.execution.failed` (the session then goes idle) and NEVER emits an
+   * accepted idle edge for an errored turn, so this event is the SOLE terminal
+   * errored edge. A failed background child is re-launched on the next fallback
+   * model a connected provider actually serves (or on FALLBACK_AGENT when the
+   * agent itself is gone); otherwise it is finalized through the failure handoff.
+   * The attempt counter lives on the record, so the retry budget is the chain
+   * length and a retry can never loop forever. The foreground
+   * `delegate-task-retry` owns foreground calls; this is the background-child
+   * path only, so the two never double-retry. A synchronous re-entrancy guard
+   * makes repeated `session.execution.failed` events for one session finalize at
+   * most once.
+   */
+  async function handleChildFailure({ sessionID, errorInfo, connectedProviders, modelsByProvider } = {}) {
+    if (disposed) return { action: "ignored" }
+    const taskId = bySession.get(sessionID)
+    const record = taskId ? tasks.get(taskId) : undefined
+    if (!record || record.status === "completed") return { action: "ignored" }
+    // Duplicate/repeated `execution.failed` events for the same session can arrive
+    // while the first call is still awaiting the transcript read; claim the
+    // record BEFORE any await so only one of them finalizes or relaunches.
+    if (record.failureHandling === true) return { action: "ignored", reason: "in-flight" }
+    record.failureHandling = true
+    try {
+      let resolvedError = errorInfo
+      if (resolvedError === undefined && typeof readStoppedError === "function") {
+        try {
+          resolvedError = await readStoppedError(sessionID)
+        } catch (error) {
+          report(error, { sessionID, phase: "retry-read" })
+        }
+      }
+      const fallbackChain = typeof resolveFallbackChain === "function" ? resolveFallbackChain(record) : undefined
+      const decision = decideBackgroundRetry({
+        errorInfo: resolvedError,
+        currentModel: currentModelOf(record),
+        currentAgent: agentNameOf(record.agent),
+        attemptCount: record.retryAttempt ?? 0,
+        fallbackChain,
+        connectedProviders,
+        modelsByProvider,
+      })
+      if (decision.action === "retry" && decision.nextModel) {
+        const next = decision.nextModel
+        return relaunch(record, {
+          model: { providerID: next.providerID, id: next.modelID, ...(next.variant ? { variant: next.variant } : {}) },
+          attempt: next.attemptCount,
+        })
+      }
+      if (decision.action === "fallback-agent") {
+        return relaunch(record, { agent: { name: FALLBACK_AGENT }, attempt: (record.retryAttempt ?? 0) + 1 })
+      }
+      enqueueHandoff(sessionID, "failed", resolvedError === undefined ? undefined : describeSessionError(resolvedError))
+      return { action: decision.action, handled: false, reason: decision.reason }
+    } finally {
+      // `relaunch` deleted this record and `enqueueHandoff` marked it completed;
+      // clear the flag only if the same record is still tracked (e.g. a read
+      // failure that finalized nothing) so a later real event can retry it.
+      if (tasks.get(record.taskId) === record && record.status !== "completed") record.failureHandling = false
+    }
+  }
+
+  /**
+   * Drop the failed attempt's record/slot silently (no failure handoff) and
+   * re-admit the same work on the new agent/model. Admission-before-spawn and the
+   * concurrency bucket are preserved, so a retry obeys the same limits.
+   */
+  function relaunch(record, { agent, model, attempt }) {
+    const descriptor = {
+      parentSessionID: record.parentSessionID,
+      route: record.route,
+      agent: agent ?? record.agent,
+      category: record.category,
+      subagentType: record.subagentType,
+      model: model ?? record.modelRef,
+      modelKey: model ? modelRefKey(model) : record.modelKey,
+      prompt: record.retryPrompt ?? record.prompt,
+      loadSkills: record.loadSkills,
+    }
+    detachFromQueue(record)
+    if (record.sessionID) bySession.delete(record.sessionID)
+    tasks.delete(record.taskId)
+    persist(record.parentSessionID)
+    const decision = admit(descriptor)
+    const nextRecord = decision.taskId ? tasks.get(decision.taskId) : undefined
+    if (nextRecord) nextRecord.retryAttempt = attempt ?? 0
+    return { action: model ? "retry" : "fallback-agent", handled: true, taskId: decision.taskId, model, agent: agent?.name }
   }
 
   /** Re-queue every undelivered wake that is not already waiting. */
@@ -482,7 +613,7 @@ export function createBackgroundManager({
     let requeued = 0
     for (const record of tasks.values()) {
       if (!record.pendingWake || !record.sessionID || pump.has(record.sessionID)) continue
-      pump.enqueue({ sessionID: record.sessionID, taskId: record.taskId, status: record.resultStatus, child: { parentSessionID: record.parentSessionID, agent: record.agent } })
+      pump.enqueue({ sessionID: record.sessionID, taskId: record.taskId, status: record.resultStatus, child: { parentSessionID: record.parentSessionID, agent: record.agent, ...(record.resultCause ? { error: record.resultCause } : {}) } })
       requeued += 1
     }
     return requeued
@@ -790,7 +921,8 @@ export function createBackgroundManager({
           if (!record || !record.sessionID || pump.has(record.sessionID)) continue
           record.pendingWake = true
           record.resultStatus = record.resultStatus ?? wake.status ?? "succeeded"
-          pump.enqueue({ sessionID: record.sessionID, taskId: record.taskId, status: record.resultStatus, child: { parentSessionID: record.parentSessionID, agent: record.agent } })
+          if (record.resultCause === undefined && typeof wake.cause === "string") record.resultCause = wake.cause
+          pump.enqueue({ sessionID: record.sessionID, taskId: record.taskId, status: record.resultStatus, child: { parentSessionID: record.parentSessionID, agent: record.agent, ...(record.resultCause ? { error: record.resultCause } : {}) } })
           summary.wakes += 1
         }
         persist(parentSessionID)
@@ -880,6 +1012,7 @@ export function createBackgroundManager({
     cancelDescendants,
     enqueueHandoff,
     retryPendingWakes,
+    handleChildFailure,
     clearSession,
     clearParent,
     clearAll,

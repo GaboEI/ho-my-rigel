@@ -45,6 +45,9 @@ export function createHandoffPump({
   const attempts = new Map()
   const idleWaiters = []
   let pumping = false
+  // The item currently being delivered. `has` must report it, or a wake-retry
+  // observing the event loop DURING `run` would re-enqueue a duplicate handoff.
+  let inFlight = null
   let disposed = false
 
   function safe(callback, ...args) {
@@ -72,6 +75,7 @@ export function createHandoffPump({
     try {
       while (!disposed && queue.length > 0) {
         const item = queue.shift()
+        inFlight = item
         const attempt = (attempts.get(item.sessionID) ?? 0) + 1
         attempts.set(item.sessionID, attempt)
         try {
@@ -85,6 +89,8 @@ export function createHandoffPump({
           } else {
             safe(onFailed, item, error, attempt)
           }
+        } finally {
+          inFlight = null
         }
       }
     } finally {
@@ -102,6 +108,7 @@ export function createHandoffPump({
   }
 
   function has(sessionID) {
+    if (inFlight && inFlight.sessionID === sessionID) return true
     return queue.some((item) => item.sessionID === sessionID)
   }
 

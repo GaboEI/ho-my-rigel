@@ -133,29 +133,48 @@ export async function resolveCategory(client, location, categoryName, options = 
   }
   const available = await listV2Models(client, location)
   const userConfig = userCategories && typeof userCategories === "object" ? userCategories[name] : undefined
-  // A user entry may carry its own model chain (`models`), a single `model`, or
-  // neither. The canonical built-in chain stays the source of truth for a
-  // built-in category; a user chain replaces it, and a user single model is the
-  // explicit override V1 honours before the built-in lane.
+  // Upstream 5a9bb74a4: an EXPLICIT user model suppresses the built-in canonical
+  // chain entirely. A user `models` chain or a single `model` is the only
+  // selection; when there is none, the built-in chain stays the source of truth.
+  // `fallback_models` is the user's retry chain and replaces the built-in chain
+  // whether or not the model was pinned (V1 `configuredFallbackChain`).
   const userChain = Array.isArray(userConfig?.models) && userConfig.models.length > 0
-    ? userConfig.models.map((entry) => normalizeUserChainEntry(entry))
+    ? userConfig.models.map((entry) => normalizeUserChainEntry(entry)).filter(Boolean)
     : undefined
-  const chain = userChain ?? categoryChain(name)
-  // First reachable rung of the canonical chain, provider-scoped per rung.
-  // `sameProviderAs` is intentionally omitted: category resolution runs before
-  // V2 selects the provider, so choosing a rung on another provider is
-  // legitimate here and is not the post-selection misroute the HTTP hook
-  // guards against. A category with no canonical chain falls back to its
-  // manifest lane.
-  const selected = Array.isArray(chain) && chain.length > 0
-    ? resolveFallbackModel({ chain, availableModels: available })
-    : manifestLane(config, available)
-  if (!selected) {
-    const visible = available.map(modelKey).filter(Boolean).sort()
-    const required = Array.isArray(chain) && chain.length > 0
-      ? chain.map((entry) => entry.model).join(", ")
-      : config.model
-    throw new Error(`Category "${name}" requires one of its canonical fallback models (${required}), none of which is available in this OpenCode V2 location. Available models: ${visible.join(", ")}`)
+  const fallbackChain = normalizeUserChain(userConfig?.fallback_models)
+  const explicitModel = typeof userConfig?.model === "string" && userConfig.model.trim()
+    ? userConfig.model.trim()
+    : undefined
+  const explicit = Boolean(explicitModel || (userChain && userChain.length > 0))
+  let selected
+  if (explicit) {
+    // The user's own model(s) are the ONLY selection; the built-in chain is never
+    // consulted. A reachable `models` chain wins over a single `model`.
+    selected = userChain && userChain.length > 0
+      ? resolveFallbackModel({ chain: userChain, availableModels: available })
+      : manifestLane({ model: explicitModel, variant: userConfig?.variant }, available)
+    if (!selected) {
+      const requested = userChain?.map((entry) => entry.model).filter(Boolean).join(", ") || explicitModel
+      throw new Error(`Category "${name}" was pinned to the user model(s) (${requested}), none of which is available in this OpenCode V2 location. Available models: ${available.map(modelKey).filter(Boolean).sort().join(", ")}`)
+    }
+  } else {
+    // First reachable rung of the canonical chain, provider-scoped per rung.
+    // `sameProviderAs` is intentionally omitted: category resolution runs before
+    // V2 selects the provider, so choosing a rung on another provider is
+    // legitimate here and is not the post-selection misroute the HTTP hook
+    // guards against. A category with no canonical chain falls back to its
+    // manifest lane.
+    const chain = categoryChain(name)
+    selected = Array.isArray(chain) && chain.length > 0
+      ? resolveFallbackModel({ chain, availableModels: available })
+      : manifestLane(config, available)
+    if (!selected) {
+      const visible = available.map(modelKey).filter(Boolean).sort()
+      const required = Array.isArray(chain) && chain.length > 0
+        ? chain.map((entry) => entry.model).join(", ")
+        : config.model
+      throw new Error(`Category "${name}" requires one of its canonical fallback models (${required}), none of which is available in this OpenCode V2 location. Available models: ${visible.join(", ")}`)
+    }
   }
   return {
     name,
@@ -164,6 +183,8 @@ export async function resolveCategory(client, location, categoryName, options = 
     promptAppend: userConfig?.prompt_append ?? manifest.prompts[name] ?? "",
     model: selected,
     configuredModel: config.model,
+    explicit,
+    fallbackChain,
   }
 }
 
@@ -174,7 +195,7 @@ export async function resolveCategory(client, location, categoryName, options = 
  * entry with no provider list is left provider-less so the resolver matches the
  * id on any provider, which is the V1 user-chain behaviour.
  */
-function normalizeUserChainEntry(entry) {
+export function normalizeUserChainEntry(entry) {
   if (typeof entry === "string") {
     const parsed = parseModel(entry)
     return parsed ? { providers: parsed.providerID ? [parsed.providerID] : [], model: parsed.id, ...(parsed.variant ? { variant: parsed.variant } : {}) } : undefined
@@ -186,6 +207,17 @@ function normalizeUserChainEntry(entry) {
     ? entry.providers.filter((providerID) => typeof providerID === "string" && providerID)
     : (typeof entry.providerID === "string" && entry.providerID ? [entry.providerID] : [])
   return { providers, model, ...(typeof entry.variant === "string" && entry.variant ? { variant: entry.variant } : {}) }
+}
+
+/**
+ * Normalize a user `fallback_models` list into the `{ providers, model, variant }`
+ * chain `resolveFallbackModel` walks, or `undefined` when the list is absent or
+ * empty. Reuses the same entry shape as the category `models` chain.
+ */
+export function normalizeUserChain(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return undefined
+  const chain = entries.map((entry) => normalizeUserChainEntry(entry)).filter(Boolean)
+  return chain.length > 0 ? chain : undefined
 }
 
 export function categoryTaskPrompt(prompt, category) {

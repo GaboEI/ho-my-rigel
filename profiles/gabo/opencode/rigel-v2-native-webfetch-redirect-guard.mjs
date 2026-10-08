@@ -5,6 +5,8 @@
 // `clearAll` drop tracked state. The V2 catalog names the tool `webfetch`
 // (see installer permissions), so this guard matches `webfetch` only.
 
+import { patchToolArgs } from "./rigel-v2-native-tool-args.mjs"
+
 export const DEFAULT_WEBFETCH_TIMEOUT_MS = 30_000
 export const MAX_WEBFETCH_TIMEOUT_MS = 120_000
 export const MAX_WEBFETCH_REDIRECTS = 10
@@ -197,7 +199,7 @@ export function createNativeWebFetchRedirectGuard(deps = {}) {
         })
 
         if (resolution.type === "resolved") {
-          args.url = resolution.url
+          patchToolArgs(event, (target) => { target.url = resolution.url })
           return
         }
 

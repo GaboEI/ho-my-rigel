@@ -418,6 +418,25 @@ function dedupeSkills(skills) {
   return Array.from(merged.values())
 }
 
+// Locale-independent string order so a listing built from this is byte-identical
+// across processes regardless of the filesystem's readdir order (upstream #9432).
+function compareCodeUnits(left, right) {
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
+}
+
+// Scope priority desc, then name asc. The name tie-break makes the registered
+// listing independent of discovery order, so the host-rendered tool prefix stays
+// cacheable.
+function sortSkillsForListing(skills) {
+  return [...skills].sort(
+    (left, right) =>
+      (SCOPE_PRIORITY[right.scope] ?? 0) - (SCOPE_PRIORITY[left.scope] ?? 0)
+      || compareCodeUnits(left.name, right.name),
+  )
+}
+
 function configuredSkillDirs(config, directory) {
   const sources = config?.skills?.sources
   if (!Array.isArray(sources)) return []
@@ -567,8 +586,11 @@ function addNativeSkill(collection, skill) {
 // without re-reading the disk.
 export async function registerNativeSkills(context, { directory, home, env, disabledSkills, config } = {}) {
   const target = directory ?? context?.location?.directory ?? process.cwd()
-  let skills = discoverSkills({ directory: target, home, env, config: config ?? context?.config })
-  if (disabledSkills && disabledSkills.size > 0) skills = skills.filter((skill) => !isDisabledSkillAlias(skill, disabledSkills))
+  const discovered = discoverSkills({ directory: target, home, env, config: config ?? context?.config })
+  const enabled = disabledSkills && disabledSkills.size > 0
+    ? discovered.filter((skill) => !isDisabledSkillAlias(skill, disabledSkills))
+    : discovered
+  const skills = sortSkillsForListing(enabled)
   const registered = []
   const skillDomain = context?.skill
   if (skillDomain && typeof skillDomain.transform === "function") {

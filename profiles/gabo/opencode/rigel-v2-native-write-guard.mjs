@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { patchToolArgs } from "./rigel-v2-native-tool-args.mjs"
 
 const MAX_SESSIONS = 256
 const MAX_PATHS_PER_SESSION = 1024
@@ -52,7 +53,7 @@ export function createNativeWriteExistingFileGuard({ directory } = {}) {
       if (/(^|[/\\])\.omo([/\\]|$)/.test(target)) return
       const args = event.input ?? event.args
       const overwrite = args?.overwrite === true || String(args?.overwrite).toLowerCase() === "true"
-      if (args && Object.hasOwn(args, "overwrite")) delete args.overwrite
+      if (args && Object.hasOwn(args, "overwrite")) patchToolArgs(event, (target) => { delete target.overwrite })
       if (overwrite) return
       const allowed = state(event.sessionID)
       if (allowed.delete(target)) {

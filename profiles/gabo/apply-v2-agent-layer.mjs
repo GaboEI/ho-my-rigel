@@ -49,7 +49,7 @@ const generated = childProcess.spawnSync(process.execPath, [
   "--input", configFile, "--output", output,
   "--selection", selectionFile, "--judge", judgeFile,
   "--directory", home, "--profile-root", generatorHome,
-], { cwd: sourceRoot, env: { ...process.env, HOME: generatorHome, XDG_CONFIG_HOME: path.dirname(path.dirname(configFile)), OMO_PROFILE: "gabo" }, encoding: "utf8" })
+], { cwd: sourceRoot, env: { ...process.env, HOME: generatorHome, XDG_CONFIG_HOME: path.dirname(path.dirname(configFile)), OMO_PROFILE: "gabo", OMO_DISABLE_PROCESS_CLEANUP: "1" }, encoding: "utf8" })
 fs.rmSync(generatorHome, { recursive: true, force: true })
 if (generated.status !== 0) fail(`la generación del manifiesto falló: ${generated.stderr || generated.stdout}`)
 const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, "utf8")) : { activatedAt: new Date().toISOString(), configFile, labRoot, pluginEntry: null }

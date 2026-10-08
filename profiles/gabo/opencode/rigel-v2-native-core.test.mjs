@@ -10,6 +10,7 @@ import {
   isDemotedPlanAgent,
   normalizeV2ToolResult,
   normalizeToolDefinition,
+  backgroundHandoffPrompt,
 } from "./rigel-v2-native-core.mjs"
 
 describe("Rigel native OpenCode V2 delegation", () => {
@@ -182,5 +183,24 @@ describe("Rigel native V2 tool result normalization", () => {
   test("leaves a definition without execute untouched", () => {
     const definition = { description: "x" }
     expect(normalizeToolDefinition(definition)).toBe(definition)
+  })
+})
+
+// A failed background handoff must name the agent and the cause. The parent
+// consumed `agent: [object Object]` and a flag-only detail before, so it could
+// not tell a provider error from an abort.
+describe("backgroundHandoffPrompt", () => {
+  test("renders the agent name and the failure cause for a failed handoff", () => {
+    const text = backgroundHandoffPrompt({ sessionID: "ses_c", agent: { name: "Explore" }, status: "failed", error: "provider.invalid-request: boom" })
+    expect(text).toContain("agent: Explore")
+    expect(text).toContain("status: failed")
+    expect(text).toContain("error: provider.invalid-request: boom")
+    expect(text).toContain("<rigel-native-background-result>")
+  })
+
+  test("omits the cause for a non-failed handoff", () => {
+    const text = backgroundHandoffPrompt({ sessionID: "ses_c", agent: "Explore", status: "succeeded", result: "done" })
+    expect(text).toContain("status: succeeded")
+    expect(text).not.toContain("error:")
   })
 })

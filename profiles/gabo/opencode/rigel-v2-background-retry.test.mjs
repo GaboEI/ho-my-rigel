@@ -24,6 +24,7 @@ import {
   FALLBACK_AGENT,
   canonicalizeModelID,
   decideBackgroundRetry,
+  filterProvidersServingModel,
   getNextFallback,
   hasMoreFallbacks,
   isAgentNotFoundError,
@@ -549,5 +550,74 @@ describe("#given selectNextFallback directly", () => {
       // given / when / then
       expect(canonicalizeModelID("Claude-Sonnet-4.6")).toBe(canonicalizeModelID("claude-sonnet-4-6"))
     })
+  })
+})
+
+// Upstream 8e705a122: skip fallback entries no connected provider serves.
+describe("#when a connected provider does not serve the fallback model", () => {
+  test("#then the entry is skipped and a later served provider is selected", () => {
+    const decision = decideBackgroundRetry({
+      errorInfo: { statusCode: 429 },
+      currentModel: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+      attemptCount: 0,
+      fallbackChain: [
+        { providers: ["openai"], model: "gpt-6-astra" },
+        { providers: ["deepseek"], model: "deepseek-flash" },
+      ],
+      connectedProviders: ["openai", "deepseek"],
+      modelsByProvider: { openai: ["gpt-6-luna-fast"], deepseek: ["deepseek-flash"] },
+    })
+    expect(decision.action).toBe("retry")
+    expect(decision.nextModel.providerID).toBe("deepseek")
+    expect(decision.nextModel.modelID).toBe("deepseek-flash")
+  })
+
+  test("#then no retry happens when no connected provider serves any entry", () => {
+    const decision = decideBackgroundRetry({
+      errorInfo: { statusCode: 429 },
+      currentModel: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+      fallbackChain: [{ providers: ["openai"], model: "gpt-6-astra" }],
+      connectedProviders: ["openai"],
+      modelsByProvider: { openai: ["gpt-6-luna-fast"] },
+    })
+    expect(decision.action).toBe("none")
+    expect(decision.reason).toBe("no-eligible-fallback")
+  })
+
+  test("#then a provider without a cached model list is kept (a cold cache never blocks)", () => {
+    const decision = decideBackgroundRetry({
+      errorInfo: { statusCode: 429 },
+      currentModel: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+      fallbackChain: [{ providers: ["openai"], model: "gpt-6-astra" }],
+      connectedProviders: ["openai"],
+      modelsByProvider: {},
+    })
+    expect(decision.action).toBe("retry")
+    expect(decision.nextModel.providerID).toBe("openai")
+  })
+
+  test("#then without any provider model cache the previous behavior is unchanged", () => {
+    const decision = decideBackgroundRetry({
+      errorInfo: { statusCode: 429 },
+      currentModel: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+      fallbackChain: [{ providers: ["openai"], model: "gpt-6-astra" }],
+      connectedProviders: ["openai"],
+    })
+    expect(decision.action).toBe("retry")
+    expect(decision.nextModel.providerID).toBe("openai")
+  })
+})
+
+describe("#when filterProvidersServingModel is applied directly", () => {
+  test("#then it drops only connected providers whose loaded list lacks the model", () => {
+    const kept = filterProvidersServingModel({
+      providers: ["openai", "deepseek", "anthropic"],
+      model: "gpt-6-astra",
+      connectedSet: new Set(["openai", "deepseek"]),
+      modelsByProvider: { openai: ["gpt-6-luna-fast"], deepseek: ["gpt-6-astra"] },
+      transformModelForProvider: (provider, model) => model,
+    })
+    // A non-connected provider is kept (V1 keeps it; isReachable then decides).
+    expect(kept).toEqual(["deepseek", "anthropic"])
   })
 })

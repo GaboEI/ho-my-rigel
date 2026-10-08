@@ -171,3 +171,27 @@ describe("createHandoffPump ordering and non-blocking enqueue", () => {
     expect(pump.pending()).toBe(false)
   })
 })
+
+// The manager's `retryPendingWakes` re-enqueues a pending wake whenever
+// `pump.has(sessionID)` is false. During delivery the item has left the queue but
+// has not settled, so `has` must also report the in-flight item or a wake-retry
+// observing the event loop mid-`run` would enqueue a duplicate handoff.
+describe("createHandoffPump in-flight visibility", () => {
+  test("has() is true while the item is delivering so a wake-retry does not duplicate it", async () => {
+    const deliveries = []
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    const pump = createHandoffPump({ run: async (item) => { deliveries.push(item.sessionID); await gate } })
+    pump.enqueue({ sessionID: "ses_a" })
+    while (deliveries.length === 0) await Promise.resolve()
+
+    // the manager's wake-retry path: re-enqueue only when has() is false
+    const wouldRequeue = !pump.has("ses_a")
+    if (wouldRequeue) pump.enqueue({ sessionID: "ses_a" })
+    release()
+    await pump.whenIdle()
+
+    expect(wouldRequeue).toBe(false)
+    expect(deliveries).toEqual(["ses_a"])
+  })
+})

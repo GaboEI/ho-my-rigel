@@ -95,6 +95,66 @@ test("proactive resolution falls back to the manifest model when the inventory i
   expect(resolved.get("explore")).toEqual({ providerID: "kimi-for-coding", id: "kimi-for-coding-highspeed", variant: "off" })
 })
 
+// Upstream 5a9bb74a4: an explicit user model must survive the proactive pass.
+test("proactive resolution keeps an explicit user model instead of overwriting it with a chain rung", () => {
+  const manifest = {
+    agents: {
+      oracle: { name: "Oracle", mode: "subagent", model: "openai/gpt-5.6-sol", variant: "xhigh" },
+    },
+  }
+  const inventory = [{ providerID: "anthropic", id: "claude-opus-5-5", enabled: true }]
+  const explicit = new Map([["oracle", { model: "deepseek/deepseek-v4-pro", variant: "max" }]])
+  const resolved = resolveProactiveAgentModels(manifest.agents, inventory, explicit)
+  expect(resolved.get("oracle")).toEqual({ providerID: "deepseek", id: "deepseek-v4-pro", variant: "max" })
+})
+
+test("proactive resolution still walks the chain for an agent with no explicit model", () => {
+  const manifest = {
+    agents: {
+      oracle: { name: "Oracle", mode: "subagent", model: "openai/gpt-5.6-sol", variant: "xhigh" },
+    },
+  }
+  const inventory = [{ providerID: "anthropic", id: "claude-opus-5-5", enabled: true }]
+  const resolved = resolveProactiveAgentModels(manifest.agents, inventory)
+  expect(resolved.get("oracle")).toEqual({ providerID: "anthropic", id: "claude-opus-5-5", variant: "max" })
+})
+
+test("a disabled agent (V1 disabled_agents) is never registered", async () => {
+  const updated = []
+  const editor = {
+    update(id, callback) {
+      const agent = { request: { headers: {}, body: {} }, permissions: [] }
+      callback(agent)
+      updated.push(id)
+    },
+    default() {},
+  }
+  const agentDomain = {
+    transform: async (callback) => { callback(editor); return { dispose() {} } },
+    reload: async () => {},
+  }
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "subagent", model: "openai/gpt-6-sol", variant: "medium" },
+      oracle: { name: "Oracle", mode: "subagent", model: "openai/gpt-5.6-sol", variant: "xhigh" },
+    },
+  }
+  const registered = await registerNativeAgents(agentDomain, manifest, { disabledAgents: ["hephaestus"] })
+  expect(registered).toEqual(["oracle"])
+  expect(updated).toEqual(["oracle"])
+})
+
+test("an explicit user model keyed by base id applies to the display-named manifest entry", () => {
+  const manifest = {
+    agents: {
+      "Hephaestus - Deep Agent": { name: "Hephaestus - Deep Agent", mode: "subagent", model: "openai/gpt-6-sol", variant: "medium" },
+    },
+  }
+  const explicit = new Map([["hephaestus", { model: "rigel-nsg/gpt-4o" }]])
+  const resolved = resolveProactiveAgentModels(manifest.agents, [{ providerID: "openai", id: "gpt-6-sol", enabled: true }], explicit)
+  expect(resolved.get("Hephaestus - Deep Agent")).toEqual({ providerID: "rigel-nsg", id: "gpt-4o" })
+})
+
 test("registerNativeAgents applies the proactive model before agent.reload", async () => {
   const timeline = []
   const applied = {}

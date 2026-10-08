@@ -99,12 +99,43 @@ async function bakeSisyphusPromptVariants(agent) {
   return { bakedModel: configuredModel, bakedPrompt: applySisyphusFormatExampleFix(agent.prompt), promptByModel: byModel }
 }
 
+// Upstream 5a9bb74a4: an explicit user model on an agent (or a user
+// `fallback_models` chain) must survive into the runtime so the built-in
+// canonical chain is not attached. The user `agents` block is resolved from the
+// omo.jsonc chain, which the V1 plugin config bake (`--input`) does NOT carry, so
+// this is materialized separately and read back by
+// `readNativeAgentOverrides(manifest)`.
+function extractAgentOverrides(agents) {
+  if (!agents || typeof agents !== "object" || Array.isArray(agents)) return {}
+  const overrides = {}
+  for (const [id, value] of Object.entries(agents)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue
+    const entry = {}
+    if (typeof value.model === "string" && value.model.trim()) entry.model = value.model.trim()
+    if (typeof value.variant === "string" && value.variant) entry.variant = value.variant
+    if (Array.isArray(value.fallback_models) && value.fallback_models.length > 0) entry.fallback_models = [...value.fallback_models]
+    if (Object.keys(entry).length > 0) overrides[id] = entry
+  }
+  return overrides
+}
+
 try {
   await hooks.config(config)
   const allAgents = config.agent || {}
+  // Resolve the user plugin view up front so a `disabled_agents` entry can drop
+  // an agent from the manifest instead of failing generation. The V1 bake already
+  // omits a disabled agent from `config.agent`; without this the strict selection
+  // loop below would throw `OmO did not generate the required agent`.
+  const pluginView = resolveNativePluginConfig({
+    directory,
+    ...(profileRoot ? { env: { ...process.env, HOME: profileRoot } } : {}),
+  })
+  const canonicalAgentKey = (id) => String(id ?? "").trim().toLocaleLowerCase().split(/\s+-\s+/)[0].trim()
+  const disabledAgentKeys = new Set((pluginView.disabled?.agents ?? []).map((id) => canonicalAgentKey(id)))
   const selection = selectionPath ? JSON.parse(fs.readFileSync(selectionPath, "utf8")) : null
   const selected = {}
   for (const id of selection?.orchestratedAgentIds ?? Object.keys(allAgents)) {
+    if (disabledAgentKeys.has(canonicalAgentKey(id))) continue
     if (!allAgents[id]) throw new Error(`OmO did not generate the required agent: ${id}`)
     selected[id] = allAgents[id]
   }
@@ -143,10 +174,6 @@ try {
   // other agent entry is touched.
   const fixedAgents = fixSisyphusAgentMap(orderedSelected)
   const sisyphusPrompt = await bakeSisyphusPromptVariants(fixedAgents[SISYPHUS_AGENT_ID])
-  const pluginView = resolveNativePluginConfig({
-    directory,
-    ...(profileRoot ? { env: { ...process.env, HOME: profileRoot } } : {}),
-  })
   const gates = deriveNativeGates(pluginView)
   // A V1 tool default can carry a hard global disable for a family the native
   // profile explicitly enables (`task_*: false` is the default). The native gate
@@ -197,6 +224,10 @@ try {
         // the published package's npm dist-tags.
         bundledVersion: readBundledVersion(),
         categories: { ...(pluginView.categories ?? {}) },
+        // Upstream 5a9bb74a4: the user's per-agent explicit model / fallback_models,
+        // materialized so the runtime suppresses the built-in chain without
+        // parsing omo.jsonc itself. An empty block is the honest no-override case.
+        agentOverrides: extractAgentOverrides(pluginView.agents),
         disabled: { ...(pluginView.disabled ?? {}) },
         // The resolved OpenClaw block is absent when no layer sets it. The
         // runtime's bidirectional surface reads it from the manifest, so the

@@ -17,12 +17,15 @@ import {
   mergeCategories,
   resolveCategoryFromClients,
 } from "./rigel-v2-native-categories.mjs"
+import { agentOverrideFor, resolveEffectiveChain } from "./rigel-v2-native-explicit-chain.mjs"
+import { createNativeNoSisyphusGptEnforcement } from "./rigel-v2-native-no-sisyphus-gpt.mjs"
+import { isHephaestusAgentId } from "./rigel-v2-native-hephaestus.mjs"
 import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { createNativeContextHook, createNativeModelRequestHook } from "./rigel-v2-native-prompt.mjs"
 import { readSisyphusPromptPlan, SISYPHUS_PROMPT_RECEIPT } from "./rigel-v2-native-sisyphus-prompt.mjs"
-import { agentChain, categoryChain, resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
+import { resolveFallbackModel } from "./rigel-v2-native-model-chains.mjs"
 import { createDirectoryInstructionStore } from "./rigel-v2-directory-instructions.mjs"
 import { createNativeToolResultReminders } from "./rigel-v2-native-reminders.mjs"
 import { applyNativeRecoveryReminder } from "./rigel-v2-native-recovery.mjs"
@@ -34,7 +37,7 @@ import { createNativeWebFetchRedirectGuard } from "./rigel-v2-native-webfetch-re
 import { createNativePlanFormatValidator } from "./rigel-v2-native-plan-format-validator.mjs"
 import { createNativePrometheusMdOnly } from "./rigel-v2-native-prometheus-md-only.mjs"
 import manifest from "./rigel-v2-native-agent-manifest.mjs"
-import { checkNativeHostVersion, readNativeBundledVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativeOpenclaw, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
+import { checkNativeHostVersion, readNativeAgentOverrides, readNativeBundledVersion, readNativeDisabled, readNativeGates, readNativeMaxTools, readNativeMcpBuiltinsPolicy, readNativeMcpPolicy, readNativeOpenclaw, readNativePreemptiveThreshold, readNativeRepoRoot, readNativeTruncateAllToolOutputs } from "./rigel-v2-native-config.mjs"
 import { registerNativeAgents } from "./rigel-v2-native-agents.mjs"
 import { createNativeToolPermissionGate, translateGlobalTools } from "./rigel-v2-native-permissions.mjs"
 import { createRuntimeHostSkillSource, registerNativeSkills, selectSkillsForChild, formatSkillInjection } from "./rigel-v2-native-skills.mjs"
@@ -57,6 +60,7 @@ import { runOrderedRules } from "./rigel-v2-native-hook-chain.mjs"
 import { createSessionStateRegistry } from "./rigel-v2-native-session-state.mjs"
 import { createKeywordState } from "./rigel-v2-keyword-state.mjs"
 import { createBackgroundManager } from "./rigel-v2-background-manager.mjs"
+import { getStoppedSessionErrorInfo } from "./rigel-v2-background-stopped.mjs"
 import { writeStopMarker } from "./rigel-v2-background-marker.mjs"
 import { createFileBackgroundState, createStorageBackgroundState } from "./rigel-v2-background-state.mjs"
 // T17: single flow-rule import point. `createFlowRules` rebuilds the ordered
@@ -266,12 +270,19 @@ function modelKeyString(value) {
 
 /**
  * The honest pre-spawn admission key: the category's resolved model when the
- * category route is taken, otherwise the agent's declared model from the
- * generated manifest. Both are known BEFORE any child session exists, so the
- * child is admitted under its real bucket and is never re-keyed after spawn.
+ * category route is taken, the user's explicit agent model when one is pinned,
+ * otherwise the agent's declared model from the generated manifest. All are
+ * known BEFORE any child session exists, so the child is admitted under its real
+ * bucket and is never re-keyed after spawn. Exported so the runtime tests pin
+ * the derivation without booting the setup closure.
  */
-function preSpawnModelKey(category, agent, manifestRef) {
+export function preSpawnModelKey(category, agent, manifestRef, agentOverrides) {
   if (category?.model) return modelKeyString(category.model)
+  // Upstream 5a9bb74a4: when the user pinned an agent model, the child starts on
+  // that model, so the admission bucket must key on it instead of the
+  // generator's default manifest model.
+  const override = agentOverrideFor(agentOverrides, agent?.id ?? agent?.name)
+  if (typeof override?.model === "string" && override.model) return modelKeyString(override.model)
   const agents = manifestRef?.agents ?? {}
   const entry = agents[agent?.id] ?? agents[agent?.name]
   return entry?.model ? modelKeyString(entry.model) : ""
@@ -370,6 +381,10 @@ export default {
     // execution-time resolver and the orchestrator roster so a user category is
     // selectable and routable exactly like a built-in.
     const userCategories = readUserCategories(context)
+    // Upstream 5a9bb74a4: the user's per-agent overrides materialized by the
+    // generator (explicit model / fallback_models). An explicit model here
+    // suppresses the built-in canonical chain.
+    const agentOverrides = readNativeAgentOverrides(manifest)
     const sessionAgentResolver = createSessionAgentResolver(context)
     const permissionWiring = createNativePermissionWiring({
       manifest,
@@ -381,6 +396,16 @@ export default {
       // so an agent whose primary is absent starts on the next chain rung
       // instead of being rejected by V2 before any request hook can run.
       listModels: () => listV2ModelsFromClients([context, context?.client], location),
+      // Upstream 5a9bb74a4: agents the user pinned a model for. The proactive
+      // resolver must keep that model instead of overwriting it with a chain rung.
+      explicitAgentModels: new Map(
+        Object.entries(agentOverrides)
+          .filter(([, override]) => typeof override?.model === "string" && override.model)
+          .map(([id, override]) => [id, { model: override.model, variant: override.variant }]),
+      ),
+      // V1 `disabled_agents`: a disabled agent is never registered, so a switch
+      // onto it is impossible.
+      disabledAgents: readNativeDisabled(manifest).agents,
       onAgentRequest: (id, body) => {
         agentRequestBodies.set(id.toLocaleLowerCase(), body)
         const name = manifest.agents?.[id]?.name
@@ -389,6 +414,39 @@ export default {
       // The permission gate consumes each agent's translated tool-name gates
       // here, so the `execute.before` hook below governs the real roster.
       onAgentPermissions: (id, permissions) => permissionWiring.onAgentPermissions(id, permissions),
+    })
+    // Upstream 5fd04b590: redirect a Sisyphus session on an unsupported GPT model
+    // to Hephaestus, or keep Sisyphus with a distinct notice when Hephaestus is
+    // not in the REGISTERED roster. The redirect uses the V2 switchAgent seam and
+    // an observable attention notice plus a durable receipt (never prompt-only).
+    const noSisyphusGpt = createNativeNoSisyphusGptEnforcement({
+      switchAgent: (args) => context?.session?.switchAgent?.(args),
+      resolveSession: async (sessionID) => {
+        try {
+          const session = await context?.session?.get?.({ sessionID })
+          const data = session?.data ?? session ?? {}
+          const agent = typeof data.agent === "string" ? data.agent : undefined
+          const modelID = typeof data.model?.modelID === "string" ? data.model.modelID
+            : (typeof data.model?.id === "string" ? data.model.id : (typeof data.model === "string" ? data.model : undefined))
+          return { agent, modelID }
+        } catch (error) {
+          console.error(`[oh-my-rigel] no-sisyphus-gpt: session resolve failed: ${error instanceof Error ? error.message : String(error)}`)
+          return undefined
+        }
+      },
+      notify: (payload) => {
+        try {
+          return context?.attention?.notify?.(payload)
+        } catch (error) {
+          console.error(`[oh-my-rigel] no-sisyphus-gpt: attention notify failed: ${error instanceof Error ? error.message : String(error)}`)
+          return undefined
+        }
+      },
+      hephaestusTarget: () => registeredAgents.find((id) => isHephaestusAgentId(id)),
+      log: (message, detail) => {
+        console.error(`[oh-my-rigel] ${message}${detail ? ` ${JSON.stringify(detail)}` : ""}`)
+        writeStateReceipt("no-sisyphus-gpt.json", { message, ...detail })
+      },
     })
     // Native skill surface (Task 14). Discovered skills are registered into
     // V2's own skill registry (`context.skill.transform`), and their embedded
@@ -495,11 +553,19 @@ export default {
         return undefined
       }
     }
+    // Upstream 5a9bb74a4: the EFFECTIVE chain for a session. An explicit user
+    // model (category or agent) yields ONLY the user's `fallback_models` (empty
+    // when none), never the built-in canonical chain. A configured
+    // `fallback_models` replaces the built-in chain even without a pinned model.
+    const explicitChainFor = (sessionID, agent) => resolveEffectiveChain({
+      descriptor: categoryChildSessions.get(sessionID),
+      agent,
+      userCategories,
+      agentOverrides,
+    })
     const resolveNativeModel = async ({ sessionID, agent, model, sameProviderAs }) => {
       if (!sessionID || typeof model !== "string" || !model.trim()) return undefined
-      const chain = categoryChildSessions.has(sessionID)
-        ? categoryChain(categoryChildSessions.get(sessionID))
-        : agentChain(agent)
+      const chain = explicitChainFor(sessionID, agent)
       if (!Array.isArray(chain) || chain.length === 0) return undefined
       const state = sessionFallback.get(sessionID) ?? { chain, failedModels: new Set(), attempts: 0 }
       state.chain = chain
@@ -536,7 +602,12 @@ export default {
       if (state.attempts >= chain.length) return
       if (typeof state.model === "string" && state.model) state.failedModels.add(state.model)
       state.attempts += 1
-      if (state.attempts >= chain.length) {
+      // A user `fallback_models` chain does NOT include the running model, so the
+      // first failure must be allowed to walk rung 0 (V1 walks
+      // `configuredFallbackChain` from index 0). Built-in chains include the
+      // primary as rung 0, which the resolver skips as a no-op, so allowing the
+      // full chain length changes nothing there.
+      if (state.attempts > chain.length) {
         console.error(`[oh-my-rigel] Native V2 model fallback exhausted: session=${sessionID}; attempts=${state.attempts}/${chain.length}; last=${state.model ?? "unknown"}`)
         return
       }
@@ -585,9 +656,7 @@ export default {
     // reactive fallback could not act.
     const seedChildFallback = (sessionID, { agent, model } = {}) => {
       if (typeof sessionID !== "string" || !sessionID) return
-      const chain = categoryChildSessions.has(sessionID)
-        ? categoryChain(categoryChildSessions.get(sessionID))
-        : agentChain(agent)
+      const chain = explicitChainFor(sessionID, agent)
       if (!Array.isArray(chain) || chain.length === 0) return
       const state = sessionFallback.get(sessionID) ?? { chain, failedModels: new Set(), attempts: 0 }
       state.chain = chain
@@ -781,7 +850,13 @@ export default {
             onChildSession: (sessionID, child) => {
               onSession(sessionID, child?.model)
               childSessionIDs.add(sessionID)
-              if (descriptor.category) categoryChildSessions.set(sessionID, descriptor.category.name)
+              if (descriptor.category) {
+                categoryChildSessions.set(sessionID, {
+                  name: descriptor.category.name,
+                  explicit: descriptor.category.explicit,
+                  chain: descriptor.category.fallbackChain,
+                })
+              }
               seedChildFallback(sessionID, child)
             },
           })
@@ -802,6 +877,18 @@ export default {
         if (typeof context?.session?.abort === "function") return context.session.abort({ sessionID })
         return undefined
       },
+      // Upstream a0b2e96c3: the manager's event-driven errored-idle check reads
+      // the child transcript through the same V2 surface the rules injector uses.
+      // An absent session context degrades to "no error" (never a false finalize).
+      readStoppedError: async (sessionID) => {
+        if (typeof context?.session?.context !== "function") return undefined
+        const raw = await context.session.context({ sessionID })
+        const messages = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : [])
+        return getStoppedSessionErrorInfo(messages)
+      },
+      // Upstream 8e705a122: the retry walker must know the child's fallback chain
+      // (explicit user chain or the built-in one) to pick the next served model.
+      resolveFallbackChain: (record) => explicitChainFor(record.sessionID, record.agent?.name ?? record.agent),
       runHandoff: async ({ sessionID, status, child }) => {
         let result = ""
         if (status === "succeeded" && typeof context?.session?.context === "function") {
@@ -809,10 +896,10 @@ export default {
         }
         await context.session.prompt({
           sessionID: child.parentSessionID,
-          text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result }),
+          text: backgroundHandoffPrompt({ sessionID, agent: child.agent, status, result, error: child.error }),
           resume: true,
         })
-        console.error(`[oh-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}`)
+        console.error(`[oh-my-rigel] Native V2 background handoff: child=${sessionID}; parent=${child.parentSessionID}; status=${status}${child.error ? `; error=${String(child.error).slice(0, 200)}` : ""}`)
       },
       onError: (error, info) => {
         console.error(`[oh-my-rigel] Native V2 background handoff failed: child=${info?.sessionID ?? "unknown"}; ${error instanceof Error ? error.message : String(error)}`)
@@ -1059,6 +1146,7 @@ export default {
               // no longer be omitted from a hand-maintained list. A throwing
               // clear is isolated by the registry and never stops the rest.
               await sessionState.disposeSession(sessionID)
+              noSisyphusGpt.clear(sessionID)
               // A deleted session may be a PARENT; its queued descriptors have no
               // session id, so they must be withdrawn before any creation and its
               // running children aborted.
@@ -1083,6 +1171,13 @@ export default {
                   })
                 }
                 await idleContinuations.handle(idle)
+                // Upstream a0b2e96c3's terminal-errored finalization is owned by
+                // the `session.execution.failed` handler below (`handleChildFailure`):
+                // a terminal errored child never emits an accepted idle edge
+                // (V2 emits `execution.failed`, then idles the session internally
+                // with no plugin-visible idle event), so there is nothing to check
+                // here. Adding an errored-idle check on this edge would be a
+                // fictional no-op and a latent double-finalize.
                 // The todo-continuation enforcer rides the SAME accepted idle
                 // edge, after the background hint. The cooldown and the rest of
                 // the gate make a duplicate idle a no-op.
@@ -1142,10 +1237,30 @@ export default {
             if (event.type === "session.created") await tmuxVizManager?.onSessionCreated(event)
             if (event.type === "session.deleted" && typeof sessionID === "string") await tmuxVizManager?.onSessionDeleted({ sessionID })
             if (typeof sessionID !== "string" || !backgroundManager.has(sessionID)) continue
+            if (event.type === "session.execution.failed") {
+              // Upstream 8e705a122: classify the child failure before finalizing.
+              // A retryable failure re-launches on the next model a connected
+              // provider actually serves; an unserved chain finalizes as failed.
+              const rows = await readAvailableModels()
+              const modelsByProvider = rows ? {} : undefined
+              for (const row of rows ?? []) {
+                const providerID = row.providerID ?? row.provider
+                const id = row.id ?? row.modelID
+                if (typeof providerID === "string" && typeof id === "string") {
+                  if (!modelsByProvider[providerID]) modelsByProvider[providerID] = []
+                  modelsByProvider[providerID].push(id)
+                }
+              }
+              await backgroundManager.handleChildFailure({
+                sessionID,
+                connectedProviders: modelsByProvider ? Object.keys(modelsByProvider) : undefined,
+                modelsByProvider,
+              })
+              continue
+            }
             const status = event.type === "session.execution.succeeded" ? "succeeded"
-              : event.type === "session.execution.failed" ? "failed"
-                : event.type === "session.execution.interrupted" ? "interrupted"
-                  : undefined
+              : event.type === "session.execution.interrupted" ? "interrupted"
+                : undefined
             // ENQUEUE, never await: one slow handoff must not block the next
             // event (compaction, reactive fallback, monitor) from being handled.
             if (status) backgroundManager.enqueueHandoff(sessionID, status)
@@ -1269,7 +1384,13 @@ export default {
               parentSessionID,
               onChildSession: (sessionID, child) => {
                 childSessionIDs.add(sessionID)
-                if (category) categoryChildSessions.set(sessionID, category.name)
+                if (category) {
+                  categoryChildSessions.set(sessionID, {
+                    name: category.name,
+                    explicit: category.explicit,
+                    chain: category.fallbackChain,
+                  })
+                }
                 seedChildFallback(sessionID, child)
               },
             })
@@ -1284,7 +1405,7 @@ export default {
             category,
             subagentType: input.subagent_type,
             model: category?.model,
-            modelKey: preSpawnModelKey(category, agent, manifest),
+            modelKey: preSpawnModelKey(category, agent, manifest, agentOverrides),
             prompt: effectivePrompt,
             loadSkills: requestedSkills,
           })
@@ -1486,8 +1607,12 @@ export default {
         try {
           applyPromptAdmission(event, stopContinuationState)
           await autoSlashCommand.before(event)
+          // Upstream 5fd04b590: this boundary runs BEFORE the turn's request is
+          // built, so a Sisyphus session on an unsupported GPT model is switched
+          // to Hephaestus for THIS turn (the provider payload uses Hephaestus).
+          await noSisyphusGpt.handlePrompt(event?.sessionID)
         } catch (error) {
-          console.error(`[oh-my-rigel] Native V2 embedded slash-command hook failed: ${error instanceof Error ? error.message : String(error)}`)
+          console.error(`[oh-my-rigel] Native V2 prompt hook failed: ${error instanceof Error ? error.message : String(error)}`)
         }
       })
       : undefined

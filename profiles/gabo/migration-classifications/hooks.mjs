@@ -161,8 +161,8 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "La cadena proactiva V1 en `hooks/model-fallback/hook.ts` reescribe el modelo en chat.params; se migra resolviendo la cadena por agente en la frontera http.request del runtime nativo V2 y reescribiendo el campo model del payload.",
-    futureEvidence: "`rigel-v2-native-model-chains.mjs`; `rigel-v2-native-model-chains.test.mjs`; `rigel-v2-native.mjs` (fallback proactivo en model.request y reactivo en session.error)",
+      "La cadena proactiva V1 en `hooks/model-fallback/hook.ts` reescribe el modelo en chat.params; se migra resolviendo la cadena por agente en la frontera http.request del runtime nativo V2 y reescribiendo el campo model del payload. Un modelo explicito del usuario suprime la cadena built-in (upstream 5a9bb74a4): `rigel-v2-native-explicit-chain.mjs` devuelve solo la cadena `fallback_models` del usuario (o vacia) para un agente/categoria explicitos, y la cadena built-in cuando no hay override.",
+    futureEvidence: "`rigel-v2-native-explicit-chain.mjs`; `rigel-v2-native-model-chains.mjs`; `rigel-v2-native-model-chains.test.mjs`; `rigel-v2-native.mjs` (fallback proactivo en model.request y reactivo en session.error)",
   },
   "monitor-status-injector": {
     classification: "Migrar",
@@ -227,8 +227,8 @@ export default {
     classification: "Migrar",
     status: "Migrado",
     rationale:
-      "El guard V1 en `hooks/no-sisyphus-gpt/hook.ts` bloquea Sisyphus en proveedores no GPT; en el runtime nativo la seleccion de modelos de cada agente pasa por las cadenas y gates del manifiesto (`requiresProvider`/gate por agente en el registro) y por el fallback de `rigel-v2-native-model-chains.mjs`, que nunca resuelve a un modelo fuera de la cadena del agente.",
-    futureEvidence: "`rigel-v2-native-model-chains.mjs`; `rigel-v2-native-hephaestus.mjs` (gate equivalente); `rigel-v2-native-agents.mjs`",
+      "El hook V1 en `hooks/no-sisyphus-gpt/hook.ts` (post-fix upstream 5fd04b590) redirige una sesion Sisyphus sobre un modelo GPT sin prompt nativo (`isGptModel && !isGptNativeSisyphusModel && !isGpt6Model`) a Hephaestus SOLO cuando Hephaestus esta en el roster REGISTRADO; si no, conserva Sisyphus con un aviso distinto y log, sin persistir un turno bajo un agente desconocido. `rigel-v2-native-no-sisyphus-gpt.mjs` porta la deteccion de modelo y la decision; el runtime lo aplica en el hook `context` (`rigel-v2-native.mjs`), usa `context.session.switchAgent` para el redirect (mismo seam que ulw-execute) y un aviso observable (`context.attention.notify`) mas recibo durable, nunca prompt-only. El estado previo de esta fila afirmaba un gate de cadena inexistente; se corrige.",
+    futureEvidence: "`rigel-v2-native-no-sisyphus-gpt.mjs`; `rigel-v2-native-no-sisyphus-gpt.test.mjs`; `rigel-v2-native.mjs` (hook context + switchAgent); `rigel-v2-native-hephaestus.mjs` (roster gate)",
   },
   "notepad-write-guard": {
     classification: "Migrar",

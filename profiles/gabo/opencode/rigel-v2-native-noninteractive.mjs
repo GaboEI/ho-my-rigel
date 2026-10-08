@@ -13,6 +13,8 @@
  *   interactive program.
  */
 
+import { patchToolArgs } from "./rigel-v2-native-tool-args.mjs"
+
 export const NON_INTERACTIVE_ENV = {
   CI: "true",
   DEBIAN_FRONTEND: "noninteractive",
@@ -136,21 +138,20 @@ export function createNativeNonInteractiveEnvGuard(context = {}) {
       if (String(event?.tool ?? "").toLowerCase() !== "shell") return
       const command = commandArgument(event)
       if (!command) return
-      const args = event.input ?? event.args
       const banned = detectBannedCommand(command)
       if (banned) {
         const message = warningMessage(banned)
-        if (args && typeof args === "object") {
+        patchToolArgs(event, (args) => {
           if (Object.hasOwn(args, "command")) args.command = `echo ${JSON.stringify(message)}`
           else if (Object.hasOwn(args, "cmd")) args.cmd = `echo ${JSON.stringify(message)}`
-        }
+        })
         return
       }
       if (!/\bgit\b/i.test(command) || command.trim().startsWith(envPrefix.trim())) return
-      if (args && typeof args === "object") {
+      patchToolArgs(event, (args) => {
         if (Object.hasOwn(args, "command")) args.command = `${envPrefix} ${command}`
         else if (Object.hasOwn(args, "cmd")) args.cmd = `${envPrefix} ${command}`
-      }
+      })
     },
   }
 }

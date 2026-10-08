@@ -38,6 +38,26 @@ describe("native V2 non-interactive environment guard", () => {
     expect(value.input.command).toBe(`echo ${JSON.stringify(warningMessage("git rebase -i"))}`)
   })
 
+  // Upstream 34355b5bc: the hook patches the argument object the tool will
+  // execute. A mutable input keeps its identity; a frozen input (the inverse
+  // risk) is replaced on the event field so the rewrite still reaches the tool.
+  test("preserves input identity when the argument object is mutable", () => {
+    const input = { command: "git status" }
+    const value = { tool: "shell", input }
+    createNativeNonInteractiveEnvGuard().before(value)
+    expect(value.input).toBe(input)
+    expect(input.command).toBe(`${prefix} git status`)
+  })
+
+  test("rewrites a FROZEN argument object by replacing the event field", () => {
+    const frozen = Object.freeze({ command: "git rebase -i HEAD~1" })
+    const value = { tool: "shell", input: frozen }
+    createNativeNonInteractiveEnvGuard().before(value)
+    expect(value.input).not.toBe(frozen)
+    expect(value.input.command).toBe(`echo ${JSON.stringify(warningMessage("git rebase -i"))}`)
+    expect(frozen.command).toBe("git rebase -i HEAD~1")
+  })
+
   test("warning echoes the v1 message for editors and pagers", () => {
     for (const banned of ["vim", "less", "man"]) {
       const value = event(`${banned} file`)

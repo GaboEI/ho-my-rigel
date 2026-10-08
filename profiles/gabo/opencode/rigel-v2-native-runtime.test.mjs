@@ -1524,3 +1524,173 @@ test("native runtime reads keyword_detector disabled and enabled lists from the 
   expect(nativeRuntime.readKeywordDetectorConfig({ config: { keyword_detector: { disabled_keywords: "team" } } }))
     .toEqual({ disabledKeywords: undefined, enabledExpansions: undefined })
 })
+
+// Upstream 5a9bb74a4: an explicit user model suppresses the built-in canonical
+// chain. `resolveNativeModel` (model.request) and `seedChildFallback`
+// (session.execution.failed) must honour that flag for a category child, so
+// these tests drive both real seams instead of the pure decision helper alone.
+function explicitCategoryRuntime({ config, createIds = ["ses_category_child"], directory = "/native-v2" }) {
+  const switched = []
+  const feed = createEventFeed()
+  let createIndex = 0
+  const context = {
+    location: { directory },
+    config,
+    agent: {
+      list: async () => ({ data: [{ id: "Sisyphus-Junior", name: "Sisyphus-Junior", mode: "subagent" }] }),
+      transform: async () => ({ dispose() {} }),
+      reload: async () => {},
+    },
+    model: { list: async () => ({ data: [
+      { providerID: "xiaomi", id: "mimo-v2.6-pro", enabled: true },
+      { providerID: "xiaomi", id: "mimo-v2.6-flash", enabled: true },
+      { providerID: "openai", id: "gpt-6-luna-fast", enabled: true },
+      { providerID: "anthropic", id: "claude-opus-5-5", enabled: true },
+      { providerID: "anthropic", id: "claude-opus-4-6", enabled: true },
+    ] }) },
+    event: { subscribe: feed.subscribe },
+    session: {
+      hook: async (name, handler) => { if (name === "model.request") feed.requestHook = handler; return { dispose() {} } },
+      create: async () => ({ data: { id: createIds[createIndex++] ?? createIds.at(-1) } }),
+      prompt: async () => ({ data: {} }),
+      wait: async () => {},
+      context: async () => [{ type: "assistant", content: [{ type: "text", text: "done" }] }],
+      switchModel: async (input) => { switched.push(input); return { data: {} } },
+    },
+    tool: { transform: async (callback) => {
+      let definition
+      callback({ add: (value) => { if (value?.name === "rigel_task") definition = value }, get: () => definition })
+      if (definition) feed.definition = definition
+      return { dispose() {} }
+    } },
+  }
+  return { feed, switched, context }
+}
+
+function categoryRequest(sessionID, providerID, modelID) {
+  return {
+    sessionID,
+    agent: "Sisyphus-Junior",
+    model: { providerID, modelID },
+    request: new Request("https://example.invalid/chat", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: modelID, messages: [{ role: "user", content: "work" }] }),
+    }),
+  }
+}
+
+function failAndConsume(feed, sessionID) {
+  const consumed = feed.consumed()
+  feed.push({ type: "session.execution.failed", data: { sessionID } })
+  return consumed
+}
+
+test("native runtime suppresses the built-in chain for an explicit category child", async () => {
+  const { feed, switched, context } = explicitCategoryRuntime({
+    config: { categories: { quick: { model: "xiaomi/mimo-v2.6-pro" } } },
+  })
+  const dispose = await plugin.setup(context)
+  // given: a category pinned to the user's model (no fallback_models)
+  await feed.definition.execute({ category: "quick", prompt: "Work." }, { sessionID: "ses_parent" })
+
+  // when: the child issues a model request on the provider V2 selected
+  const request = categoryRequest("ses_category_child", "xiaomi", "mimo-v2.6-pro")
+  await feed.requestHook(request)
+
+  // then: the user's model is untouched; quick's built-in first rung
+  // (gpt-6-luna-fast) and same-provider rung (mimo-v2.6-flash) are never attached
+  expect((await request.request.clone().json()).model).toBe("mimo-v2.6-pro")
+  // and: a pre-request failure has no built-in chain to walk
+  await failAndConsume(feed, "ses_category_child")
+  expect(switched).toEqual([])
+  await dispose()
+})
+
+test("native runtime walks only the user fallback_models chain for an explicit category child", async () => {
+  const { feed, switched, context } = explicitCategoryRuntime({
+    config: { categories: { quick: { model: "xiaomi/mimo-v2.6-pro", fallback_models: ["xiaomi/mimo-v2.6-flash(low)"] } } },
+  })
+  const dispose = await plugin.setup(context)
+  await feed.definition.execute({ category: "quick", prompt: "Work." }, { sessionID: "ses_parent" })
+
+  // when: the pinned model fails, then: only the user's fallback_models rung is walked
+  await failAndConsume(feed, "ses_category_child")
+  expect(switched).toEqual([
+    { sessionID: "ses_category_child", model: { providerID: "xiaomi", id: "mimo-v2.6-flash" } },
+  ])
+  await dispose()
+})
+
+test("native runtime keeps an explicit category child isolated from a non-explicit sibling", async () => {
+  const { feed, switched, context } = explicitCategoryRuntime({
+    config: { categories: { quick: { model: "xiaomi/mimo-v2.6-pro" } } },
+    createIds: ["ses_explicit", "ses_implicit"],
+  })
+  const dispose = await plugin.setup(context)
+  await feed.definition.execute({ category: "quick", prompt: "Work." }, { sessionID: "ses_parent" })
+  await feed.definition.execute({ category: "writing", prompt: "Write." }, { sessionID: "ses_parent" })
+
+  // when: the non-explicit sibling fails, then the explicit one fails
+  await failAndConsume(feed, "ses_implicit")
+  await failAndConsume(feed, "ses_explicit")
+
+  // then: only the non-explicit sibling walks its built-in writing chain
+  expect(switched).toEqual([
+    { sessionID: "ses_implicit", model: { providerID: "anthropic", id: "claude-opus-4-6" } },
+  ])
+  await dispose()
+})
+
+test("native runtime keeps an explicit category child's chain across a resume", async () => {
+  const { feed, switched, context } = explicitCategoryRuntime({
+    config: { categories: { quick: { model: "xiaomi/mimo-v2.6-pro", fallback_models: ["xiaomi/mimo-v2.6-flash(low)"] } } },
+  })
+  const dispose = await plugin.setup(context)
+  await feed.definition.execute({ category: "quick", prompt: "Work." }, { sessionID: "ses_parent" })
+  // when: the same child session is resumed
+  await feed.definition.execute({ task_id: "ses_category_child", prompt: "Again." }, { sessionID: "ses_parent" })
+
+  // then: the explicit descriptor from creation still governs the chain
+  await failAndConsume(feed, "ses_category_child")
+  expect(switched).toEqual([
+    { sessionID: "ses_category_child", model: { providerID: "xiaomi", id: "mimo-v2.6-flash" } },
+  ])
+  await dispose()
+})
+
+test("native runtime keys an admitted background child on the explicit category chain", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "rigel-native-explicit-bg-"))
+  try {
+    const { feed, switched, context } = explicitCategoryRuntime({
+      config: { categories: { quick: { model: "xiaomi/mimo-v2.6-pro", fallback_models: ["xiaomi/mimo-v2.6-flash(low)"] } } },
+      createIds: ["ses_bg_child"],
+      directory,
+    })
+    const dispose = await plugin.setup(context)
+    // given: a background category delegation (admission before spawn)
+    await feed.definition.execute({ category: "quick", prompt: "Work.", run_in_background: true }, { sessionID: "ses_parent" })
+
+    // when: the admitted child fails, then: the explicit chain is attached
+    await failAndConsume(feed, "ses_bg_child")
+    expect(switched).toContainEqual({ sessionID: "ses_bg_child", model: { providerID: "xiaomi", id: "mimo-v2.6-flash" } })
+    await dispose()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+// Upstream 5a9bb74a4: the pre-spawn admission key must reflect the model the
+// child will actually start on, including a pinned agent model.
+test("native runtime keys the pre-spawn admission on the explicit agent model", () => {
+  const manifest = { agents: { oracle: { model: "openai/gpt-5.6-sol" } } }
+  const overrides = { oracle: { model: "deepseek/deepseek-v4-pro", variant: "max" } }
+
+  // given: no category, when: the user pinned an agent model
+  expect(nativeRuntime.preSpawnModelKey(undefined, { id: "oracle", name: "Oracle" }, manifest, overrides)).toBe("deepseek/deepseek-v4-pro")
+  // and: an agent with no override keeps its manifest model
+  expect(nativeRuntime.preSpawnModelKey(undefined, { id: "oracle", name: "Oracle" }, manifest, {})).toBe("openai/gpt-5.6-sol")
+  // and: a category route keys on the resolved category model
+  expect(nativeRuntime.preSpawnModelKey({ model: { providerID: "xiaomi", id: "mimo-v2.6-pro" } }, { id: "sisyphus-junior", name: "Sisyphus-Junior" }, manifest, overrides)).toBe("xiaomi/mimo-v2.6-pro")
+  // and: an unknown agent with no override yields no key
+  expect(nativeRuntime.preSpawnModelKey(undefined, { id: "missing", name: "Missing" }, manifest, overrides)).toBe("")
+})
