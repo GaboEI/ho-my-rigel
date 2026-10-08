@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import {
   DISABLED_BUILTIN_NOTIFICATION,
   parseJsonc,
+  registerCompanionCliPlugin,
   registerNotificationCliPlugin,
+  removeRigelCliEntries,
   resolveNotificationOptions,
   resolveProfileOpenCodeBlock,
   stripJsonComments,
@@ -149,5 +151,68 @@ describe("registerNotificationCliPlugin", () => {
     const disabled = registerNotificationCliPlugin(registered, { runtimeDir, options: { configured: true, enabled: false } })
     expect(disabled.plugins).toEqual(["./plugins/keep.mjs"])
     expect(disabled.plugins).not.toContain(DISABLED_BUILTIN_NOTIFICATION)
+  })
+})
+
+describe("registerCompanionCliPlugin family identity", () => {
+  const familyRoot = "/state/oh-my-rigel"
+  const v1Runtime = `${familyRoot}/versions/1/runtime`
+  const v2Runtime = `${familyRoot}/versions/2/runtime`
+  const options = { configured: true, enabled: true }
+
+  test("#given a version transition #then the family entry is replaced in place, not duplicated", () => {
+    const installed = registerCompanionCliPlugin(
+      { plugins: ["foreign-a.mjs", "foreign-b.mjs"] },
+      { runtimeDir: v1Runtime, familyRoot, options, notificationEnabled: true },
+    )
+    const upgraded = registerCompanionCliPlugin(installed, { runtimeDir: v2Runtime, familyRoot, options, notificationEnabled: true })
+
+    const family = upgraded.plugins.filter((entry) => typeof entry === "object" && entry.package.startsWith(familyRoot))
+    expect(family).toHaveLength(1)
+    expect(family[0].package).toBe(v2Runtime)
+    // Foreign entries keep their position; the family entry keeps its slot.
+    expect(upgraded.plugins[0]).toBe("foreign-a.mjs")
+    expect(upgraded.plugins[1]).toBe("foreign-b.mjs")
+  })
+
+  test("#given a duplicated family entry #then only one survives", () => {
+    const cli = { plugins: [{ package: v1Runtime, options: {} }, { package: v2Runtime, options: {} }, "keep.mjs"] }
+    const next = registerCompanionCliPlugin(cli, { runtimeDir: v2Runtime, familyRoot, options, notificationEnabled: true })
+    expect(next.plugins.filter((entry) => typeof entry === "object" && entry.package.startsWith(familyRoot))).toHaveLength(1)
+    expect(next.plugins).toContain("keep.mjs")
+  })
+
+  test("#given the notification surface is disabled #then the builtin disable marker is absent", () => {
+    const cli = registerCompanionCliPlugin({ plugins: [] }, { runtimeDir: v1Runtime, familyRoot, options: { configured: false, enabled: false }, notificationEnabled: false })
+    expect(cli.plugins).not.toContain(DISABLED_BUILTIN_NOTIFICATION)
+    expect(cli.plugins.filter((entry) => typeof entry === "object" && entry.package === v1Runtime)).toHaveLength(1)
+  })
+
+  test("#given repeated registration #then it is idempotent", () => {
+    const once = registerCompanionCliPlugin({ plugins: ["keep.mjs"] }, { runtimeDir: v1Runtime, familyRoot, options, notificationEnabled: true })
+    const twice = registerCompanionCliPlugin(once, { runtimeDir: v1Runtime, familyRoot, options, notificationEnabled: true })
+    expect(JSON.stringify(twice)).toBe(JSON.stringify(once))
+  })
+})
+
+describe("removeRigelCliEntries", () => {
+  const familyRoot = "/state/oh-my-rigel"
+
+  test("#given family entries and the marker #then only foreign plugins remain", () => {
+    const cli = {
+      plugins: [
+        "foreign.mjs",
+        { package: `${familyRoot}/versions/1/runtime`, options: { notification: { enabled: true } } },
+        DISABLED_BUILTIN_NOTIFICATION,
+        { package: `${familyRoot}/versions/2/runtime`, options: {} },
+      ],
+    }
+    const next = removeRigelCliEntries(cli, { familyRoot })
+    expect(next.plugins).toEqual(["foreign.mjs"])
+  })
+
+  test("#given only foreign plugins #then nothing is removed", () => {
+    const cli = { plugins: ["a.mjs", "b.mjs"] }
+    expect(removeRigelCliEntries(cli, { familyRoot }).plugins).toEqual(["a.mjs", "b.mjs"])
   })
 })

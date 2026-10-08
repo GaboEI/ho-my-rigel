@@ -221,6 +221,7 @@ describe("claude-code-agent-loader", () => {
     test("returns empty object when pointed at dir without agents/", () => {
       const root = trackDir(mkdtempSync(join(tmpdir(), "agent-loader-test-")))
       process.env.OPENCODE_CONFIG_DIR = root
+      process.env.XDG_CONFIG_HOME = join(root, "xdg")
       const result = loadOpencodeGlobalAgents()
       expect(result).toEqual({})
     })

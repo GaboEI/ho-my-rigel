@@ -19,6 +19,8 @@ import path from "node:path"
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 
+import { buildProtectedManifest, diffProtectedManifests } from "./v1-protected-surfaces.mjs"
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const labRoot = process.env.RIGEL_V2_LAB_ROOT || path.join(os.homedir(), ".local", "share", "opencode-v2-lab")
 const labHome = process.env.RIGEL_V2_HOME || path.join(labRoot, "home")
@@ -50,24 +52,6 @@ function sha(file) {
     return null
   }
 }
-function counts() {
-  return V1_ROOTS.map((dir) => {
-    try {
-      let total = 0
-      const walk = (current) => {
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-          const child = path.join(current, entry.name)
-          if (entry.isDirectory()) walk(child)
-          else total += 1
-        }
-      }
-      walk(dir)
-      return total
-    } catch {
-      return 0
-    }
-  })
-}
 function cli(args, env = {}) {
   const result = spawnSync(launcher, args, { encoding: "utf8", env: { ...process.env, ...env }, timeout: 120_000 })
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" }
@@ -95,7 +79,7 @@ if (!fs.existsSync(launcher)) skip(`launcher not materialized at ${launcher}; ru
 
 const checks = []
 const beforeConfig = sha(V1_CONFIG)
-const beforeCounts = counts().join(",")
+const beforeProtected = buildProtectedManifest(os.homedir())
 
 function check(name, pass, detail) {
   checks.push({ name, pass, detail })
@@ -216,12 +200,14 @@ check("refresh.unreachableRefused", refreshDown.status === 1, `exit ${refreshDow
 
 // 5. V1 stays byte-identical.
 const afterConfig = sha(V1_CONFIG)
-const afterCounts = counts().join(",")
+const afterProtected = buildProtectedManifest(os.homedir())
 check("v1.configByteIdentical", beforeConfig === afterConfig, `${String(beforeConfig).slice(0, 16)} -> ${String(afterConfig).slice(0, 16)}`)
-check("v1.rootCountsUnchanged", beforeCounts === afterCounts, `${beforeCounts} -> ${afterCounts}`)
+const protectedDiff = diffProtectedManifests(beforeProtected, afterProtected)
+const protectedClean = protectedDiff.added.length === 0 && protectedDiff.removed.length === 0 && protectedDiff.changed.length === 0
+check("v1.protectedSurfacesUnchanged", protectedClean, protectedClean ? `${Object.keys(afterProtected).length} protected files unchanged` : JSON.stringify(protectedDiff))
 
 const failed = checks.filter((entry) => !entry.pass).map((entry) => entry.name)
-const report = { launcher, homeLauncher, labRoot, spawnedOpenCode: false, dockerUsed: false, v1Config: { before: beforeConfig, after: afterConfig }, checks, failed }
+const report = { launcher, homeLauncher, labRoot, spawnedOpenCode: false, dockerUsed: false, v1Config: { before: beforeConfig, after: afterConfig }, v1Protected: { files: Object.keys(afterProtected).length, clean: protectedClean }, checks, failed }
 fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 })
 fs.writeFileSync(path.join(evidenceDir, "cli-installed-verdicts.json"), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 })
 

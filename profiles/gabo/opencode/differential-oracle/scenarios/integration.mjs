@@ -181,9 +181,9 @@ export const scenarios = [
       return body.messages.map((message) => message.content).join("\u0000")
     },
     corpus: [
-      { name: "ultrawork gpt", text: "do ultrawork now", agent: "sisyphus", modelID: "gpt-5.2" },
+      { name: "ultrawork gpt", text: "do ultrawork now", agent: "sisyphus", modelID: "gpt-5.5" },
       { name: "ulw default", text: "ulw please", agent: "sisyphus", modelID: "anthropic/claude-sonnet-4-6" },
-      { name: "no keyword negative", text: "just a normal request", agent: "sisyphus", modelID: "gpt-5.2" },
+      { name: "no keyword negative", text: "just a normal request", agent: "sisyphus", modelID: "gpt-5.5" },
     ],
     mutation: { target: "appendDirectiveToUserMessage", perturb: () => () => false },
   },
@@ -890,9 +890,9 @@ export const scenarios = [
       return restoration ? restoration.message : null
     },
     corpus: [
-      { name: "restore after compaction", seed: true, compacted: true, agent: "sisyphus", modelID: "gpt-5.2", text: "do ultrawork" },
-      { name: "deleted clears", seed: true, deleted: true, agent: "sisyphus", modelID: "gpt-5.2", text: "do ultrawork" },
-      { name: "no compaction no restore", seed: true, agent: "sisyphus", modelID: "gpt-5.2", text: "do ultrawork" },
+      { name: "restore after compaction", seed: true, compacted: true, agent: "sisyphus", modelID: "gpt-5.5", text: "do ultrawork" },
+      { name: "deleted clears", seed: true, deleted: true, agent: "sisyphus", modelID: "gpt-5.5", text: "do ultrawork" },
+      { name: "no compaction no restore", seed: true, agent: "sisyphus", modelID: "gpt-5.5", text: "do ultrawork" },
     ],
     mutation: { target: "createKeywordState", perturb: () => () => ({ rememberExplicit: () => true, handleEvent: () => true, getRestoration: () => undefined, clearSession: () => true }) },
   },

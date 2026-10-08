@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { checkCodexComponents, type CodexComponentsDoctorDeps } from "./codex-components"
+
+const fixtureRoots: string[] = []
 
 const PLUGIN_VERSION = "4.9.2"
 const TEST_PLATFORM: NodeJS.Platform = "linux"
@@ -47,6 +49,7 @@ async function writeBundleFile(pluginRoot: string, relativePath: string, content
 
 async function createInstalledFixture(options: FixtureOptions = {}): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), "omo-codex-components-doctor-"))
+  fixtureRoots.push(root)
   const codexHome = join(root, ".codex")
   const binDir = join(root, "bin")
   const pluginRoot = join(codexHome, "plugins", "cache", "sisyphuslabs", "omo", PLUGIN_VERSION)
@@ -119,6 +122,9 @@ function buildDeps(fixture: Fixture, overrides: Partial<CodexComponentsDoctorDep
     binDir: fixture.binDir,
     detectCodexInstallation: async () => ({ found: true, source: "cli", path: "/usr/local/bin/codex" }),
     env: {},
+    // Hermetic: the shared sg resolver also probes <home>/.omo/runtime, so pin it
+    // to the fixture root instead of the developer's real home.
+    homeDir: fixture.root,
     platform: TEST_PLATFORM,
     arch: TEST_ARCH,
     // The sg fixtures are byte-filled placeholders, not runnable binaries, and the resolver now
@@ -132,6 +138,10 @@ function buildDeps(fixture: Fixture, overrides: Partial<CodexComponentsDoctorDep
 }
 
 describe("codex components doctor check", () => {
+  afterEach(async () => {
+    while (fixtureRoots.length > 0) await rm(fixtureRoots.pop()!, { recursive: true, force: true })
+  })
+
   test("#given a complete installed plugin #when checking components #then passes with sg source and completed bootstrap", async () => {
     // given
     const fixture = await createInstalledFixture()

@@ -136,10 +136,23 @@ export function resolveNotificationOptions({ profile, externalNotifierDetected =
   }
 }
 
-function isOurRuntimeEntry(entry, runtimeDir) {
-  if (typeof entry === "string") return entry === runtimeDir
-  if (entry && typeof entry === "object") return entry.package === runtimeDir
-  return false
+/**
+ * A path is owned by the Rigel CLI-plugin family when it equals the stable
+ * family root or sits underneath it. The family root is the version-independent
+ * Rigel state directory, so a version transition (which moves the runtime from
+ * `versions/<a>/runtime` to `versions/<b>/runtime`) is still recognised as the
+ * same family entry and can be replaced in place instead of duplicated.
+ */
+function underFamily(candidate, familyRoot) {
+  if (typeof candidate !== "string" || typeof familyRoot !== "string" || familyRoot.length === 0) return false
+  if (candidate === familyRoot) return true
+  return candidate.startsWith(`${familyRoot}/`) || candidate.startsWith(`${familyRoot}\\`)
+}
+
+function isOurRuntimeEntry(entry, { runtimeDir, familyRoot }) {
+  const pkg = typeof entry === "string" ? entry : entry && typeof entry === "object" ? entry.package : undefined
+  if (typeof pkg !== "string") return false
+  return pkg === runtimeDir || underFamily(pkg, familyRoot)
 }
 
 /**
@@ -153,11 +166,11 @@ function isOurRuntimeEntry(entry, runtimeDir) {
  * without our entry and with `opencode.notifications` untouched. Idempotent:
  * re-running yields the same array, and unrelated plugins keep their position.
  */
-export function registerNotificationCliPlugin(cliConfig, { runtimeDir, options, disableBuiltin = true } = {}) {
+export function registerNotificationCliPlugin(cliConfig, { runtimeDir, familyRoot = runtimeDir, options, disableBuiltin = true } = {}) {
   const next = { ...(cliConfig && typeof cliConfig === "object" ? cliConfig : {}) }
   const current = Array.isArray(next.plugins) ? next.plugins : []
   const plugins = current.filter((entry) => {
-    if (isOurRuntimeEntry(entry, runtimeDir)) return false
+    if (isOurRuntimeEntry(entry, { runtimeDir, familyRoot })) return false
     if (entry === DISABLED_BUILTIN_NOTIFICATION) return false
     return true
   })
@@ -179,19 +192,50 @@ export function registerNotificationCliPlugin(cliConfig, { runtimeDir, options, 
  * legacy-name notice, native-edition nudge, task toasts), and the
  * non-notification surfaces are default-on. Each surface applies its own gate, so
  * registering the package while the notification block is disabled is not a
- * double-announce risk. Idempotent: re-running yields the same array, and
- * unrelated plugins keep their position.
+ * double-announce risk.
+ *
+ * Family identity: `familyRoot` is the stable, version-independent Rigel state
+ * root. Every entry whose package sits under it belongs to the same family, so a
+ * version transition replaces the existing family entry IN PLACE with the active
+ * `runtimeDir` instead of appending a second one. Exactly one family entry
+ * survives; foreign plugins keep their position; the host builtin disable marker
+ * is present if and only if the notification surface is enabled. Idempotent.
  */
-export function registerCompanionCliPlugin(cliConfig, { runtimeDir, options, notificationEnabled = false, disableBuiltin = true } = {}) {
+export function registerCompanionCliPlugin(cliConfig, { runtimeDir, familyRoot = runtimeDir, options, notificationEnabled = false, disableBuiltin = true } = {}) {
   const next = { ...(cliConfig && typeof cliConfig === "object" ? cliConfig : {}) }
   const current = Array.isArray(next.plugins) ? next.plugins : []
-  const plugins = current.filter((entry) => {
-    if (isOurRuntimeEntry(entry, runtimeDir)) return false
-    if (entry === DISABLED_BUILTIN_NOTIFICATION) return false
-    return true
-  })
-  plugins.push({ package: runtimeDir, options: { notification: options } })
+  const entry = { package: runtimeDir, options: { notification: options } }
+  const plugins = []
+  let placed = false
+  for (const candidate of current) {
+    if (candidate === DISABLED_BUILTIN_NOTIFICATION) continue
+    if (isOurRuntimeEntry(candidate, { runtimeDir, familyRoot })) {
+      if (!placed) {
+        plugins.push(entry)
+        placed = true
+      }
+      continue
+    }
+    plugins.push(candidate)
+  }
+  if (!placed) plugins.push(entry)
   if (notificationEnabled && disableBuiltin) plugins.push(DISABLED_BUILTIN_NOTIFICATION)
   next.plugins = plugins
+  return next
+}
+
+/**
+ * Remove every Rigel-family companion entry and the host builtin disable marker,
+ * leaving foreign plugins untouched and in order. The mirror of
+ * {@link registerCompanionCliPlugin}: after it runs, `cli.json` carries no
+ * Rigel-owned surface, which is the correct end state for uninstall.
+ */
+export function removeRigelCliEntries(cliConfig, { familyRoot } = {}) {
+  const next = { ...(cliConfig && typeof cliConfig === "object" ? cliConfig : {}) }
+  const current = Array.isArray(next.plugins) ? next.plugins : []
+  next.plugins = current.filter((entry) => {
+    if (entry === DISABLED_BUILTIN_NOTIFICATION) return false
+    return !isOurRuntimeEntry(entry, { runtimeDir: familyRoot, familyRoot })
+  })
   return next
 }

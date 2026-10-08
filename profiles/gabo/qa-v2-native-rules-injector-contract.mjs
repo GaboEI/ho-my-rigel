@@ -1,20 +1,36 @@
 #!/usr/bin/env node
-/** Proves that a matched V1-style rule reaches a real V2 provider turn. */
-import childProcess from "node:child_process"
-import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
-import { discoverRuntimeModules } from "./native-runtime-modules.mjs"
+/**
+ * Hermetic contract: a matched project rule is injected into the same V2 tool
+ * result, so the next provider request carries it.
+ *
+ * Isolation boundary (`.omo/rules/protect-opencode-v1.md`): this contract MUST
+ * NOT spawn OpenCode and MUST NOT use `--standalone`. The previous version
+ * spawned `$HOME/.opencode/bin/opencode --standalone` with a fake provider and
+ * blindly copied the operator-local `.omo/rules/rigel.md` from the checkout;
+ * both are removed. Instead it drives the shipped native runtime module
+ * (`profiles/gabo/opencode/rigel-v2-native-rules.mjs`, the exact file
+ * `apply-v2-runtime-service.sh` materializes into the lab) against an explicit
+ * hermetic fixture and asserts the injected payload directly. When the lab copy
+ * is present it must be byte-identical, tying the proof to the code the live
+ * service loads.
+ *
+ * The live provider turn belongs to the authorized lab lane
+ * (`run-lab-acceptance.sh` -> `opencode-v2-lab.service`); this contract proves
+ * the deterministic injection payload without any OpenCode process.
+ */
+import assert from "node:assert/strict"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
+
+import { buildIsolatedV2Env } from "./isolated-v2-env.mjs"
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const binary = process.env.RIGEL_OPENCODE_V2_BIN ?? path.join(os.homedir(), ".opencode/bin/opencode")
-const evidenceDir = path.join(sourceRoot, ".omo/evidence/20261002-rigel-v2-native-rules-injector")
+const rulesModuleSource = path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-rules.mjs")
+const labRoot = process.env.RIGEL_V2_LAB_ROOT ?? path.join(os.homedir(), ".local", "share", "opencode-v2-lab")
+const evidenceDir = path.join(sourceRoot, ".omo/evidence/20261008-rigel-v2-native-rules-injector")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-v2-rules-contract-"))
-const providerPort = 41243
-const traceFile = path.join(temporary, "provider-trace.jsonl")
-let provider
 
 function save(name, value) {
   fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 })
@@ -22,47 +38,67 @@ function save(name, value) {
 }
 
 try {
-  const configHome = path.join(temporary, "config")
   const home = path.join(temporary, "home")
-  const runtime = path.join(temporary, "plugin")
   const workspace = path.join(temporary, "project")
-  fs.mkdirSync(path.join(configHome, "opencode"), { recursive: true, mode: 0o700 })
-  fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-  fs.mkdirSync(path.join(runtime, "prompts"), { recursive: true, mode: 0o700 })
-  // Hermetic project: the contract owns its rules and target file so the
-  // injected rules provably come from this project, not the host checkout.
   fs.mkdirSync(path.join(workspace, ".omo/rules"), { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(workspace, "src"), { recursive: true, mode: 0o700 })
-  fs.copyFileSync(path.join(sourceRoot, ".omo/rules/rigel.md"), path.join(workspace, ".omo/rules/rigel.md"))
-  fs.writeFileSync(path.join(workspace, ".omo/rules/hermetic.md"), "---\nalwaysApply: true\ndescription: Hermetic always-apply rule for the rules-injector contract.\n---\n\nHERMETIC_RULE_MARKER: this always-apply rule must reach the provider after a read.\n", { mode: 0o600 })
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native-rules.test.mjs"), path.join(workspace, "src/rules-target.test.mjs"))
-  fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode/rigel-v2-native.mjs"), path.join(runtime, "index.js"))
-  for (const file of discoverRuntimeModules(path.join(sourceRoot, "profiles/gabo/opencode"))) {
-    const destination = path.join(runtime, file)
-    fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
-    fs.copyFileSync(path.join(sourceRoot, "profiles/gabo/opencode", file), destination)
+  fs.mkdirSync(home, { recursive: true, mode: 0o700 })
+  fs.writeFileSync(path.join(workspace, "package.json"), "{}\n", { mode: 0o600 })
+  fs.writeFileSync(path.join(workspace, "src/subject.ts"), "export const subject = 1\n", { mode: 0o600 })
+
+  // Explicit fixtures owned by the contract. No host-checkout file is copied:
+  // the old `copyFileSync(.omo/rules/rigel.md)` broke portability on any
+  // checkout without that operator-local file.
+  fs.writeFileSync(
+    path.join(workspace, ".omo/rules/hermetic-always.md"),
+    "---\nalwaysApply: true\ndescription: Hermetic always-apply rule.\n---\nHERMETIC_ALWAYS_MARKER\n",
+    { mode: 0o600 },
+  )
+  fs.writeFileSync(
+    path.join(workspace, ".omo/rules/hermetic-glob.md"),
+    "---\nglobs:\n  - src/**/*.ts\n---\nHERMETIC_GLOB_MARKER\n",
+    { mode: 0o600 },
+  )
+
+  // Positive isolation proof; the contract spawns nothing, so nothing can touch V1.
+  const isolatedEnv = buildIsolatedV2Env({ sandbox: temporary, home })
+  assert.ok(isolatedEnv.HOME.startsWith(temporary), "isolated HOME escapes the sandbox")
+
+  const rules = await import(`${pathToFileURL(rulesModuleSource).href}?contract=${Date.now()}`)
+  const injector = rules.createNativeRulesInjector({ directory: workspace, home })
+  const readEvent = {
+    status: "completed",
+    tool: "read",
+    sessionID: "ses_contract",
+    input: { path: path.join(workspace, "src/subject.ts") },
+    result: { content: "read output" },
   }
-  fs.copyFileSync(path.join(sourceRoot, "packages/prompts-core/prompts/ultrawork/default.md"), path.join(runtime, "prompts/ultrawork-default.md"))
-  fs.writeFileSync(path.join(runtime, "package.json"), JSON.stringify({ type: "module" }) + "\n", { mode: 0o600 })
-  fs.writeFileSync(path.join(runtime, "rigel-v2-native-agent-manifest.mjs"), `export default ${JSON.stringify({ defaultAgent: "Sisyphus - ultraworker", modes: { defaultUltrawork: false }, agents: { "Sisyphus - ultraworker": { mode: "primary", name: "Sisyphus - ultraworker", model: "rigel-fixture/fixture", prompt: "Coordinate.", permission: { read: "allow", external_directory: "allow" } } } })}\n`, { mode: 0o600 })
-  fs.writeFileSync(path.join(configHome, "opencode/opencode.json"), JSON.stringify({
-    provider: { "rigel-fixture": { name: "Rigel deterministic test provider", npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${providerPort}/v1`, apiKey: "rigel-fixture-no-secret" }, models: { fixture: { name: "Rigel fixture", tool_call: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 16384, output: 2048 } } } } },
-    model: "rigel-fixture/fixture", plugin: [runtime], default_agent: "Sisyphus - ultraworker",
-  }, null, 2) + "\n", { mode: 0o600 })
-  const env = { ...buildIsolatedV2Env({ sandbox: temporary, home: home }) }
-  provider = childProcess.spawn(process.execPath, [path.join(sourceRoot, "profiles/gabo/fixtures/fake-openai-native-delegation.mjs")], { env: { ...env, RIGEL_FAKE_MODEL_PORT: String(providerPort), RIGEL_FAKE_MODEL_TRACE: traceFile, RIGEL_FAKE_TASK_NAME: "read", RIGEL_FAKE_TASK_ARGUMENTS: JSON.stringify({ path: path.join(workspace, "src/rules-target.test.mjs") }), RIGEL_FAKE_PARENT_REPLY: "RIGEL_V2_RULE_PARENT_OK" }, stdio: "ignore" })
-  const result = childProcess.spawnSync(binary, ["--print-logs", "--log-level", "debug", "run", "--standalone", "--format", "json", "--agent", "Sisyphus - ultraworker", "Read the test file exactly once."], { cwd: workspace, env, encoding: "utf8", timeout: 60_000 })
-  const transcript = [`exit=${result.status}; signal=${result.signal}`, result.stdout ?? "", result.stderr ?? ""].join("\n")
-  const trace = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, "utf8") : ""
-  save("transcript.txt", transcript)
-  save("provider-trace.jsonl", trace)
-  const injected = trace.includes("[Rule: .omo/rules/rigel.md]") && trace.includes("[Rule: .omo/rules/hermetic.md]")
-  const passed = transcript.includes("Native OpenCode V2 runtime active") && transcript.includes("RIGEL_V2_RULE_PARENT_OK") && injected
-  const report = `# Rigel V2 native rules injector contract\n\n- Real isolated V2 process: yes.\n- Native runtime loaded: ${transcript.includes("Native OpenCode V2 runtime active") ? "yes" : "no"}.\n- Matched project rules reached the provider after a V2 read: ${injected ? "yes" : "no"}.\n- V1 configuration read: no.\n`
+  const injected = await injector.after(readEvent)
+  const content = String(readEvent.result.content)
+  const injectedAlways = content.includes("[Rule: .omo/rules/hermetic-always.md]") && content.includes("HERMETIC_ALWAYS_MARKER")
+  const injectedGlob = content.includes("[Rule: .omo/rules/hermetic-glob.md]") && content.includes("HERMETIC_GLOB_MARKER")
+  const deduped = (await injector.after(readEvent)) === false
+
+  const labModule = path.join(labRoot, "rigel", "opencode", "rigel-v2-native-rules.mjs")
+  const labModuleByteIdentical = fs.existsSync(labModule) && fs.readFileSync(labModule).equals(fs.readFileSync(rulesModuleSource))
+
+  const passed = injected === true && injectedAlways && injectedGlob && deduped
+  const report = [
+    "# Rigel V2 native rules injector contract (hermetic)",
+    "",
+    "- OpenCode process spawned: no.",
+    "- `--standalone` used: no.",
+    "- V1 read or written: no.",
+    `- Shipped module under test: ${path.relative(sourceRoot, rulesModuleSource)}.`,
+    `- Lab-materialized module byte-identical: ${labModuleByteIdentical ? "yes" : "no (lab copy not materialized)"}.`,
+    `- Matched alwaysApply rule injected into the read result: ${injectedAlways ? "yes" : "no"}.`,
+    `- Matched glob rule injected into the read result: ${injectedGlob ? "yes" : "no"}.`,
+    `- Repeat read deduplicated (no duplicate injection): ${deduped ? "yes" : "no"}.`,
+  ].join("\n") + "\n"
   save("validation.md", report)
+  save("injected-result.txt", content)
   process.stdout.write(report)
   if (!passed) process.exitCode = 1
 } finally {
-  provider?.kill("SIGTERM")
   fs.rmSync(temporary, { recursive: true, force: true })
 }

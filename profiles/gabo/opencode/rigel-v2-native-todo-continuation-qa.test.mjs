@@ -83,11 +83,18 @@ describe("#given observe is armed", () => {
 
 describe("#given no state root is available", () => {
   test("#when the seam is created, #then it is disabled and dispatch passes through", async () => {
-    const qa = createTodoContinuationQa({ stateRoot: undefined })
-    const dispatch = qa.wrapDispatch(() => Promise.resolve("real"))
+    const originalXdgState = process.env.XDG_STATE_HOME
+    delete process.env.XDG_STATE_HOME
+    try {
+      const qa = createTodoContinuationQa({ stateRoot: undefined })
+      const dispatch = qa.wrapDispatch(() => Promise.resolve("real"))
 
-    expect(qa.enabled).toBe(false)
-    qa.arm({ rejectInjections: 5 })
-    await expect(dispatch({ sessionID: "ses_x", text: "continue" })).resolves.toBe("real")
+      expect(qa.enabled).toBe(false)
+      qa.arm({ rejectInjections: 5 })
+      await expect(dispatch({ sessionID: "ses_x", text: "continue" })).resolves.toBe("real")
+    } finally {
+      if (originalXdgState === undefined) delete process.env.XDG_STATE_HOME
+      else process.env.XDG_STATE_HOME = originalXdgState
+    }
   })
 })

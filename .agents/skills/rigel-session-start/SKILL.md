@@ -1,6 +1,6 @@
 ---
 name: rigel-session-start
-description: Mandatory session bootstrap for any work in the Oh My Rigel repository, including requests that mention Oh My Rigel, Rigel, profiles/gabo, OpenCode V2, the V2 laboratory, or /home/gabodev/Projects/oh-my-rigel. Invoke before commands, edits, tests, planning, or resumed work so the agent loads the permanent V1-protection and V2-isolation rules.
+description: Mandatory session bootstrap for any work in the Oh My Rigel repository, including requests that mention Oh My Rigel, Rigel, profiles/gabo, OpenCode V2, or the V2 laboratory. Invoke before commands, edits, tests, planning, or resumed work so the agent loads the permanent V1-protection and V2-isolation rules.
 ---
 
 # Rigel session start
@@ -9,15 +9,18 @@ Use this skill before taking any project action. It applies again after context 
 
 ## Mandatory reading order
 
-From the repository root, read these files completely:
+From the repository root, read `.omo/rules/protect-opencode-v1.md` completely. It is the single tracked, binding boundary file and MUST be present: if it is missing or unreadable, stop project work and report the missing path.
+
+Also read these operator-local files when they exist, because they may carry per-operator instructions:
 
 1. `AGENTS.rigel.md`
 2. `.omo/rules/rigel.md`
-3. `.omo/rules/protect-opencode-v1.md`
+
+Both are operator-local and gitignored by design, so their absence is normal and is NOT a blocker: the binding boundary is fully carried by `protect-opencode-v1.md` and the root `AGENTS.md`. Do not stop, and do not report a missing path, merely because an operator-local file is absent, and never invent or recreate one.
 
 Also obey the root `AGENTS.md` and every more-specific `AGENTS.md` governing files in scope. If the task will launch, test, configure, refresh, or inspect an OpenCode runtime, read `profiles/gabo/README.md` before acting.
 
-Do not delegate this reading. Do not rely on a summary from another agent or an earlier session. If a mandatory file is missing or unreadable, stop project work and report the missing path.
+Do not delegate this reading. Do not rely on a summary from another agent or an earlier session.
 
 ## Mandatory V1 -> V2 migration reading (binding)
 

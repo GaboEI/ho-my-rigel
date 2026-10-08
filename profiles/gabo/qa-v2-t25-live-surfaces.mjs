@@ -107,7 +107,7 @@ async function runServerPhase() {
     check("btw-context", "server registered exactly one context hook", hooksNamed(capture, "context").length === 1, `hooks=${hooksNamed(capture, "context").length}`)
 
     // Positive: side session metadata -> bounded injection + receipt.
-    const sideEvent = { sessionID: "ses_side", agent: "Sisyphus", model: { modelID: "gpt-5.2" }, system: [], messages: [], options: {} }
+    const sideEvent = { sessionID: "ses_side", agent: "Sisyphus", model: { modelID: "gpt-5.5" }, system: [], messages: [], options: {} }
     await contextHook.handler(sideEvent)
     const injected = Array.isArray(sideEvent.messages) && sideEvent.messages.length > 0
     const boundary = (sideEvent.system ?? []).some((part) => typeof part?.text === "string" && part.text.includes("<omo-btw-boundary>"))
@@ -123,7 +123,7 @@ async function runServerPhase() {
     // receipt, and no parent content. (The full context pipeline legitimately
     // rewrites the request for every session, so the btw contract is asserted
     // on btw-specific observables, not whole-request byte identity.)
-    const rootEvent = { sessionID: "ses_root", agent: "Sisyphus", model: { modelID: "gpt-5.2" }, system: [{ type: "text", text: "keep" }], messages: [{ role: "user", content: "hi" }], options: {} }
+    const rootEvent = { sessionID: "ses_root", agent: "Sisyphus", model: { modelID: "gpt-5.5" }, system: [{ type: "text", text: "keep" }], messages: [{ role: "user", content: "hi" }], options: {} }
     await contextHook.handler(rootEvent)
     const rootBoundary = (rootEvent.system ?? []).some((part) => typeof part?.text === "string" && part.text.includes("<omo-btw-boundary>"))
     const rootHasParent = JSON.stringify(rootEvent.messages ?? []).includes("parent turn")

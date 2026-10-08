@@ -76,12 +76,15 @@ Installation requirements:
 2. Run script/agent/setup.sh to verify tools, install dependencies, and build.
 3. Run node profiles/gabo/validate-profile.mjs.
 4. Set RIGEL_V2_HOME to the confirmed V2 home, RIGEL_V2_CONFIG to the absolute
-   path of the active V2 JSON config, and RIGEL_V2_LAB_ROOT to a dedicated
-   Rigel state directory. The variable name is historical; do not create or
-   require a laboratory or service.
-5. With those explicit variables, run
-   profiles/gabo/apply-v2-agent-layer.mjs and then
-   profiles/gabo/switch-live-plugin-to-native-v2.mjs.
+   path of the active V2 JSON config, and RIGEL_V2_USER_ROOT to a dedicated
+   Rigel state directory. The variable name RIGEL_V2_LAB_ROOT is a historical
+   spelling of that state directory: do not create or require a laboratory or
+   service.
+5. With those explicit variables, run the user lifecycle installer:
+   node profiles/gabo/rigel-v2-user-install.mjs install --version 1. It
+   materializes the native runtime and generated agent manifest, exposes the V2
+   skills, and registers the runtime in the selected V2 config. It refuses any
+   path that resolves under a V1 root and never launches OpenCode.
 6. Verify that the V2 config registers the generated Rigel runtime, launch the
    normal OpenCode V2 command, and confirm that Rigel reports its native V2
    runtime as active. Do not claim unavailable features.
@@ -138,32 +141,48 @@ side.
    ```bash
    export RIGEL_V2_HOME="$HOME"
    export RIGEL_V2_CONFIG="/absolute/path/to/the/active-v2/opencode.json"
-   export RIGEL_V2_LAB_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oh-my-rigel"
+   export RIGEL_V2_USER_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oh-my-rigel"
    test -f "$RIGEL_V2_CONFIG"
    ```
 
-   `RIGEL_V2_LAB_ROOT` is a historical variable name. In this route it is only
-   Rigel's state and generated-runtime directory; no laboratory or service is
-   created.
+   `RIGEL_V2_LAB_ROOT` is the historical spelling of the state directory and is
+   still accepted. In this route the state directory is only Rigel's install
+   state and generated-runtime directory; no laboratory or service is created.
 
-4. Generate the V2 agent layer, install the native runtime into the selected V2
-   config, then start OpenCode normally:
+4. Install the native runtime, the generated agent manifest, the V2 skills and
+   the CLI launcher through the user lifecycle installer, then start OpenCode
+   normally:
 
    ```bash
-   node profiles/gabo/apply-v2-agent-layer.mjs
-   node profiles/gabo/switch-live-plugin-to-native-v2.mjs
+   node profiles/gabo/rigel-v2-user-install.mjs install --version 1
    opencode
    ```
 
-The two Node scripts refuse missing prerequisites and preserve protected config
-fingerprints. They materialize the selected agents and skills, stage the native
-runtime under the dedicated Rigel state directory, and register that runtime in
-the chosen V2 config. They do not update OpenCode itself.
+   The installer resolves everything from `RIGEL_V2_HOME`, `RIGEL_V2_CONFIG` and
+   `RIGEL_V2_USER_ROOT`, refuses any path that resolves under a V1 root, and
+   never launches OpenCode or touches V1. It writes one versioned tree under
+   `<RIGEL_V2_USER_ROOT>/versions/<version>/`, records the install in
+   `<RIGEL_V2_USER_ROOT>/install-state.json`, and exposes the launcher at
+   `<RIGEL_V2_USER_ROOT>/bin/rigel-v2`.
 
-This preview has no automated uninstaller. Keep the checkout available because
-the generated runtime and skill links refer to its files. If any step fails,
-stop and report the command and sanitized error instead of trying a different
-config or running a second OpenCode installation.
+5. Operate and maintain the same installation with the same contract:
+
+   ```bash
+   node profiles/gabo/rigel-v2-user-install.mjs status             # first operation / health
+   node profiles/gabo/rigel-v2-user-install.mjs install --version 1 # idempotent reinstall
+   node profiles/gabo/rigel-v2-user-install.mjs upgrade --version 2 # version transition + state migration
+   node profiles/gabo/rigel-v2-user-install.mjs rollback           # revert to the previous version, byte-identical
+   node profiles/gabo/rigel-v2-user-install.mjs uninstall          # remove only Rigel-owned state
+   ```
+
+   Upgrade materializes the new version and migrates the recorded install state;
+   rollback restores the previous version byte for byte; uninstall deregisters
+   only Rigel-owned plugin/CLI/skill entries and removes only Rigel-owned state,
+   preserving unrelated configuration keys, files and skills.
+
+Keep the checkout available because the generated runtime and skill links refer
+to its files. If any step fails, stop and report the command and sanitized error
+instead of trying a different config or running a second OpenCode installation.
 
 ## How to contribute
 

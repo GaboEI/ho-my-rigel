@@ -14,6 +14,13 @@ if [[ ! -f "$lab_config" ]]; then
   exit 1
 fi
 
+# Hardening: the lab credential file is operator-local state (not tracked) and
+# must stay owner-only. Every authorized refresh re-asserts the minimal mode so
+# a permissive umask cannot silently regress it.
+if [[ -f "$lab_root/secret.env" ]]; then
+  chmod 600 "$lab_root/secret.env"
+fi
+
 completed=false
 trap 'if [[ "$completed" != true ]]; then systemctl --user start "$service" >/dev/null 2>&1 || true; fi' EXIT
 

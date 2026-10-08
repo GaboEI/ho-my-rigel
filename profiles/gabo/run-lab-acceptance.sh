@@ -36,8 +36,8 @@ echo "== Rigel lab acceptance =="
 
 before_goals=$(goal_probe)
 before_config_hash=$(sha256sum "$HOME/.config/opencode/opencode.json" 2>/dev/null | cut -d' ' -f1)
-before_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>/dev/null | wc -l; done | tr '\n' ',')
-echo "v1: config_hash=${before_config_hash:0:16} goal_mode=$goal_mode goal_state=$before_goals counts=$before_counts"
+before_protected=$(node "$root/profiles/gabo/v1-protected-surfaces.mjs" --digest "$HOME")
+echo "v1: config_hash=${before_config_hash:0:16} goal_mode=$goal_mode goal_state=$before_goals protected=${before_protected:0:16}"
 
 if [ "${1:-}" = "--refresh" ]; then
   echo "-- refresh through apply-v2-runtime-service.sh (only touches $service) --"
@@ -66,6 +66,15 @@ case "$exec_line" in *"--port 4097"*) pass "service listens on the lab port 4097
 
 password=$(grep -m1 '^OPENCODE_PASSWORD=' "$secret_file" 2>/dev/null | cut -d= -f2-)
 [ -n "${password:-}" ] && pass "lab credentials available" || bad "lab credentials unavailable"
+
+# The credential file must be owner-only (no group/other bits). It is refreshed
+# by apply-v2-runtime-service.sh; this asserts the hardening held.
+secret_mode=$(stat -c '%a' "$secret_file" 2>/dev/null || echo "")
+if [ -n "$secret_mode" ] && [ $((8#$secret_mode & 077)) -eq 0 ]; then
+  pass "lab credentials are owner-only (mode $secret_mode)"
+else
+  bad "lab credentials permissions are too broad (mode ${secret_mode:-missing})"
+fi
 curl_json() { curl -fsS -u "opencode:${password}" "http://127.0.0.1:4097$1" 2>/dev/null; }
 
 ready=0
@@ -116,12 +125,41 @@ else
   bad "installed CLI launcher missing at $lab_root/rigel/bin/rigel-v2"
 fi
 
+# Hermetic native rules-injector contract: proves the shipped runtime injects a
+# matched project rule into the same tool result the next provider request reads.
+# It spawns NO OpenCode and uses NO --standalone (protect-opencode-v1.md); the
+# live provider turn stays owned by this lab service.
+if node "$root/profiles/gabo/qa-v2-native-rules-injector-contract.mjs" >/dev/null 2>&1; then
+  pass "native rules-injector contract (hermetic)"
+else
+  bad "native rules-injector contract (hermetic)"
+fi
+
+# Hermetic user-install lifecycle contract (P2-1): proves the productized user
+# route installs, operates, reinstalls idempotently, upgrades between two real
+# versions with state migration, rolls back byte-identically and uninstalls while
+# preserving foreign data in an isolated HOME/XDG. No OpenCode spawn, no V1 access.
+if node "$root/profiles/gabo/qa-v2-user-install-contract.mjs" >/dev/null 2>&1; then
+  pass "user install lifecycle contract (hermetic)"
+else
+  bad "user install lifecycle contract (hermetic)"
+fi
+
+# P3 atomicity: a fault injected at EVERY write boundary of install/upgrade/
+# rollback/uninstall must restore config/cli/state byte-identically and leave no
+# partial version. No OpenCode spawn, no V1 access.
+if node "$root/profiles/gabo/qa-v2-user-install-transaction-contract.mjs" >/dev/null 2>&1; then
+  pass "user install transaction contract (hermetic)"
+else
+  bad "user install transaction contract (hermetic)"
+fi
+
 after_goals=$(goal_probe)
 after_config_hash=$(sha256sum "$HOME/.config/opencode/opencode.json" 2>/dev/null | cut -d' ' -f1)
-after_counts=$(for r in "${v1_roots[@]}"; do [ -d "$r" ] && find "$r" -type f 2>/dev/null | wc -l; done | tr '\n' ',')
+after_protected=$(node "$root/profiles/gabo/v1-protected-surfaces.mjs" --digest "$HOME")
 
 [ "$before_config_hash" = "$after_config_hash" ] && pass "V1 config hash unchanged" || bad "V1 config hash changed"
-[ "$before_counts" = "$after_counts" ] && pass "V1 root file counts unchanged" || bad "V1 root file counts changed"
+[ "$before_protected" = "$after_protected" ] && pass "V1 protected surfaces unchanged (manifest digest)" || bad "V1 protected surfaces changed"
 if goal_verdict=$(node "$goal_gate" --verify "$goal_mode" "$before_goals" "$after_goals" 2>&1); then
   pass "goal invariant ($goal_mode): $goal_verdict"
 else
@@ -133,8 +171,8 @@ fi
   echo "lab_root=$lab_root"
   echo "v1_config_hash_before=$before_config_hash"
   echo "v1_config_hash_after=$after_config_hash"
-  echo "v1_counts_before=$before_counts"
-  echo "v1_counts_after=$after_counts"
+  echo "v1_protected_before=$before_protected"
+  echo "v1_protected_after=$after_protected"
   echo "goal_mode=$goal_mode"
   echo "goal_state_before=$before_goals"
   echo "goal_state_after=$after_goals"

@@ -66,7 +66,7 @@ export const scenarios = [
     observeV2: (v2, input) => canonicalModel(v2.parseModel(input.value) ?? null, true),
     corpus: [
       { name: "plain", value: "anthropic/claude-sonnet-4-5" },
-      { name: "variant", value: "openai/gpt-5.2:high" },
+      { name: "variant", value: "openai/gpt-5.5:high" },
       { name: "deepseek", value: "deepseek/deepseek-flash" },
       { name: "bare", value: "bare-model" },
       { name: "empty", value: "" },
@@ -84,7 +84,7 @@ export const scenarios = [
     observeV2: (v2, input) => v2.transformModelForProvider(input.provider, input.model),
     corpus: [
       { name: "anthropic", provider: "anthropic", model: "claude-sonnet-4-5" },
-      { name: "openai", provider: "openai", model: "gpt-5.2" },
+      { name: "openai", provider: "openai", model: "gpt-5.5" },
       { name: "google", provider: "google", model: "gemini-3-pro" },
       { name: "unknown provider", provider: "custom", model: "some-model" },
     ],

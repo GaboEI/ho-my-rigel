@@ -3,29 +3,37 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 
-import * as opencodeConfigDir from "../../shared/opencode-config-dir"
 import { readOpencodeConfigSkills } from "./opencode-config-skills-reader"
 
 describe("readOpencodeConfigSkills", () => {
   let tmpDir: string
   let globalConfigDir: string
-  let getOpenCodeConfigDirSpy: ReturnType<typeof spyOn>
+  let xdgRoot: string
+  let originalOpenCodeConfigDir: string | undefined
+  let originalXdgConfigHome: string | undefined
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ohmo-host-skills-"))
-    // Hermetic: redirect the "global" opencode config dir into an isolated
-    // empty tmp dir so the developer's real ~/.config/opencode does not
-    // leak into these tests (or vice versa: CI passes while local fails).
+    // Hermetic: point every OpenCode config-dir source at isolated empty temp
+    // dirs so the developer's real ~/.config/opencode (V1) never leaks in. The
+    // reader delegates to the skills-loader-core resolver, so process-level
+    // HOME/XDG isolation is the boundary that actually holds.
     globalConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "ohmo-global-opencode-"))
-    getOpenCodeConfigDirSpy = spyOn(opencodeConfigDir, "getOpenCodeConfigDir").mockReturnValue(
-      globalConfigDir,
-    )
+    xdgRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ohmo-xdg-"))
+    originalOpenCodeConfigDir = process.env.OPENCODE_CONFIG_DIR
+    originalXdgConfigHome = process.env.XDG_CONFIG_HOME
+    process.env.OPENCODE_CONFIG_DIR = globalConfigDir
+    process.env.XDG_CONFIG_HOME = xdgRoot
   })
 
   afterEach(() => {
-    getOpenCodeConfigDirSpy.mockRestore()
+    if (originalOpenCodeConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = originalOpenCodeConfigDir
+    if (originalXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = originalXdgConfigHome
     fs.rmSync(tmpDir, { recursive: true, force: true })
     fs.rmSync(globalConfigDir, { recursive: true, force: true })
+    fs.rmSync(xdgRoot, { recursive: true, force: true })
   })
 
   it("returns undefined when no opencode config exists", () => {

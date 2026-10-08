@@ -72,7 +72,9 @@ else
   run_step "bash: run-lab-acceptance.sh" bash "$suite_dir/run-lab-acceptance.sh"
 fi
 if [ "${RIGEL_SUITE_ALLOW_NODE_CONTRACTS:-0}" = "1" ]; then
-  for contract in qa-v2-agent-domain.mjs qa-v2-agent-transform-contract.mjs qa-v2-agents-md-contract.mjs qa-v2-compaction-hook-contract.mjs qa-v2-native-delegation.mjs qa-v2-native-prompt-contract.mjs qa-v2-native-rules-injector-contract.mjs qa-v2-native-ultrawork.mjs qa-v2-noninteractive-contract.mjs qa-v2-tool-after-result-contract.mjs qa-v2-tool-before-contract.mjs qa-v2-lab-install-contract.mjs; do
+  # The rules-injector contract is hermetic (spawns no OpenCode, no --standalone) and
+  # belongs to the authorized lab lane via run-lab-acceptance.sh, not this host-spawn lane.
+  for contract in qa-v2-agent-domain.mjs qa-v2-agent-transform-contract.mjs qa-v2-agents-md-contract.mjs qa-v2-compaction-hook-contract.mjs qa-v2-native-delegation.mjs qa-v2-native-prompt-contract.mjs qa-v2-native-ultrawork.mjs qa-v2-noninteractive-contract.mjs qa-v2-tool-after-result-contract.mjs qa-v2-tool-before-contract.mjs qa-v2-lab-install-contract.mjs qa-v2-user-install-contract.mjs qa-v2-user-install-transaction-contract.mjs; do
     run_step "node: $contract" node "$suite_dir/$contract"
   done
 else

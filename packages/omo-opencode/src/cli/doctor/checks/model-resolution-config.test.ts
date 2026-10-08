@@ -7,15 +7,20 @@ import { loadOmoConfig } from "./model-resolution-config"
 
 describe("model-resolution-config", () => {
   let originalHome: string | undefined
+  let originalCwd = ""
   let temporaryDirectory = ""
 
   beforeEach(() => {
     originalHome = process.env.HOME
+    originalCwd = process.cwd()
     temporaryDirectory = mkdtempSync(join(tmpdir(), "omo-model-resolution-config-"))
     process.env.HOME = temporaryDirectory
+    // The project-layer walk stops at $HOME, so it must start inside the isolated home.
+    process.chdir(temporaryDirectory)
   })
 
   afterEach(() => {
+    process.chdir(originalCwd)
     rmSync(temporaryDirectory, { recursive: true, force: true })
     if (originalHome === undefined) delete process.env.HOME
     else process.env.HOME = originalHome

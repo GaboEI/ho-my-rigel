@@ -174,6 +174,7 @@ describe("config check", () => {
       const originalXdgConfig = process.env.XDG_CONFIG_HOME
       const originalXdgCache = process.env.XDG_CACHE_HOME
       const originalHome = process.env.HOME
+      const originalCwd = process.cwd()
       const testRootDir = join(
         tmpdir(),
         `omo-doctor-custom-provider-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -189,6 +190,8 @@ describe("config check", () => {
         process.env.HOME = testRootDir
         process.env.XDG_CONFIG_HOME = xdgConfigDir
         process.env.XDG_CACHE_HOME = xdgCacheDir
+        // The project-layer walk stops at $HOME; start inside the isolated home.
+        process.chdir(testRootDir)
 
         writeFileSync(
           join(testRootDir, ".omo", "omo.jsonc"),
@@ -224,6 +227,7 @@ describe("config check", () => {
 
         expect(providerIssue).toBeUndefined()
       } finally {
+        process.chdir(originalCwd)
         rmSync(testRootDir, { recursive: true, force: true })
         if (originalConfigDir === undefined) {
           delete process.env.OPENCODE_CONFIG_DIR

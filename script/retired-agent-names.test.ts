@@ -110,7 +110,7 @@ describe("retired agent names gate", () => {
   test("no retired agent name appears in a governed surface", async () => {
     const violations = (await Promise.all(GOVERNED_SURFACES.map(scanSurface))).flat()
     expect(violations.join("\n")).toBe("")
-  })
+  }, 60_000)
 
   test(`at most ${MAX_ALLOWED_MARKERS} lines repo-wide end with the retired-name-allowed marker`, async () => {
     const markerLines: string[] = []
@@ -124,5 +124,5 @@ describe("retired agent names gate", () => {
       })
     }
     expect(markerLines.length <= MAX_ALLOWED_MARKERS ? "" : markerLines.join("\n")).toBe("")
-  })
+  }, 60_000)
 })

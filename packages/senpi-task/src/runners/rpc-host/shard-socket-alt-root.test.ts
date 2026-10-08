@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto"
 import { chmodSync, lstatSync, mkdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
 
@@ -27,8 +26,10 @@ function daemonDirectoryName(socket: string): string {
 describe.skipIf(process.platform === "win32")("the POSIX alternate shard root", () => {
   describe("altRoot", () => {
     test("#given any agent dir #when deriving the alternate root #then it is the fixed /tmp prefix, never os.tmpdir()", () => {
-      // given
+      // given a root derived before TMPDIR changes, so the assertion proves
+      // TMPDIR-independence without trusting the process-wide os.tmpdir() cache
       const previous = process.env["TMPDIR"]
+      const before = altRoot("/h/.omo/agent")
       process.env["TMPDIR"] = `/var/folders/xx/${"a".repeat(30)}/T`
       try {
         // when
@@ -37,7 +38,7 @@ describe.skipIf(process.platform === "win32")("the POSIX alternate shard root", 
         // then
         expect(root).toMatch(/^\/tmp\/omo-rpc-[0-9a-f]{8}$/)
         expect(root).toBe(join("/tmp", `omo-rpc-${createHash("sha256").update("/h/.omo/agent").digest("hex").slice(0, 8)}`))
-        expect(root.startsWith(tmpdir())).toBe(false)
+        expect(root).toBe(before)
       } finally {
         if (previous === undefined) delete process.env["TMPDIR"]
         else process.env["TMPDIR"] = previous

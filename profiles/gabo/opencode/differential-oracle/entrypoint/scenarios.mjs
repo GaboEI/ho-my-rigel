@@ -258,9 +258,9 @@ export const scenarios = [
       return { injected: Boolean(message) && result.rendered.includes(message) }
     },
     corpus: [
-      { name: "ultrawork keyword", text: "do ultrawork now", agent: "sisyphus", modelID: "gpt-5.2" },
+      { name: "ultrawork keyword", text: "do ultrawork now", agent: "sisyphus", modelID: "gpt-5.5" },
       { name: "ulw keyword", text: "ulw please", agent: "sisyphus", modelID: "claude-sonnet-4-6" },
-      { name: "no keyword negative", text: "just a normal request", agent: "sisyphus", modelID: "gpt-5.2" },
+      { name: "no keyword negative", text: "just a normal request", agent: "sisyphus", modelID: "gpt-5.5" },
     ],
     mutation: {
       target: "driveUltraworkInjection",

@@ -1,11 +1,20 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { detectGoalMode, probeGoalState, verifyGoalInvariant, readGoalConfig, internalGoalEnabled } from "./lab-goal-gate.mjs"
 
+const createdHomes = []
+
+afterEach(() => {
+  while (createdHomes.length > 0) {
+    fs.rmSync(createdHomes.pop(), { recursive: true, force: true })
+  }
+})
+
 function makeHome({ configs = {}, omoGoalEnabled = null, stateDirs = [], cacheDirs = [] } = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "rigel-goal-gate-"))
+  createdHomes.push(home)
   const cfgDir = path.join(home, ".config/opencode")
   fs.mkdirSync(cfgDir, { recursive: true })
   for (const [name, content] of Object.entries(configs)) {
