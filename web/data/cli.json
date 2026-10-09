@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "parentPluginCli": "packages/omo-opencode/src/cli/cli-program.ts",
+    "parentRuntimeCommands": "packages/omo-opencode/src/cli/runtime-commands.ts",
+    "parentCleanup": "packages/omo-opencode/src/cli/cleanup-command.ts",
+    "parentMcpOauth": "packages/omo-opencode/src/cli/mcp-oauth/index.ts",
+    "parentNativeLauncher": "packages/omo-native/bin/lib/launcher.js",
+    "omrCli": "profiles/gabo/cli/rigel-v2-cli-registry.mjs",
+    "omrLifecycle": "profiles/gabo/rigel-v2-user-install.mjs",
+    "slashCommands": "packages/omo-opencode/src/features/builtin-commands/commands.ts",
+    "btwSide": "packages/omo-opencode/src/features/btw-side/btw-command-draft.ts"
+  },
+  "owners": {
+    "rigel-v2": {
+      "owner": "omr",
+      "program": "rigel-v2",
+      "note": "Oh My Rigel CLI. Product label: oh-my-rigel. Must NOT be confused with the parent `omo` command.",
+      "commands": [
+        { "name": "version", "aliases": [] },
+        { "name": "get-local-version", "aliases": [] },
+        { "name": "doctor", "aliases": [] },
+        { "name": "install", "aliases": [] },
+        { "name": "uninstall", "aliases": ["cleanup"] },
+        { "name": "ulw-loop", "aliases": [] },
+        { "name": "worktree-sweep", "aliases": [] },
+        { "name": "boulder", "aliases": [] },
+        { "name": "refresh-model-capabilities", "aliases": [] },
+        { "name": "ast-grep", "aliases": [] }
+      ]
+    },
+    "omo": {
+      "owner": "parent",
+      "program": "omo",
+      "programAliases": ["oh-my-openagent", "oh-my-opencode", "omo-agent-toolkit", "lazycodex", "lazycodex-ai"],
+      "note": "Parent Oh My OpenCode product. `omo setup`, `omo doctor` etc. belong to the parent and do not configure Oh My Rigel.",
+      "commands": [
+        { "name": "install", "aliases": ["setup"] },
+        { "name": "setup", "aliases": [] },
+        { "name": "run", "aliases": [] },
+        { "name": "doctor", "aliases": [] },
+        { "name": "get-local-version", "aliases": [] },
+        { "name": "config", "aliases": [] },
+        { "name": "cleanup", "aliases": ["uninstall"] },
+        { "name": "refresh-model-capabilities", "aliases": [] },
+        { "name": "version", "aliases": [] },
+        { "name": "boulder", "aliases": [] },
+        { "name": "worktree-sweep", "aliases": [] },
+        { "name": "ulw-loop", "aliases": [] },
+        { "name": "mcp", "aliases": [] }
+      ]
+    },
+    "slash": {
+      "owner": "parent",
+      "note": "In-chat slash commands registered by the OpenCode plugin.",
+      "commands": ["goal", "refactor", "ulw-execute", "stop-continuation", "remove-ai-slops", "handoff", "hyperplan", "btw", "side"]
+    }
+  },
+  "install": {
+    "documentedByCatalog": "curl -fsSL https://get.omo.dev/install.sh | bash ; bunx oh-my-openagent install ; uninstall/cleanup",
+    "productParent": "The catalog's install/uninstall text describes the PARENT Oh My OpenCode install path.",
+    "omrReal": "Oh My Rigel's real install is the source lifecycle: `script/agent/setup.sh` then `node profiles/gabo/rigel-v2-user-install.mjs install --version 1` (or `rigel-v2 install --platform opencode`). See OH-MY-RIGEL.md."
+  },
+  "warnings": [
+    {
+      "id": "omo-setup-parent",
+      "text": "`omo setup` belongs to the parent Oh My OpenCode product and does NOT configure Oh My Rigel.",
+      "source": "packages/omo-native/bin/lib/launcher.js:284 ; packages/omo-native/bin/lib/setup-import.js:88 ; OH-MY-RIGEL.md:38"
+    },
+    {
+      "id": "rigel-setup-absent",
+      "text": "`rigel setup` does not exist today. It is a future UX improvement, not a publication requirement; the web must not announce it.",
+      "source": "profiles/gabo/cli/rigel-v2-cli-registry.mjs (no setup command)"
+    },
+    {
+      "id": "omr-install-not-parent-install",
+      "text": "The catalog's install/uninstall command text corresponds to the PARENT product; Oh My Rigel installs from source via script/agent/setup.sh + rigel-v2-user-install.mjs (or `rigel-v2 install`). Preserved 1:1 from the catalog and flagged for W6/W7.",
+      "source": "OH-MY-RIGEL.md:76,84,157 ; profiles/gabo/rigel-v2-user-install.mjs:12"
+    }
+  ]
+}

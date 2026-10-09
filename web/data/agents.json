@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "roster": "packages/omo-opencode/src/config/schema/agent-names.ts",
+    "requirements": "packages/model-core/src/agent-model-requirements.ts"
+  },
+  "roster": {
+    "publishedPublic": 11,
+    "universalOmO": 11,
+    "gaboProfileRegistered": 12,
+    "senpiNativeBuiltins": 7,
+    "note": "publishedPublic = universal built-in OmO agents baked into the V2 native manifest. gaboProfileRegistered adds the operator-local `judge` (profiles/gabo/v2-agent-selection.json + apply-v2-agent-layer.mjs:56). senpiNativeBuiltins = packages/senpi-task/src/agents/builtin/index.ts (separate native engine).",
+    "v2StateRule": "En el runtime V2 (profiles/gabo) los agentes orquestados se registran siempre salvo Hephaestus, que se omite si su puerta no se cumple (proveedor conectado + modelo GPT soportado). El `judge` se añade solo en el perfil Gabo; build/plan quedan demoted/excluded.",
+    "v2StateSources": [
+      "profiles/gabo/v2-agent-selection.json",
+      "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+      "profiles/gabo/opencode/rigel-v2-native-hephaestus.mjs"
+    ]
+  },
+  "agents": [
+    {
+      "id": "sisyphus",
+      "displayName": "Sisyphus",
+      "mode": "primary",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Powerful AI orchestrator. Plans obsessively with todos, assesses search complexity before exploration, delegates strategically via category+skills combinations. Uses explore for internal code (parallel-friendly), librarian for external docs. (Sisyphus - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "claude-opus-5-5",
+        "variant": "max"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": true,
+      "requiresModel": null,
+      "reason": [
+        "capacidad",
+        "razonamiento"
+      ],
+      "reasonBasis": "orchestrator; rung1 claude-opus-5-5 max",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/sisyphus-agent-factory.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "hephaestus",
+      "displayName": "Hephaestus",
+      "mode": "primary",
+      "defaultState": "conditional",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/opencode/rigel-v2-native-agents.mjs (puerta Hephaestus) + profiles/gabo/opencode/rigel-v2-native-hephaestus.mjs (evaluateHephaestusGate) + packages/model-core/src/agent-model-requirements.ts (requiresProvider)",
+        "razon": "El runtime V2 deja a Hephaestus fuera del roster si la puerta no se cumple: proveedor conectado y modelo GPT soportado."
+      },
+      "description": "Autonomous Deep Worker - goal-oriented execution with GPT Codex. Explores thoroughly before acting, uses explore/librarian agents for comprehensive context, completes tasks end-to-end. Inspired by AmpCode deep mode. (Hephaestus - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "gpt-6-sol",
+        "variant": "medium"
+      },
+      "requiresProvider": [
+        "openai",
+        "chatgpt-subscription",
+        "github-copilot",
+        "opencode"
+      ],
+      "requiresAnyModel": true,
+      "requiresModel": null,
+      "reason": [
+        "capacidad"
+      ],
+      "reasonBasis": "deep worker; requires GPT family",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/hephaestus/agent.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "prometheus",
+      "displayName": "Prometheus",
+      "mode": "primary",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Plan agent (Prometheus - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "claude-fable-5-1",
+        "variant": "xhigh"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "razonamiento"
+      ],
+      "reasonBasis": "planner; rung1 claude-fable-5-1 xhigh",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/plugin-handlers/prometheus-agent-config-builder.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "oracle",
+      "displayName": "Oracle",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design. (Oracle - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "gpt-5.6-sol",
+        "variant": "xhigh"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "razonamiento"
+      ],
+      "reasonBasis": "consultant; rung1 gpt-5.6-sol xhigh",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/oracle.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "librarian",
+      "displayName": "Librarian",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Specialized codebase understanding agent for multi-repository analysis, searching remote codebases, retrieving official documentation, and finding implementation examples using GitHub CLI, Context7, and Web Search. MUST BE USED when users ask to look up code in remote repositories, explain library internals, or find usage examples in open source. (Librarian - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "kimi-for-coding-highspeed",
+        "variant": "off"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "rapidez",
+        "coste"
+      ],
+      "reasonBasis": "remote search; rung1 kimi-for-coding-highspeed off",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/librarian.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "explore",
+      "displayName": "Explore",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Contextual grep for codebases. Answers \"Where is X?\", \"Which file has Y?\", \"Find the code that does Z\". Fire multiple in parallel for broad searches. Specify thoroughness: \"quick\" for basic, \"medium\" for moderate, \"very thorough\" for comprehensive analysis. (Explore - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "kimi-for-coding-highspeed",
+        "variant": "off"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "rapidez",
+        "coste"
+      ],
+      "reasonBasis": "code grep; rung1 kimi-for-coding-highspeed off",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/explore.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "multimodal-looker",
+      "displayName": "Multimodal-Looker",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Analyze media files (PDFs, images, diagrams) that require interpretation beyond raw text. Extracts specific information or summaries from documents, describes visual content. Use when you need analyzed/extracted data rather than literal file contents. (Multimodal-Looker - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "gpt-5.6-sol",
+        "variant": "low"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "vision"
+      ],
+      "reasonBasis": "media interpretation; vision-capable chain",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/multimodal-looker.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "metis",
+      "displayName": "Metis",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Pre-planning consultant that analyzes requests to identify hidden intentions, ambiguities, and AI failure points. (Metis - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "claude-fable-5-1",
+        "variant": "max"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "razonamiento"
+      ],
+      "reasonBasis": "pre-planning; rung1 claude-fable-5-1 max",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/metis.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "momus",
+      "displayName": "Momus",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Expert reviewer for evaluating work plans against rigorous clarity, verifiability, and completeness standards. (Momus - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "gpt-6-astra",
+        "variant": "xhigh"
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "razonamiento"
+      ],
+      "reasonBasis": "plan review; rung1 gpt-6-astra xhigh",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/momus.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "atlas",
+      "displayName": "Atlas",
+      "mode": "primary",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Orchestrates work via task() to complete ALL tasks in a todo list until fully done. (Atlas - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "claude-sonnet-5",
+        "variant": null
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "capacidad"
+      ],
+      "reasonBasis": "plan executor; rung1 claude-sonnet-5",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/atlas/agent.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    },
+    {
+      "id": "sisyphus-junior",
+      "displayName": "Sisyphus-Junior",
+      "mode": "subagent",
+      "defaultState": "active",
+      "defaultStateProvenance": {
+        "procedencia": "derivado",
+        "fuente": "profiles/gabo/v2-agent-selection.json (orchestratedAgentIds) + profiles/gabo/opencode/rigel-v2-native-agents.mjs (registro incondicional del roster V2)"
+      },
+      "description": "Focused task executor. Same discipline, no delegation. (Sisyphus-Junior - OhMyOpenCode)",
+      "defaultModel": {
+        "model": "claude-sonnet-5",
+        "variant": null
+      },
+      "requiresProvider": [],
+      "requiresAnyModel": false,
+      "requiresModel": null,
+      "reason": [
+        "capacidad"
+      ],
+      "reasonBasis": "focused executor; rung1 claude-sonnet-5",
+      "reasonDerived": true,
+      "sources": [
+        "packages/omo-opencode/src/agents/sisyphus-junior/agent.ts",
+        "packages/model-core/src/agent-model-requirements.ts",
+        "profiles/gabo/opencode/rigel-v2-native-agents.mjs",
+        "profiles/gabo/v2-agent-selection.json"
+      ]
+    }
+  ]
+}

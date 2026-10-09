@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "5.1.10",
+  "baselineCommit": "de96488614d9117bc078390decf81cb9690e4be1",
+  "algorithm": "sha256",
+  "canonical": "sorted-keys-json",
+  "sealedFiles": [
+    "catalog.json",
+    "agents.json",
+    "chains.json",
+    "cli.json"
+  ],
+  "dataSha256": "42e6abeb4967a152c855aaa2fb1e9f761daee0491fcffa21203fed638a63916e"
+}

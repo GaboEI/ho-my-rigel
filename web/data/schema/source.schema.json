@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oh-my-rigel.dev/web/data/schema/source.schema.json",
+  "title": "Oh My Rigel web data source",
+  "description": "Normative schema for the W2 single source of truth. One $defs entry per source document. Consumed by W5/W6/W7. The machine-enforced equivalents live in web/data/source.test.ts.",
+  "oneOf": [
+    { "type": "object", "required": ["schemaVersion", "catalog", "areas", "functions"], "properties": { "schemaVersion": { "const": 1 } } },
+    { "type": "object", "required": ["schemaVersion", "roster", "agents"], "properties": { "schemaVersion": { "const": 1 } } },
+    { "type": "object", "required": ["schemaVersion", "agents", "categories"], "properties": { "schemaVersion": { "const": 1 } } },
+    { "type": "object", "required": ["schemaVersion", "owners", "warnings"], "properties": { "schemaVersion": { "const": 1 } } },
+    { "type": "object", "required": ["schemaVersion", "productVersion", "dataSha256"], "properties": { "schemaVersion": { "const": 1 } } }
+  ],
+  "$defs": {
+    "estado": { "enum": ["activada", "desactivada", "condicionada"] },
+    "v2": { "enum": ["migrada", "adaptada", "reescrita", "sustituida", "no_migrada", "excluida"] },
+    "areaId": { "enum": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"] },
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "campoDerivado": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procedencia", "valor", "fuente"],
+      "properties": {
+        "procedencia": { "const": "derivado" },
+        "valor": { "type": ["string", "array"] },
+        "fuente": { "type": "string", "minLength": 1 }
+      }
+    },
+    "campoNoConsta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procedencia", "razon", "fuente"],
+      "properties": {
+        "procedencia": { "enum": ["no_consta", "no_aplica"] },
+        "razon": { "type": "string", "minLength": 1 },
+        "fuente": { "type": "string", "minLength": 1 }
+      }
+    },
+    "campo": { "oneOf": [{ "$ref": "#/$defs/campoDerivado" }, { "$ref": "#/$defs/campoNoConsta" }] },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procedencia", "fuente"],
+      "properties": {
+        "procedencia": { "enum": ["derivado", "no_consta", "no_aplica"] },
+        "fuente": { "type": "string", "minLength": 1 },
+        "razon": { "type": "string" }
+      }
+    },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "slug", "count"],
+      "properties": {
+        "id": { "$ref": "#/$defs/areaId" },
+        "name": { "type": "string", "minLength": 1 },
+        "slug": { "$ref": "#/$defs/slug" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "funcion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nombre", "area", "areaSlug", "estado", "v2", "que_es", "como_se_activa", "como_se_usa", "cuando_sirve", "url", "modo_de_activacion", "requisitos", "valores_por_defecto", "ejemplos", "comandos", "version_desde", "cambios_relevantes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "nombre": { "type": "string", "minLength": 1 },
+        "area": { "$ref": "#/$defs/areaId" },
+        "areaSlug": { "$ref": "#/$defs/slug" },
+        "estado": { "$ref": "#/$defs/estado" },
+        "v2": { "$ref": "#/$defs/v2" },
+        "que_es": { "type": "string", "minLength": 1 },
+        "como_se_activa": { "type": "string", "minLength": 1 },
+        "como_se_usa": { "type": "string", "minLength": 1 },
+        "cuando_sirve": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "pattern": "^/catalogo/[a-z0-9-]+/$" },
+        "modo_de_activacion": { "type": "string", "minLength": 1 },
+        "requisitos": { "$ref": "#/$defs/campo" },
+        "valores_por_defecto": { "$ref": "#/$defs/campo" },
+        "ejemplos": { "$ref": "#/$defs/campo" },
+        "comandos": { "$ref": "#/$defs/campo" },
+        "version_desde": { "$ref": "#/$defs/campo" },
+        "cambios_relevantes": { "$ref": "#/$defs/campo" }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "catalog", "areas", "functions"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "catalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "sourceStatus", "totalFunctions", "totalAreas", "stateTotals"],
+          "properties": {
+            "source": { "type": "string" },
+            "sourceStatus": { "type": "string" },
+            "totalFunctions": { "const": 107 },
+            "totalAreas": { "const": 14 },
+            "stateTotals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["activada", "desactivada", "condicionada"],
+              "properties": {
+                "activada": { "type": "integer" },
+                "desactivada": { "type": "integer" },
+                "condicionada": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "areas": { "type": "array", "minItems": 14, "maxItems": 14, "items": { "$ref": "#/$defs/area" } },
+        "functions": { "type": "array", "minItems": 107, "maxItems": 107, "items": { "$ref": "#/$defs/funcion" } }
+      }
+    },
+    "rung": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "providers", "model", "variant"],
+      "properties": {
+        "order": { "type": "integer", "minimum": 0 },
+        "providers": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "model": { "type": "string", "minLength": 1 },
+        "variant": { "type": ["string", "null"] }
+      }
+    },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "order", "rungs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "order": { "type": "integer", "minimum": 0 },
+        "rungs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rung" } }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "mode", "defaultState", "defaultStateProvenance", "description", "defaultModel", "requiresProvider", "requiresAnyModel", "requiresModel", "reason", "reasonBasis", "reasonDerived", "sources"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["primary", "subagent", "all"] },
+        "defaultState": { "enum": ["active", "conditional", "disabled"] },
+        "defaultStateProvenance": { "$ref": "#/$defs/provenance" },
+        "description": { "type": "string", "minLength": 1 },
+        "defaultModel": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["model", "variant"],
+          "properties": { "model": { "type": "string" }, "variant": { "type": ["string", "null"] } }
+        },
+        "requiresProvider": { "type": "array", "items": { "type": "string" } },
+        "requiresAnyModel": { "type": "boolean" },
+        "requiresModel": { "type": ["string", "null"] },
+        "reason": { "type": "array", "minItems": 1, "items": { "enum": ["capacidad", "rapidez", "coste", "vision", "investigacion", "escritura", "razonamiento"] } },
+        "reasonBasis": { "type": "string" },
+        "reasonDerived": { "const": true },
+        "sources": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "agentsDoc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "source", "roster", "agents"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "source": { "type": "object" },
+        "roster": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["publishedPublic", "universalOmO", "gaboProfileRegistered", "senpiNativeBuiltins", "note"],
+          "properties": {
+            "publishedPublic": { "type": "integer" },
+            "universalOmO": { "type": "integer" },
+            "gaboProfileRegistered": { "type": "integer" },
+            "senpiNativeBuiltins": { "type": "integer" },
+            "note": { "type": "string" },
+            "v2StateRule": { "type": "string" },
+            "v2StateSources": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "agents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/agent" } }
+      }
+    },
+    "chainsDoc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "source", "agents", "categories"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "source": { "type": "object" },
+        "agents": { "type": "array", "items": { "$ref": "#/$defs/chain" } },
+        "categories": { "type": "array", "items": { "$ref": "#/$defs/chain" } }
+      }
+    },
+    "cliDoc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "sources", "owners", "install", "warnings"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "sources": { "type": "object" },
+        "owners": { "type": "object" },
+        "install": { "type": "object" },
+        "warnings": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "source"],
+            "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "source": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "seal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "productVersion", "baselineCommit", "algorithm", "canonical", "sealedFiles", "dataSha256"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "productVersion": { "type": "string", "minLength": 1 },
+        "baselineCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "algorithm": { "const": "sha256" },
+        "canonical": { "const": "sorted-keys-json" },
+        "sealedFiles": { "const": ["catalog.json", "agents.json", "chains.json", "cli.json"] },
+        "dataSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

@@ -1,0 +1,1006 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "agents": "packages/model-core/src/agent-model-requirements.ts",
+    "categories": "packages/model-core/src/category-model-requirements.ts"
+  },
+  "agents": [
+    {
+      "id": "sisyphus",
+      "order": 0,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode",
+            "bailian-coding-plan",
+            "moonshotai-cn",
+            "firmware",
+            "ollama-cloud",
+            "aihubmix"
+          ],
+          "model": "kimi-k3",
+          "variant": null
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "zai-coding-plan",
+            "opencode",
+            "bailian-coding-plan"
+          ],
+          "model": "glm-5.2",
+          "variant": null
+        },
+        {
+          "order": 4,
+          "providers": [
+            "opencode"
+          ],
+          "model": "big-pickle",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "hephaestus",
+      "order": 1,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-6-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        }
+      ]
+    },
+    {
+      "id": "prometheus",
+      "order": 2,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-fable-5-1",
+          "variant": "xhigh"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "oracle",
+      "order": 3,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "xhigh"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "high"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "google",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gemini-3.1-pro",
+          "variant": "high"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 4,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "glm-5.2",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "librarian",
+      "order": 4,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "kimi-for-coding"
+          ],
+          "model": "kimi-for-coding-highspeed",
+          "variant": "off"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-flash",
+          "variant": "max"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "opencode-go",
+            "bailian-coding-plan"
+          ],
+          "model": "qwen3.7-plus",
+          "variant": null
+        },
+        {
+          "order": 4,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m2.7",
+          "variant": null
+        },
+        {
+          "order": 5,
+          "providers": [
+            "anthropic",
+            "github-copilot"
+          ],
+          "model": "claude-haiku-4-5",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "explore",
+      "order": 5,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "kimi-for-coding"
+          ],
+          "model": "kimi-for-coding-highspeed",
+          "variant": "off"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-flash",
+          "variant": "max"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "opencode-go",
+            "bailian-coding-plan"
+          ],
+          "model": "qwen3.7-plus",
+          "variant": null
+        },
+        {
+          "order": 4,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m2.7",
+          "variant": null
+        },
+        {
+          "order": 5,
+          "providers": [
+            "anthropic",
+            "github-copilot"
+          ],
+          "model": "claude-haiku-4-5",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "multimodal-looker",
+      "order": 6,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "low"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "kimi-k3",
+          "variant": null
+        },
+        {
+          "order": 2,
+          "providers": [
+            "zai-coding-plan"
+          ],
+          "model": "glm-4.6v",
+          "variant": null
+        },
+        {
+          "order": 3,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5-nano",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "metis",
+      "order": 7,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-fable-5-1",
+          "variant": "max"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "momus",
+      "order": 8,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "xhigh"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "high"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "opencode"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "high"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 4,
+          "providers": [
+            "google",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gemini-3.1-pro",
+          "variant": "high"
+        },
+        {
+          "order": 5,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "glm-5.2",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "atlas",
+      "order": 9,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-sonnet-5",
+          "variant": null
+        },
+        {
+          "order": 1,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "kimi-k3",
+          "variant": null
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m3",
+          "variant": null
+        },
+        {
+          "order": 4,
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3",
+          "variant": null
+        },
+        {
+          "order": 5,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m2.7",
+          "variant": null
+        }
+      ]
+    },
+    {
+      "id": "sisyphus-junior",
+      "order": 10,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-sonnet-5",
+          "variant": null
+        },
+        {
+          "order": 1,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "kimi-k3",
+          "variant": null
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m3",
+          "variant": null
+        },
+        {
+          "order": 4,
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3",
+          "variant": null
+        },
+        {
+          "order": 5,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m2.7",
+          "variant": null
+        },
+        {
+          "order": 6,
+          "providers": [
+            "opencode"
+          ],
+          "model": "big-pickle",
+          "variant": null
+        }
+      ]
+    }
+  ],
+  "categories": [
+    {
+      "id": "visual-engineering",
+      "order": 0,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-fable-5-1",
+          "variant": "max"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "ultrabrain",
+      "order": 1,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "max"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "opencode"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "max"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        },
+        {
+          "order": 4,
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        },
+        {
+          "order": 5,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "deep-low",
+      "order": 2,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6.1-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6.1-sol-fast",
+          "variant": "medium"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-5.6-sol-fast",
+          "variant": "medium"
+        }
+      ]
+    },
+    {
+      "id": "deep-high",
+      "order": 3,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      ]
+    },
+    {
+      "id": "artistry",
+      "order": 4,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-fable-5-1",
+          "variant": "max"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "quick",
+      "order": 5,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "openai",
+            "chatgpt-subscription"
+          ],
+          "model": "gpt-6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-flash",
+          "variant": "off"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "qwen-token-plan",
+            "alibaba-token-plan",
+            "bailian-coding-plan"
+          ],
+          "model": "qwen3.6-flash",
+          "variant": "low"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m3",
+          "variant": "max"
+        },
+        {
+          "order": 4,
+          "providers": [
+            "opencode-go"
+          ],
+          "model": "minimax-m2.7",
+          "variant": "max"
+        },
+        {
+          "order": 5,
+          "providers": [
+            "xai"
+          ],
+          "model": "grok-4.20-0309-non-reasoning",
+          "variant": null
+        },
+        {
+          "order": 6,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot"
+          ],
+          "model": "claude-haiku-4-5",
+          "variant": "off"
+        },
+        {
+          "order": 7,
+          "providers": [
+            "zai-coding-plan"
+          ],
+          "model": "glm-5.3-flash",
+          "variant": "low"
+        },
+        {
+          "order": 8,
+          "providers": [
+            "xiaomi"
+          ],
+          "model": "mimo-v2.6-flash",
+          "variant": "low"
+        }
+      ]
+    },
+    {
+      "id": "unspecified-low",
+      "order": 6,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-sonnet-5-5",
+          "variant": "medium"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "xiaomi",
+            "opencode-go"
+          ],
+          "model": "mimo-v2.6-pro",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "xai",
+            "github-copilot",
+            "opencode-go"
+          ],
+          "model": "grok-4.7",
+          "variant": "xhigh"
+        },
+        {
+          "order": 3,
+          "providers": [
+            "openai",
+            "chatgpt-subscription",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "gpt-5.6-terra",
+          "variant": "high"
+        },
+        {
+          "order": 4,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-sonnet-5",
+          "variant": "low"
+        },
+        {
+          "order": 5,
+          "providers": [
+            "qwen-token-plan",
+            "alibaba-token-plan",
+            "qwen-token-plan-cn",
+            "alibaba-token-plan-cn"
+          ],
+          "model": "qwen3.8-max-preview",
+          "variant": "max"
+        },
+        {
+          "order": 6,
+          "providers": [
+            "deepseek",
+            "opencode-go"
+          ],
+          "model": "deepseek-v4-pro",
+          "variant": "max"
+        },
+        {
+          "order": 7,
+          "providers": [
+            "xiaomi",
+            "opencode-go"
+          ],
+          "model": "mimo-v2.5-pro",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "unspecified-high",
+      "order": 7,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "medium"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "zai-coding-plan",
+            "opencode-go"
+          ],
+          "model": "glm-5.3",
+          "variant": "max"
+        },
+        {
+          "order": 2,
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "id": "writing",
+      "order": 8,
+      "rungs": [
+        {
+          "order": 0,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-5-5",
+          "variant": "low"
+        },
+        {
+          "order": 1,
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode"
+          ],
+          "model": "claude-opus-4-6",
+          "variant": "max"
+        }
+      ]
+    }
+  ]
+}
