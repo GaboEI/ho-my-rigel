@@ -61,3 +61,43 @@ describe("#given the custom-domain web artifact #when it is built #then it serve
     }
   })
 })
+
+describe("#given the moved site #when the legacy /oh-my-rigel/ base path is requested #then every known route redirects to its root URL and unknown paths still 404", () => {
+  test("#given the artifact #when the legacy stubs are inspected #then each known route ships a 200 document pointing at the root URL", async () => {
+    // given
+    await buildSite()
+    const manifest = JSON.parse(readDist("route-manifest.json"))
+
+    // when
+    const contentRoutes: string[] = manifest.routes.filter((route) => route !== "/404.html")
+
+    // then
+    expect(Array.isArray(manifest.legacyRedirects)).toBe(true)
+    expect(manifest.legacyRedirects.length).toBe(contentRoutes.length)
+    for (const route of contentRoutes) {
+      const stubPath = join(outPath, `oh-my-rigel${route}`, "index.html")
+      expect(existsSync(stubPath)).toBe(true)
+      const html = readFileSync(stubPath, "utf8")
+      const target = `${CUSTOM_ORIGIN}${route}`
+      expect(html).toContain(`<meta http-equiv="refresh" content="0; url=${target}">`)
+      expect(html).toContain(`rel="canonical" href="${target}"`)
+      expect(html).toContain('name="robots" content="noindex"')
+      expect(html).toContain(`href="${target}"`)
+    }
+  })
+
+  test("#given the legacy prefix #when an unknown path is requested #then there is no catch-all stub and no real page carries a meta refresh", async () => {
+    // given
+    await buildSite()
+
+    // when
+    const unknownStub = join(outPath, "oh-my-rigel", "does-not-exist", "index.html")
+    const realPages = collectFiles(outPath).filter((file) => file.endsWith(".html") && !file.includes("/oh-my-rigel/"))
+
+    // then
+    expect(existsSync(unknownStub)).toBe(false)
+    for (const file of realPages) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/http-equiv=["']refresh/i)
+    }
+  })
+})

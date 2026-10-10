@@ -86,8 +86,11 @@ function attrs(html, name) {
 
 await buildSite()
 
+const LEGACY_PREFIX = "/oh-my-rigel/"
 const files = await listFiles(outPath)
-const htmlFiles = files.filter((file) => file.endsWith(".html"))
+const allHtmlFiles = files.filter((file) => file.endsWith(".html"))
+const legacyFiles = allHtmlFiles.filter((file) => routeFromFile(file).startsWith(LEGACY_PREFIX))
+const htmlFiles = allHtmlFiles.filter((file) => !routeFromFile(file).startsWith(LEGACY_PREFIX))
 const routes = htmlFiles.map(routeFromFile)
 const esRoutes = new Set(routes.filter((route) => route.startsWith("/es/")).map((route) => route.replace(/^\/es/, "")))
 const enRoutes = new Set(routes.filter((route) => route.startsWith("/en/")).map((route) => route.replace(/^\/en/, "")))
@@ -646,4 +649,30 @@ for (const file of htmlFiles) {
   }
 }
 
-console.log(`PASS web/site/check.mjs (${htmlFiles.length} HTML files, ${routes.length} routes, ${seenExternal.size} external URLs)`)
+// Legacy-path compatibility gate: the public site moved from the /oh-my-rigel/ project base path to
+// the custom-domain root. GitHub Pages is static and cannot issue a server-side 301/302, so the
+// verifiable compatibility is a shipped 200 document per known route that declares the root URL as
+// canonical and redirects the reader. Fail-closed: a missing stub, a wrong target, an indexed stub, a
+// missing fallback link, or a meta-refresh leak onto a real page all fail the build. The legacy
+// prefix must never become a catch-all, so an unknown legacy path still resolves to 404.html.
+const contentRoutes = routeManifest.routes.filter((route) => route !== "/404.html")
+assert(Array.isArray(routeManifest.legacyRedirects), "route-manifest must record the legacy redirect set")
+assert(routeManifest.legacyRedirects.length === contentRoutes.length, `legacy redirects must cover every content route (${routeManifest.legacyRedirects.length} vs ${contentRoutes.length})`)
+assert(legacyFiles.length === contentRoutes.length, `legacy redirect stubs must cover every content route (${legacyFiles.length} vs ${contentRoutes.length})`)
+for (const route of contentRoutes) {
+  const legacyRoute = `${LEGACY_PREFIX.slice(0, -1)}${route}`
+  const target = absoluteUrl(route)
+  const record = routeManifest.legacyRedirects.find((entry) => entry.from === legacyRoute)
+  assert(record && record.to === target, `legacy redirect manifest entry missing or wrong for ${legacyRoute}`)
+  const stub = await readFile(join(outPath, legacyRoute.slice(1), "index.html"), "utf8")
+  assert(stub.includes(`<meta http-equiv="refresh" content="0; url=${target}">`), `${legacyRoute} must redirect to ${target}`)
+  assert(stub.includes(`rel="canonical" href="${target}"`), `${legacyRoute} canonical must be ${target}`)
+  assert(stub.includes('name="robots" content="noindex"'), `${legacyRoute} must be noindex`)
+  assert(stub.includes(`href="${target}"`), `${legacyRoute} must carry a visible fallback link to ${target}`)
+}
+assert(!existsSync(join(outPath, "oh-my-rigel", "does-not-exist", "index.html")), "the legacy prefix must not fabricate redirects for unknown routes")
+for (const file of htmlFiles) {
+  assert(!/http-equiv=["']refresh/i.test(await readFile(file, "utf8")), `${routeFromFile(file)} must not carry a meta refresh (the exception is scoped to the legacy stubs)`)
+}
+
+console.log(`PASS web/site/check.mjs (${htmlFiles.length} HTML files, ${legacyFiles.length} legacy redirects, ${routes.length} routes, ${seenExternal.size} external URLs)`)

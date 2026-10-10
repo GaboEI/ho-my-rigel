@@ -1090,6 +1090,28 @@ export function guidePage(lang, source) {
   return page({ lang, logicalPath: langLogicalPath(lang, "/agentes-y-modelos/guia-modelos/"), title: t.guideTitle, description: lead, body, crumbItems: [[t.agents, publicPath(langLogicalPath(lang, "/agentes-y-modelos/"))], [t.guideTitle, ""]], seal: source.seal })
 }
 
+// Legacy-path compatibility page. GitHub Pages is static and cannot emit an HTTP 301/302, so the
+// moved /oh-my-rigel/ project paths ship a real 200 document that declares the root URL as its
+// canonical, redirects the reader via meta refresh (no JS), and keeps a visible fallback link. It is
+// noindex, and it is emitted only for known routes: an unknown legacy path has no file and still
+// falls through to the 404 page.
+export function legacyRedirectPage(target) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="refresh" content="0; url=${target}">
+  <link rel="canonical" href="${attr(target)}">
+  <title>Oh My Rigel</title>
+</head>
+<body>
+  <p>This guide now lives at <a href="${attr(target)}">${attr(target)}</a>.</p>
+</body>
+</html>`
+}
+
 export function notFoundPage(source) {
   return `<!doctype html>
 <html lang="en">
