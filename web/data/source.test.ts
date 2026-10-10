@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 import { loadAndValidate, validate } from "./schema-validate.mjs"
@@ -52,6 +52,19 @@ type ModelCore = {
   AGENT_MODEL_REQUIREMENTS: Record<string, { fallbackChain: { providers: string[]; model: string; variant?: string }[]; requiresProvider?: string[]; requiresAnyModel?: boolean; requiresModel?: string }>
   CATEGORY_MODEL_REQUIREMENTS: Record<string, { fallbackChain: { providers: string[]; model: string; variant?: string }[]; requiresProvider?: string[]; requiresAnyModel?: boolean; requiresModel?: string }>
 }
+type GuideAgent = { id: string; provenance: string; funcion: string; cuandoUsar: string; displayName?: string; mode?: string }
+type GuideSkill = { id: string; provenance: string; funcion: string; uso: string }
+type GuideCommand = { id: string; surface: string; name: string; queHace: string; queToca: string }
+type Guide = { schemaVersion: number; source: Record<string, string>; agents: GuideAgent[]; skills: GuideSkill[]; commands: GuideCommand[] }
+type GuideOverlay = {
+  schemaVersion: number
+  document: string
+  locale: string
+  coverage: { fields: string[]; note: string }
+  agents: Record<string, { funcion: string; cuandoUsar: string }>
+  skills: Record<string, { funcion: string; uso: string }>
+  commands: Record<string, { queHace: string; queToca: string }>
+}
 
 const EXPECTED_PER_AREA: Record<string, number> = { A: 15, B: 10, C: 11, D: 17, E: 6, F: 9, G: 3, H: 3, I: 7, J: 5, K: 9, L: 6, M: 3, N: 3 }
 const COVERAGE_FINGERPRINT = "6d64a10b20ed526224688e6c6186838a5455433777f5c785e10129b5455ab3a9"
@@ -61,6 +74,13 @@ function readJson<T>(name: string): T {
 }
 function readRepo(rel: string): string {
   return readFileSync(new URL(rel, REPO), "utf8")
+}
+function skillIds(rel: string): string[] {
+  const dir = new URL(`${rel}/`, REPO)
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(new URL(`${entry.name}/SKILL.md`, dir)))
+    .map((entry) => entry.name)
 }
 async function loadModelCore(): Promise<ModelCore> {
   const agent = (await import(`${fileURLToPath(REPO)}packages/model-core/src/agent-model-requirements.ts`)) as ModelCore
@@ -73,12 +93,14 @@ const agentsDoc = readJson<{ schemaVersion: number; roster: Record<string, numbe
 const chainsDoc = readJson<{ schemaVersion: number; agents: Chain[]; categories: Chain[] }>("chains.json")
 const cliDoc = readJson<{ schemaVersion: number; owners: Record<string, { commands: unknown[] }>; warnings: { id: string; text: string }[] }>("cli.json")
 const seal = readJson<{ schemaVersion: number; productVersion: string; baselineCommit: string; algorithm: string; canonical: string; sealedFiles: string[]; dataSha256: string }>("seal.json")
+const guideDoc = readJson<Guide>("guide.json")
+const guideOverlay = readJson<GuideOverlay>("i18n/guide.en.json")
 const sourceSchema = readJson<Record<string, unknown>>("schema/source.schema.json")
 
 describe("#given the web data source #when its documents are read #then each is schema-versioned", () => {
   test("#given every source document #when its schemaVersion is inspected #then it equals 1", () => {
     // given / when / then
-    for (const [name, doc] of Object.entries({ catalog, agents: agentsDoc, chains: chainsDoc, cli: cliDoc, seal })) {
+    for (const [name, doc] of Object.entries({ catalog, agents: agentsDoc, chains: chainsDoc, cli: cliDoc, guide: guideDoc, seal })) {
       expect(`${name}:${(doc as { schemaVersion: number }).schemaVersion}`).toBe(`${name}:1`)
       expect((doc as { schemaVersion: number }).schemaVersion).toBe(SCHEMA_VERSION)
     }
@@ -152,8 +174,8 @@ describe("#given the catalog functions #when integrity rules are applied #then n
 describe("#given the source documents #when validated #then the real JSON Schema validates them", () => {
   test("#given every document #when validated against source.schema.json #then there are no errors", () => {
     // given / when / then
-    const defs: Record<string, string> = { catalog: "catalog", agents: "agentsDoc", chains: "chainsDoc", cli: "cliDoc", seal: "seal" }
-    const docs: Record<string, unknown> = { catalog, agents: agentsDoc, chains: chainsDoc, cli: cliDoc, seal }
+    const defs: Record<string, string> = { catalog: "catalog", agents: "agentsDoc", chains: "chainsDoc", cli: "cliDoc", guide: "guideDoc", seal: "seal" }
+    const docs: Record<string, unknown> = { catalog, agents: agentsDoc, chains: chainsDoc, cli: cliDoc, guide: guideDoc, seal }
     for (const [name, def] of Object.entries(defs)) {
       const errors = loadAndValidate(sourceSchema, def, docs[name])
       expect([name, errors]).toEqual([name, []])
@@ -400,6 +422,16 @@ describe("#given cli.json #when re-derived against the real CLI sources #then no
     expect(ids).toContain("omo-setup-parent")
     expect(ids).toContain("rigel-setup-absent")
   })
+
+  test("#given the install route contract #when cli.json is inspected #then the public route never offers the lab CLI install command", () => {
+    // given / when / then
+    const warning = cliDoc.warnings.find((w) => w.id === "omr-install-not-parent-install")
+    expect(warning).toBeDefined()
+    const installText = `${cliDoc.install.omrReal}\n${warning!.text}`
+    expect(installText).toContain("script/agent/setup.sh")
+    expect(installText).toContain("rigel-v2-user-install.mjs")
+    expect(installText).not.toContain("rigel-v2 install")
+  })
 })
 
 describe("#given seal.json #when verified #then it seals the current source with the documented version", () => {
@@ -412,5 +444,199 @@ describe("#given seal.json #when verified #then it seals the current source with
     expect(seal.baselineCommit).toBe(BASELINE_COMMIT)
     const pkg = JSON.parse(readRepo("package.json")) as { version: string }
     expect(seal.productVersion).toBe(pkg.version)
+  })
+})
+
+describe("#given the W3 i18n overlay #when validated #then it is id-anchored, translatable-only, and sealed", () => {
+  const overlay = readJson<{
+    schemaVersion: number
+    document: string
+    locale: string
+    coverage: { fields: string[]; note: string }
+    areas: Record<string, { name: string }>
+    functions: Record<string, { nombre: string; que_es: string; modo_de_activacion: string; como_se_usa: string; cuando_sirve: string; requisitos: string; valores_por_defecto: string }>
+  }>("i18n/catalog.en.json")
+  const areaById = new Map(catalog.areas.map((area) => [area.id, area]))
+  const fieldText = (f: Funcion["requisitos"]) => (f.procedencia === "derivado" ? (Array.isArray(f.valor) ? f.valor.join(", ") : f.valor) : f.razon)
+
+  test("#given the overlay #when compared to the source #then every id exists and only translatable fields are present", () => {
+    // given / when / then
+    expect(overlay.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(overlay.document).toBe("catalog.json")
+    expect(overlay.locale).toBe("en")
+    expect(overlay.coverage.fields).toEqual(["areas[].name", "functions[].nombre", "functions[].que_es", "functions[].modo_de_activacion", "functions[].como_se_usa", "functions[].cuando_sirve", "functions[].requisitos", "functions[].valores_por_defecto"])
+    const ids = Object.keys(overlay.areas)
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) {
+      const source = areaById.get(id)
+      expect(source).toBeDefined()
+      expect(Object.keys(overlay.areas[id])).toEqual(["name"])
+      const name = overlay.areas[id].name
+      expect(typeof name).toBe("string")
+      expect(name.length).toBeGreaterThan(0)
+      expect(name).not.toBe(source!.name)
+    }
+  })
+
+  test("#given the overlay functions #when compared to the catalogue #then every function is translated, non-empty and distinct from the ES source", () => {
+    // given / when / then
+    const fnById = new Map(catalog.functions.map((fn) => [fn.id, fn]))
+    const ids = Object.keys(overlay.functions)
+    expect(ids.length).toBe(107)
+    for (const id of ids) {
+      const src = fnById.get(id)
+      expect([id, src !== undefined]).toEqual([id, true])
+      const o = overlay.functions[id]
+      for (const field of ["nombre", "que_es", "como_se_usa", "cuando_sirve"] as const) {
+        expect([id, field, typeof o[field] === "string" && o[field].length > 0]).toEqual([id, field, true])
+        expect([id, field, o[field] !== src![field]]).toEqual([id, field, true])
+      }
+      expect([id, typeof o.modo_de_activacion === "string" && o.modo_de_activacion.length > 0]).toEqual([id, true])
+      expect([id, o.requisitos.length > 0 && o.requisitos !== fieldText(src!.requisitos)]).toEqual([id, true])
+      expect([id, o.valores_por_defecto.length > 0 && o.valores_por_defecto !== fieldText(src!.valores_por_defecto)]).toEqual([id, true])
+    }
+  })
+
+  test("#given the overlay #when sealed #then it is listed in sealedFiles and covered by the hash", () => {
+    // given / when / then
+    expect(SEALED_FILES).toContain("i18n/catalog.en.json")
+    expect(seal.sealedFiles).toContain("i18n/catalog.en.json")
+    expect(computeDataSha256(DATA_URL)).toBe(seal.dataSha256)
+  })
+})
+
+describe("#given the guide source #when checked against the real product surfaces #then its inventory cannot drift", () => {
+  test("#given the guide agents #when compared to agents.json and the beta Judge #then every id is covered once with the right provenance", () => {
+    // given / when / then
+    const omoIds = guideDoc.agents.filter((a) => a.provenance === "omo").map((a) => a.id).sort()
+    const betaIds = guideDoc.agents.filter((a) => a.provenance === "beta").map((a) => a.id)
+    expect(omoIds).toEqual(agentsDoc.agents.map((a) => a.id).sort())
+    expect(betaIds).toEqual(["judge"])
+    const ids = guideDoc.agents.map((a) => a.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    const judge = guideDoc.agents.find((a) => a.id === "judge")!
+    const judgeJson = JSON.parse(readRepo("profiles/gabo/opencode/agents/judge.v2.json")) as { name: string; mode: string }
+    expect(judge.displayName).toBe(judgeJson.name)
+    expect(judge.mode).toBe(judgeJson.mode)
+    for (const agent of guideDoc.agents) {
+      expect([agent.id, typeof agent.funcion === "string" && agent.funcion.length > 0]).toEqual([agent.id, true])
+      expect([agent.id, typeof agent.cuandoUsar === "string" && agent.cuandoUsar.length > 0]).toEqual([agent.id, true])
+    }
+  })
+
+  test("#given the guide skills #when compared to the shipped and beta skill trees #then every id is covered once with the right provenance", () => {
+    // given / when / then
+    const omo = skillIds("packages/shared-skills/skills")
+    const beta = skillIds("profiles/gabo/skills")
+    expect(omo.length).toBe(18)
+    expect(beta.length).toBe(14)
+    expect(guideDoc.skills.filter((s) => s.provenance === "omo").map((s) => s.id).sort()).toEqual(omo.sort())
+    expect(guideDoc.skills.filter((s) => s.provenance === "beta").map((s) => s.id).sort()).toEqual(beta.sort())
+    const ids = guideDoc.skills.map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const skill of guideDoc.skills) {
+      expect([skill.id, typeof skill.funcion === "string" && skill.funcion.length > 0]).toEqual([skill.id, true])
+      expect([skill.id, typeof skill.uso === "string" && skill.uso.length > 0]).toEqual([skill.id, true])
+    }
+  })
+
+  test("#given the guide commands #when compared to cli.json #then every command id is covered once on the right surface", () => {
+    // given / when / then
+    const expected = new Set<string>()
+    for (const c of cliDoc.owners["rigel-v2"].commands as { name: string }[]) expected.add(`rigel-v2:${c.name}`)
+    for (const c of cliDoc.owners.omo.commands as { name: string }[]) expected.add(`omo:${c.name}`)
+    for (const name of cliDoc.owners.slash.commands as string[]) expected.add(`slash:${name}`)
+    const actual = guideDoc.commands.map((c) => c.id)
+    expect(actual.slice().sort()).toEqual([...expected].sort())
+    expect(new Set(actual).size).toBe(actual.length)
+    for (const command of guideDoc.commands) {
+      const [surface, name] = command.id.split(":")
+      expect([command.id, command.surface, command.name]).toEqual([command.id, surface, name])
+      expect([command.id, typeof command.queHace === "string" && command.queHace.length > 0]).toEqual([command.id, true])
+      expect([command.id, typeof command.queToca === "string" && command.queToca.length > 0]).toEqual([command.id, true])
+    }
+  })
+
+  test("#given the guide agents #when chain coverage is measured against chains.json #then at least one agent declares no chain, so a universal agent/model claim is invalid", () => {
+    // given / when / then
+    const chained = new Set(chainsDoc.agents.map((c) => c.id))
+    const without = guideDoc.agents.filter((a) => !chained.has(a.id)).map((a) => a.id)
+    expect(without).toEqual(["judge"])
+    expect(chainsDoc.agents.length).toBe(11)
+  })
+
+  test("#given the rigel-v2 install/uninstall cards #when read #then they name the isolated lab and the public human route, not a chosen-config install", () => {
+    // given / when / then
+    const install = guideDoc.commands.find((c) => c.id === "rigel-v2:install")!
+    const uninstall = guideDoc.commands.find((c) => c.id === "rigel-v2:uninstall")!
+    expect(install.queToca).toContain("laboratorio")
+    expect(install.queToca).toContain("rigel-v2-user-install.mjs")
+    expect(uninstall.queToca).toContain("laboratorio")
+    expect(uninstall.queToca).toContain("V1")
+    const enInstall = guideOverlay.commands["rigel-v2:install"]
+    const enUninstall = guideOverlay.commands["rigel-v2:uninstall"]
+    expect(enInstall.queToca).toContain("laboratory")
+    expect(enInstall.queToca).toContain("rigel-v2-user-install.mjs")
+    expect(enUninstall.queToca).toContain("laboratory")
+    expect(enUninstall.queToca).toContain("V1")
+  })
+
+  test("#given the effect-bearing command cards #when read #then each names its real surface: cleanup is Codex-only and the two worktree-sweep flags differ", () => {
+    // given / when / then
+    const byId = Object.fromEntries(guideDoc.commands.map((c) => [c.id, c]))
+    const en = guideOverlay.commands
+    expect(byId["omo:cleanup"].queHace).toContain("Codex")
+    expect(byId["omo:cleanup"].queToca).toContain("--platform codex")
+    expect(en["omo:cleanup"].queHace).toContain("Codex")
+    expect(en["omo:cleanup"].queToca).toContain("--platform codex")
+    expect(byId["rigel-v2:worktree-sweep"].queToca).toContain("--dry-run")
+    expect(en["rigel-v2:worktree-sweep"].queToca).toContain("--dry-run")
+    expect(byId["omo:worktree-sweep"].queToca).toContain("--apply")
+    expect(en["omo:worktree-sweep"].queToca).toContain("--apply")
+  })
+})
+
+describe("#given the guide EN overlay #when checked #then every id and prose field is translated and distinct from the ES source", () => {
+  test("#given the overlay #when its shape is read #then it is id-anchored to guide.json and names the guide prose fields", () => {
+    // given / when / then
+    expect(guideOverlay.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(guideOverlay.document).toBe("guide.json")
+    expect(guideOverlay.locale).toBe("en")
+    expect(guideOverlay.coverage.fields).toEqual(["agents[].funcion", "agents[].cuandoUsar", "skills[].funcion", "skills[].uso", "commands[].queHace", "commands[].queToca"])
+  })
+
+  test("#given each guide entry #when the EN prose is compared to the ES source #then it is present, non-empty and different", () => {
+    // given / when / then
+    for (const agent of guideDoc.agents) {
+      const en = guideOverlay.agents[agent.id]
+      expect([agent.id, en !== undefined]).toEqual([agent.id, true])
+      for (const field of ["funcion", "cuandoUsar"] as const) {
+        expect([agent.id, field, typeof en[field] === "string" && en[field].length > 0]).toEqual([agent.id, field, true])
+        expect([agent.id, field, en[field] !== agent[field]]).toEqual([agent.id, field, true])
+      }
+    }
+    for (const skill of guideDoc.skills) {
+      const en = guideOverlay.skills[skill.id]
+      expect([skill.id, en !== undefined]).toEqual([skill.id, true])
+      for (const field of ["funcion", "uso"] as const) {
+        expect([skill.id, field, typeof en[field] === "string" && en[field].length > 0]).toEqual([skill.id, field, true])
+        expect([skill.id, field, en[field] !== skill[field]]).toEqual([skill.id, field, true])
+      }
+    }
+    for (const command of guideDoc.commands) {
+      const en = guideOverlay.commands[command.id]
+      expect([command.id, en !== undefined]).toEqual([command.id, true])
+      for (const field of ["queHace", "queToca"] as const) {
+        expect([command.id, field, typeof en[field] === "string" && en[field].length > 0]).toEqual([command.id, field, true])
+        expect([command.id, field, en[field] !== command[field]]).toEqual([command.id, field, true])
+      }
+    }
+  })
+
+  test("#given the overlay #when extra ids are checked #then it carries no id absent from guide.json", () => {
+    // given / when / then
+    expect(Object.keys(guideOverlay.agents).sort()).toEqual(guideDoc.agents.map((a) => a.id).sort())
+    expect(Object.keys(guideOverlay.skills).sort()).toEqual(guideDoc.skills.map((s) => s.id).sort())
+    expect(Object.keys(guideOverlay.commands).sort()).toEqual(guideDoc.commands.map((c) => c.id).sort())
   })
 })

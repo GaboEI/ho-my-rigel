@@ -1,0 +1,81 @@
+name: Web Public Scaffold
+
+on:
+  pull_request:
+    branches: [v2-mirror]
+    paths:
+      - "web/**"
+      - "package.json"
+      - ".github/workflows/web-public.yml"
+  push:
+    branches: [v2-mirror]
+    paths:
+      - "web/**"
+      - "package.json"
+      - ".github/workflows/web-public.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify web gates (W2 source, WCAG contrast, i18n render)
+        run: bun test web/
+
+      - name: Build and check W5 static scaffold
+        run: bun run web:check
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          JOB_SUMMARY_TITLE: Web public scaffold
+          JOB_SUMMARY_STATUS: ${{ job.status }}
+          JOB_SUMMARY_DETAILS: |
+            - Verifies the web gates (W2 source, WCAG contrast, i18n render).
+            - Builds the W5 static scaffold.
+            - Checks basePath routing, absolute SEO URLs, no auto-redirects, and W4 CSS guardrails.
+          JOB_SUMMARY_NEXT: Start with the first W2 data or web:check failure. Deployment is intentionally not enabled in W5.
+        run: GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" bash .github/scripts/write-job-summary.sh
+
+  pages-artifact-dry-run:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/v2-mirror'
+    needs: build-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build static scaffold
+        run: bun run web:build
+
+      - name: Upload future Pages artifact without deploying
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/site/dist
+
+      - name: W5 deployment boundary
+        run: |
+          printf '%s\n' 'W5 intentionally stops after artifact upload. Add actions/deploy-pages in W7 after publication gates pass.'

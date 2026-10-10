@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs"
 
 export const SCHEMA_VERSION = 1
 export const BASELINE_COMMIT = "de96488614d9117bc078390decf81cb9690e4be1"
-export const SEALED_FILES = ["catalog.json", "agents.json", "chains.json", "cli.json"]
+export const SEALED_FILES = ["catalog.json", "agents.json", "chains.json", "cli.json", "i18n/catalog.en.json", "guide.json", "i18n/guide.en.json"]
 
 export function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
