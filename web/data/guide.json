@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "agents": "web/data/agents.json",
+    "chains": "web/data/chains.json",
+    "cli": "web/data/cli.json",
+    "judge": "profiles/gabo/opencode/agents/judge.v2.json",
+    "skillsOmo": "packages/shared-skills/skills/*/SKILL.md",
+    "skillsBeta": "profiles/gabo/skills/*/SKILL.md",
+    "commands": "packages/omo-opencode/src/cli/* + packages/omo-opencode/src/features/builtin-commands/commands.ts + profiles/gabo/cli/commands/*.mjs"
+  },
+  "agents": [
+    {
+      "id": "sisyphus",
+      "provenance": "omo",
+      "funcion": "Orquestador que planifica, decide la exploración y delega en agentes y categorías con skills.",
+      "cuandoUsar": "Orquestador principal: planifica con todos, decide cuándo explorar y reparte el trabajo entre agentes y modelos. Úsalo para dirigir una tarea completa de principio a fin."
+    },
+    {
+      "id": "hephaestus",
+      "provenance": "omo",
+      "funcion": "Trabajador profundo autónomo que ejecuta objetivos con GPT Codex.",
+      "cuandoUsar": "Trabajador autónomo orientado a objetivos que ejecuta con GPT Codex. Úsalo para trabajo profundo cuando tengas conectado un proveedor con un modelo GPT compatible; si no se cumple esa condición, queda fuera del roster."
+    },
+    {
+      "id": "prometheus",
+      "provenance": "omo",
+      "funcion": "Constructor del plan de trabajo, con un formato de plan estricto.",
+      "cuandoUsar": "Constructor de planes: convierte un objetivo en un plan de trabajo verificado. Úsalo antes de ejecutar cuando la tarea es amplia o ambigua."
+    },
+    {
+      "id": "oracle",
+      "provenance": "omo",
+      "funcion": "Consultor de solo lectura para depuración difícil y diseño de arquitectura.",
+      "cuandoUsar": "Consultor de solo lectura para razonamiento de alta dificultad: depuración compleja y diseño de arquitectura. Úsalo cuando un problema se resiste o hay que decidir entre alternativas."
+    },
+    {
+      "id": "librarian",
+      "provenance": "omo",
+      "funcion": "Investigador de código y documentación externos: repositorios remotos y documentación oficial.",
+      "cuandoUsar": "Investigador de código externo: analiza repositorios remotos, recupera documentación oficial y busca ejemplos de uso. Úsalo para entender una librería o un patrón ajeno."
+    },
+    {
+      "id": "explore",
+      "provenance": "omo",
+      "funcion": "Buscador contextual del propio código: localiza dónde está cada cosa.",
+      "cuandoUsar": "Búsqueda contextual dentro del código: responde dónde está algo y qué archivo lo implementa. Lánzalo en paralelo para reconocer un módulo desconocido."
+    },
+    {
+      "id": "multimodal-looker",
+      "provenance": "omo",
+      "funcion": "Lector de PDF, imágenes y diagramas que no son texto plano.",
+      "cuandoUsar": "Intérprete de material no textual: PDF, imágenes y diagramas. Úsalo cuando el detalle está en un archivo que no es texto plano."
+    },
+    {
+      "id": "metis",
+      "provenance": "omo",
+      "funcion": "Analista previo a la planificación: intenciones ocultas, ambigüedades y fallos previsibles.",
+      "cuandoUsar": "Consultor previo a la planificación: detecta intenciones ocultas, ambigüedades y puntos donde la IA suele fallar. Úsalo antes de planificar algo complejo."
+    },
+    {
+      "id": "momus",
+      "provenance": "omo",
+      "funcion": "Revisor de planes: evalúa claridad, verificabilidad y completitud.",
+      "cuandoUsar": "Revisor de planes: evalúa claridad, verificabilidad y completitud. Úsalo para contrastar un plan antes de ejecutarlo."
+    },
+    {
+      "id": "atlas",
+      "provenance": "omo",
+      "funcion": "Ejecutor que recorre la lista de tareas pendientes y las completa.",
+      "cuandoUsar": "Ejecutor de planes: recorre la lista de tareas pendientes y las completa una a una hasta terminar. Úsalo para vaciar un plan ya escrito."
+    },
+    {
+      "id": "sisyphus-junior",
+      "provenance": "omo",
+      "funcion": "Ejecutor enfocado sin delegación, con la disciplina de Sisyphus.",
+      "cuandoUsar": "Ejecutor enfocado: misma disciplina que Sisyphus pero sin delegar. Úsalo para una unidad de trabajo acotada."
+    },
+    {
+      "id": "judge",
+      "provenance": "beta",
+      "displayName": "Judge",
+      "mode": "primary",
+      "funcion": "Auditor de aceptación independiente y adversarial (capa beta separada).",
+      "cuandoUsar": "Auditor de aceptación independiente y adversarial: verifica trabajo terminado con evidencia y emite APROBADO, RECHAZADO o BLOQUEADO, sin implementar arreglos. Úsalo solo cuando pidas explícitamente juzgar, auditar o probar algo."
+    }
+  ],
+  "skills": [
+    {
+      "id": "ast-grep",
+      "provenance": "omo",
+      "funcion": "Busca y reescribe código por forma (AST) en 25 lenguajes.",
+      "uso": "Úsala cuando el objetivo es un patrón sintáctico (todas las llamadas con cierta forma, un codemod), no texto literal."
+    },
+    {
+      "id": "browser",
+      "provenance": "omo",
+      "funcion": "Controla un navegador real desde el kernel de evaluación JavaScript.",
+      "uso": "Úsala para sitios con sesión iniciada, formularios, páginas renderizadas por JS, capturas y QA web."
+    },
+    {
+      "id": "coding-agent-sessions",
+      "provenance": "omo",
+      "funcion": "Encuentra, lee y reconstruye sesiones de agentes de código locales.",
+      "uso": "Úsala para buscar conversaciones, transcripciones o ejecuciones pasadas y recuperar qué hizo una sesión anterior."
+    },
+    {
+      "id": "data-scientist",
+      "provenance": "omo",
+      "funcion": "Procesa y analiza datos con motores residentes (DuckDB, Polars).",
+      "uso": "Úsala para CSV, parquet o JSON, agrupaciones, series temporales, limpieza o gráficos."
+    },
+    {
+      "id": "debugging",
+      "provenance": "omo",
+      "funcion": "Ejecuta un ciclo de depuración guiado por hipótesis en cualquier lenguaje o binario.",
+      "uso": "Úsala ante cuelgues, fallos silenciosos, respuestas erróneas, fugas de memoria o ingeniería inversa."
+    },
+    {
+      "id": "frontend",
+      "provenance": "omo",
+      "funcion": "Construye, estiliza y pule interfaces y experiencia web.",
+      "uso": "Úsala para cualquier página, componente, maquetación, animación o tarea de calidad visual."
+    },
+    {
+      "id": "git-master",
+      "provenance": "omo",
+      "funcion": "Resuelve trabajo de git: commits atómicos, rebase, squash, blame, bisect y reflog.",
+      "uso": "Úsala cuando haga falta un commit o investigar el historial; no para ediciones normales de código."
+    },
+    {
+      "id": "init-deep",
+      "provenance": "omo",
+      "funcion": "Inicializa una base de conocimiento AGENTS.md jerárquica para un proyecto.",
+      "uso": "Úsala cuando un repositorio necesite documentar para agentes su estructura, comandos y convenciones."
+    },
+    {
+      "id": "lsp-setup",
+      "provenance": "omo",
+      "funcion": "Configura un servidor de lenguaje para el tooling del editor y del agente.",
+      "uso": "Úsala cuando un proyecto necesite un LSP o aparezca el aviso de que no hay servidor LSP."
+    },
+    {
+      "id": "programming",
+      "provenance": "omo",
+      "funcion": "Aplica práctica moderna estricta (errores tipados, match exhaustivo, tests que pueden fallar) en Python, Rust, TypeScript y Go.",
+      "uso": "Úsala al trabajar con archivos .py, .rs, .ts o .go."
+    },
+    {
+      "id": "refactor",
+      "provenance": "omo",
+      "funcion": "Guía una refactorización, limpieza o reestructuración con la descomposición correcta.",
+      "uso": "Úsala cuando pidan refactorizar, simplificar, extraer o modernizar código."
+    },
+    {
+      "id": "remove-ai-slops",
+      "provenance": "omo",
+      "funcion": "Elimina olores de código generado por IA detrás de tests de regresión.",
+      "uso": "Úsala para limpiar cambios recientes de código generado por IA."
+    },
+    {
+      "id": "review-work",
+      "provenance": "omo",
+      "funcion": "Revisión de puerta tras implementar: QA manual real y un único revisor de control.",
+      "uso": "Úsala antes de entregar un PR o cuando pidan revisar trabajo terminado."
+    },
+    {
+      "id": "ultimate-browsing",
+      "provenance": "omo",
+      "funcion": "Renderiza, maneja y captura páginas web, incluidos hosts bloqueados por WAF.",
+      "uso": "Úsala para fuentes renderizadas por JS, inicios de sesión persistentes y capturas como prueba."
+    },
+    {
+      "id": "ulw-execute",
+      "provenance": "omo",
+      "funcion": "Ejecuta un plan de trabajo escrito con estado, registro de evidencia y subagentes en paralelo.",
+      "uso": "Úsala cuando pidan ejecutar un plan guardado en .omo/plans."
+    },
+    {
+      "id": "ulw-plan",
+      "provenance": "omo",
+      "funcion": "Consultor de planificación que escribe un plan de trabajo completo antes de programar.",
+      "uso": "Úsala solo cuando se pida el flujo ulw-plan o un plan previo a la implementación."
+    },
+    {
+      "id": "ulw-research",
+      "provenance": "omo",
+      "funcion": "Investigación a máxima saturación con equipo cooperativo y un entregable citado.",
+      "uso": "Úsala cuando pidan investigación o una indagación profunda."
+    },
+    {
+      "id": "visual-qa",
+      "provenance": "omo",
+      "funcion": "QA visual rigurosa en web, terminal y superficies paginadas, con capturas y veredicto.",
+      "uso": "Úsala para cualquier cambio de UI o cuando pregunten si algo se ve bien."
+    },
+    {
+      "id": "defuddle",
+      "provenance": "beta",
+      "funcion": "Extrae markdown limpio de páginas web quitando ruido y navegación.",
+      "uso": "Úsala en lugar de descargar la página cuando dan una URL para leer, resumir o investigar."
+    },
+    {
+      "id": "github-public-writing",
+      "provenance": "beta",
+      "funcion": "Escribe o audita contenido público de repositorios GitHub con claridad.",
+      "uso": "Úsala para README, documentación pública, tablas de compatibilidad y metadatos del repositorio."
+    },
+    {
+      "id": "json-canvas",
+      "provenance": "beta",
+      "funcion": "Crea y edita archivos JSON Canvas (.canvas) con nodos, aristas y grupos.",
+      "uso": "Úsala para lienzos visuales, mapas mentales y diagramas que conectan ideas."
+    },
+    {
+      "id": "juez-repo",
+      "provenance": "beta",
+      "funcion": "Audita un repositorio de GitHub como lo vería un reclutador o cliente potencial.",
+      "uso": "Úsala cuando pidan auditar el repositorio o revisar si está listo para mostrar."
+    },
+    {
+      "id": "juez-tester",
+      "provenance": "beta",
+      "funcion": "Diagnostica y corrige un problema, o autoaudita trabajo terminado antes de la revisión.",
+      "uso": "Úsala cuando se pida reparar y validar, o para devolver una autoevaluación antes de la auditoría."
+    },
+    {
+      "id": "obsidian-bases",
+      "provenance": "beta",
+      "funcion": "Crea y edita Bases de Obsidian (.base) con vistas, filtros y fórmulas.",
+      "uso": "Úsala para organizar notas en tablas, tarjetas o listas."
+    },
+    {
+      "id": "obsidian-cli",
+      "provenance": "beta",
+      "funcion": "Opera bóvedas de Obsidian por CLI y permite desarrollar plugins o temas.",
+      "uso": "Úsala para leer, crear y buscar notas, tareas y propiedades de una bóveda."
+    },
+    {
+      "id": "obsidian-markdown",
+      "provenance": "beta",
+      "funcion": "Crea y edita Markdown con sintaxis de Obsidian.",
+      "uso": "Úsala para wikilinks, embeds, callouts, propiedades y etiquetas."
+    },
+    {
+      "id": "obsidian-second-brain-audit",
+      "provenance": "beta",
+      "funcion": "Audita una bóveda para que funcione como un segundo cerebro enlazado.",
+      "uso": "Úsala cuando las notas queden desconectadas o pidan estructurar la bóveda."
+    },
+    {
+      "id": "obsidian-vault-writing-rules",
+      "provenance": "beta",
+      "funcion": "Impone escritura profesional en bóvedas: sin monolitos, con jerarquía y enlaces.",
+      "uso": "Úsala en cualquier tarea que cree o edite documentación dentro de una bóveda."
+    },
+    {
+      "id": "opencode-multi-auth-fix",
+      "provenance": "beta",
+      "funcion": "Diagnostica errores de cuentas del plugin multi-auth de Codex.",
+      "uso": "Úsala ante mensajes como falta de cuentas disponibles o token expirado."
+    },
+    {
+      "id": "prompt-master",
+      "provenance": "beta",
+      "funcion": "Escribe o mejora prompts de OpenCode listos para copiar.",
+      "uso": "Úsala cuando pidan un prompt para un agente de OpenCode o mejorar uno existente."
+    },
+    {
+      "id": "skill-creator",
+      "provenance": "beta",
+      "funcion": "Crea nuevas skills, mejora las existentes y mide su rendimiento.",
+      "uso": "Úsala para crear una skill desde cero, editarla u optimizar su descripción."
+    },
+    {
+      "id": "tui-design",
+      "provenance": "beta",
+      "funcion": "Diseña, construye y revisa interfaces de terminal.",
+      "uso": "Úsala para crear paneles, exploradores o vistas interactivas en la terminal."
+    }
+  ],
+  "commands": [
+    {
+      "id": "rigel-v2:version",
+      "surface": "rigel-v2",
+      "name": "version",
+      "queHace": "Imprime la versión del producto Rigel V2.",
+      "queToca": "Solo lectura de la versión compilada; no modifica estado."
+    },
+    {
+      "id": "rigel-v2:get-local-version",
+      "surface": "rigel-v2",
+      "name": "get-local-version",
+      "queHace": "Compara la versión en marcha con la publicada.",
+      "queToca": "Lee la versión local y la remota; no cambia nada."
+    },
+    {
+      "id": "rigel-v2:doctor",
+      "surface": "rigel-v2",
+      "name": "doctor",
+      "queHace": "Ejecuta diagnósticos de salud de Rigel V2 en cuatro categorías.",
+      "queToca": "Inspecciona sistema, configuración, herramientas y modelos; no altera el estado."
+    },
+    {
+      "id": "rigel-v2:install",
+      "surface": "rigel-v2",
+      "name": "install",
+      "queHace": "Instala o refresca la superficie Rigel V2 para una plataforma.",
+      "queToca": "Con --platform opencode solo refresca el runtime dentro del laboratorio aislado (opencode-v2-lab); rechaza mover la instalación fuera de él y nunca toca tu OpenCode V1. No es la ruta pública: esa es script/agent/setup.sh más rigel-v2-user-install.mjs install --version 1. Las plataformas codex y native delegan en sus instaladores."
+    },
+    {
+      "id": "rigel-v2:uninstall",
+      "surface": "rigel-v2",
+      "name": "uninstall",
+      "queHace": "Desinstala la superficie Rigel V2 para una plataforma.",
+      "queToca": "Con --platform opencode quita la entrada del runtime del laboratorio aislado y borra el runtime y el estado de activación; se niega si la configuración no registra ese runtime y nunca toca tu OpenCode V1. Las plataformas codex y native delegan en sus desinstaladores."
+    },
+    {
+      "id": "rigel-v2:ulw-loop",
+      "surface": "rigel-v2",
+      "name": "ulw-loop",
+      "queHace": "Resuelve e imprime el comando del componente ulw-loop de Codex.",
+      "queToca": "Solo resuelve y muestra el comando; no ejecuta el bucle."
+    },
+    {
+      "id": "rigel-v2:worktree-sweep",
+      "surface": "rigel-v2",
+      "name": "worktree-sweep",
+      "queHace": "Barre worktrees de git obsoletos en un repositorio.",
+      "queToca": "Por defecto elimina los worktrees fusionados y limpios del repositorio; con --dry-run solo informa. Nunca barre prefijos protegidos."
+    },
+    {
+      "id": "rigel-v2:boulder",
+      "surface": "rigel-v2",
+      "name": "boulder",
+      "queHace": "Inspecciona el estado nativo de boulder y continuidad de Rigel V2.",
+      "queToca": "Lee y muestra el estado de trabajo persistente; no lo altera."
+    },
+    {
+      "id": "rigel-v2:refresh-model-capabilities",
+      "surface": "rigel-v2",
+      "name": "refresh-model-capabilities",
+      "queHace": "Resuelve el catálogo de modelos del host V2 a una instantánea de capacidades.",
+      "queToca": "Lee el catálogo del host V2 y escribe la instantánea en el estado de Rigel del laboratorio aislado; no toca el código del proyecto."
+    },
+    {
+      "id": "rigel-v2:ast-grep",
+      "surface": "rigel-v2",
+      "name": "ast-grep",
+      "queHace": "Aprovisiona el binario sg para la skill ast-grep.",
+      "queToca": "Descarga y coloca el binario sg; no toca el código del proyecto."
+    },
+    {
+      "id": "omo:install",
+      "surface": "omo",
+      "name": "install",
+      "queHace": "Instala y configura el producto padre Oh My OpenCode con un asistente.",
+      "queToca": "Configura el producto padre; no configura Oh My Rigel."
+    },
+    {
+      "id": "omo:setup",
+      "surface": "omo",
+      "name": "setup",
+      "queHace": "Asistente interactivo de configuración del producto padre.",
+      "queToca": "Configura el producto padre Oh My OpenCode; no es Oh My Rigel."
+    },
+    {
+      "id": "omo:run",
+      "surface": "omo",
+      "name": "run",
+      "queHace": "Ejecuta OpenCode en modo no interactivo con cierre por todos y tareas en segundo plano.",
+      "queToca": "Lanza una sesión y escribe el estado de sesión del producto padre."
+    },
+    {
+      "id": "omo:doctor",
+      "surface": "omo",
+      "name": "doctor",
+      "queHace": "Comprueba la salud de la instalación del producto padre.",
+      "queToca": "Inspecciona la instalación y los modelos del producto padre; no cambia Oh My Rigel."
+    },
+    {
+      "id": "omo:get-local-version",
+      "surface": "omo",
+      "name": "get-local-version",
+      "queHace": "Muestra la versión instalada del producto padre y busca actualizaciones.",
+      "queToca": "Lectura de versión; no modifica estado."
+    },
+    {
+      "id": "omo:config",
+      "surface": "omo",
+      "name": "config",
+      "queHace": "Gestiona la configuración unificada de OMO, incluida la migración.",
+      "queToca": "Migra configuración heredada a ~/.omo/omo.jsonc."
+    },
+    {
+      "id": "omo:cleanup",
+      "surface": "omo",
+      "name": "cleanup",
+      "queHace": "Limpia el estado gestionado de Codex Light (caché y marketplace) y repara artefactos Codex locales del proyecto.",
+      "queToca": "Solo admite --platform codex; no desinstala OmO ni Oh My Rigel y no toca tu OpenCode V1."
+    },
+    {
+      "id": "omo:refresh-model-capabilities",
+      "surface": "omo",
+      "name": "refresh-model-capabilities",
+      "queHace": "Refresca la instantánea de capacidades de modelos basada en models.dev.",
+      "queToca": "Reescribe la caché de capacidades de modelos."
+    },
+    {
+      "id": "omo:version",
+      "surface": "omo",
+      "name": "version",
+      "queHace": "Muestra información de versión del producto padre.",
+      "queToca": "Solo lectura."
+    },
+    {
+      "id": "omo:boulder",
+      "surface": "omo",
+      "name": "boulder",
+      "queHace": "Muestra el progreso de boulder, el tiempo y las estadísticas por tarea.",
+      "queToca": "Lectura del estado de boulder."
+    },
+    {
+      "id": "omo:worktree-sweep",
+      "surface": "omo",
+      "name": "worktree-sweep",
+      "queHace": "Informa y, con --apply, elimina worktrees de git obsoletos.",
+      "queToca": "Por defecto solo informa (dry-run); con --apply elimina y poda. No elimina worktrees bloqueados ni fusionados sin verificar."
+    },
+    {
+      "id": "omo:ulw-loop",
+      "surface": "omo",
+      "name": "ulw-loop",
+      "queHace": "Ejecuta el CLI ulw-loop de Codex LazyCodex.",
+      "queToca": "Ejecuta el bucle y escribe su propio estado."
+    },
+    {
+      "id": "omo:mcp",
+      "surface": "omo",
+      "name": "mcp",
+      "queHace": "Gestiona MCP: inicio y cierre de sesión OAuth y estado.",
+      "queToca": "Registra o revoca credenciales OAuth de servidores MCP."
+    },
+    {
+      "id": "slash:goal",
+      "surface": "slash",
+      "name": "goal",
+      "queHace": "Fija, muestra, pausa, reanuda o limpia el objetivo persistente de la sesión.",
+      "queToca": "Escribe el objetivo de la sesión actual."
+    },
+    {
+      "id": "slash:refactor",
+      "surface": "slash",
+      "name": "refactor",
+      "queHace": "Refactorización guiada con LSP, ast-grep, análisis de arquitectura y verificación.",
+      "queToca": "Puede editar el código del proyecto, siempre con verificación."
+    },
+    {
+      "id": "slash:ulw-execute",
+      "surface": "slash",
+      "name": "ulw-execute",
+      "queHace": "Ejecuta una sesión de trabajo de Atlas a partir de un plan de Prometheus.",
+      "queToca": "Ejecuta el plan; puede crear worktrees y PRs."
+    },
+    {
+      "id": "slash:stop-continuation",
+      "surface": "slash",
+      "name": "stop-continuation",
+      "queHace": "Detiene todos los mecanismos de continuación de la sesión.",
+      "queToca": "Detiene bucles de continuación, todos y boulder; no borra trabajo hecho."
+    },
+    {
+      "id": "slash:remove-ai-slops",
+      "surface": "slash",
+      "name": "remove-ai-slops",
+      "queHace": "Quita olores de código de IA de los cambios de la rama y los revisa.",
+      "queToca": "Puede editar archivos del proyecto."
+    },
+    {
+      "id": "slash:handoff",
+      "surface": "slash",
+      "name": "handoff",
+      "queHace": "Crea un resumen de contexto para continuar en una sesión nueva.",
+      "queToca": "Genera un resumen; no cambia el código."
+    },
+    {
+      "id": "slash:hyperplan",
+      "surface": "slash",
+      "name": "hyperplan",
+      "queHace": "Planificación adversarial multiagente mediante team-mode.",
+      "queToca": "Coordina varios miembros de equipo para planificar; no edita código."
+    },
+    {
+      "id": "slash:btw",
+      "surface": "slash",
+      "name": "btw",
+      "queHace": "Abre una conversación lateral efímera con el agente.",
+      "queToca": "Crea una sesión lateral aislada; no toca el hilo principal."
+    },
+    {
+      "id": "slash:side",
+      "surface": "slash",
+      "name": "side",
+      "queHace": "Alias de la conversación lateral.",
+      "queToca": "Igual que la conversación lateral: sesión aislada sin tocar el hilo principal."
+    }
+  ]
+}

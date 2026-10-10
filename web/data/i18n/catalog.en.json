@@ -1,0 +1,1027 @@
+{
+  "schemaVersion": 1,
+  "document": "catalog.json",
+  "locale": "en",
+  "coverage": {
+    "fields": [
+      "areas[].name",
+      "functions[].nombre",
+      "functions[].que_es",
+      "functions[].modo_de_activacion",
+      "functions[].como_se_usa",
+      "functions[].cuando_sirve",
+      "functions[].requisitos",
+      "functions[].valores_por_defecto"
+    ],
+    "note": "W6 complete EN overlay: area names plus every function field the catalogue renders (nombre, que_es, modo_de_activacion, como_se_usa, cuando_sirve, requisitos, valores_por_defecto). Id-anchored; ids and structural fields stay exactly as catalog.json declares them."
+  },
+  "areas": {
+    "A": {
+      "name": "Agents and delegation"
+    },
+    "B": {
+      "name": "Sessions and continuity"
+    },
+    "C": {
+      "name": "Conversation context and compaction"
+    },
+    "D": {
+      "name": "Work and editing tools"
+    },
+    "E": {
+      "name": "Code search and editor help"
+    },
+    "F": {
+      "name": "Rules, specialized guides, and commands"
+    },
+    "G": {
+      "name": "Tasks and todos"
+    },
+    "H": {
+      "name": "Teams and isolated workspaces"
+    },
+    "I": {
+      "name": "Notifications and integrations"
+    },
+    "J": {
+      "name": "Connections and external services"
+    },
+    "K": {
+      "name": "Command interface, panel, and diagnostics"
+    },
+    "L": {
+      "name": "Failure recovery, model fallback, and permissions"
+    },
+    "M": {
+      "name": "Runtime monitoring and updates"
+    },
+    "N": {
+      "name": "Configuration, installation, and startup"
+    }
+  },
+  "functions": {
+    "catalogo-de-agentes": {
+      "nombre": "Agent catalog",
+      "que_es": "Brings together all the available specialists and their ways of working.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: ask for it directly: \"which specialists do you have available and what does each one do?\"; you also see it when you request a delegation.",
+      "cuando_sirve": "Before a big job, you look at which specialist is worth bringing in and the orchestrator chooses with judgment.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "orquestador-principal": {
+      "nombre": "Main orchestrator",
+      "que_es": "Takes your request, decides the plan and hands out the work. The way it works adapts to the model you use.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: you get it by default, write your task and it hands out the work on its own. If you want to tune its style, you ask by chat.",
+      "cuando_sirve": "You ask \"implement this feature and leave the tests green\" and the work gets handed out without you directing it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "agente-autonomo": {
+      "nombre": "Autonomous agent",
+      "que_es": "Runs long work on its own, without step-by-step supervision.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: it needs the compatible AI service connected and with a valid session; without that it doesn't show up. When it's there, you ask by chat like any other delegation.",
+      "cuando_sirve": "You hand off a long cleanup of the project (duplicates, outdated documentation) and leave it running while you go to lunch.",
+      "requisitos": "It only appears if you have a compatible AI service connected.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "planificador": {
+      "nombre": "Planner",
+      "que_es": "Prepares a plan before touching the code. It can only write text documents.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: you ask for a plan: \"make me a plan for X, without touching code yet\".",
+      "cuando_sirve": "Before migrating a library used across the whole project, you see the plan in writing and review it yourself.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ejecutor-de-planes": {
+      "nombre": "Plan executor",
+      "que_es": "Carries out an approved plan, step by step.",
+      "modo_de_activacion": "Visible command",
+      "como_se_usa": "Visible command: `/ulw-execute` starts the plan execution and that's where this executor comes in.",
+      "cuando_sirve": "Once you've reviewed the previous day's plan, you put it in motion in this same session.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "manos-delegadas": {
+      "nombre": "Delegated hands",
+      "que_es": "Does the heavy lifting that the orchestrator assigns to it.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the orchestrator brings it in on its own when handing out work; you don't invoke it directly.",
+      "cuando_sirve": "You asked for a three-layer feature and it's this \"working hand\" that types the code underneath.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "especialistas-de-consulta": {
+      "nombre": "Consultation specialists",
+      "que_es": "Search within the project, external research, plan review, image analysis and expert advice.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: you ask for the role you need (\"search for it in the project\", \"review that plan for me\", \"look at this screenshot\") or you let the orchestrator decide.",
+      "cuando_sirve": "Before coding the visual area, you ask for one review of the plan and another of your interface screenshots.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "delegar-una-tarea-a-un-especialista": {
+      "nombre": "Delegate a task to a specialist",
+      "que_es": "Hands work to a specific agent or by task type, in the foreground or background.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: say it directly: \"I delegate X to specialist Y\", or add \"in the background\" so the conversation isn't blocked.",
+      "cuando_sirve": "You delegate the interface tweaks while you keep reviewing the API in the main conversation.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "categorias-de-trabajo": {
+      "nombre": "Work categories",
+      "que_es": "Group tasks by type and pick the right model for each one.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it picks the model based on the task type. Setting: the categories section of your configuration lets you tune which model goes into each category.",
+      "cuando_sirve": "You want trivial work to go to a cheap model and the architecture to be signed off by the good model: you note that down in the categories.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "compatibilidad-de-modelos-por-agente": {
+      "nombre": "Model compatibility per agent",
+      "que_es": "They prevent agent and model combinations that don't work and reroute to a compatible agent.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: you don't touch anything.",
+      "cuando_sirve": "You picked a new model and it doesn't fit a specialist: the work jumps to another compatible specialist without failing midway.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "guia-de-edicion-para-modelos-gpt": {
+      "nombre": "Editing guide for GPT models",
+      "que_es": "Gives correct editing instructions depending on the model.",
+      "modo_de_activacion": "Automatic with that family",
+      "como_se_usa": "Automatic with that family: there's nothing to turn on, it only acts when the chosen model is from the GPT family.",
+      "cuando_sirve": "With a model from that family, you stop seeing malformed patches or repeated editing warnings.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "recordatorio-para-usar-especialistas": {
+      "nombre": "Reminder to use specialists",
+      "que_es": "Suggests delegating when it's worth it, with a limit per conversation.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it reaches you as a suggestion inside the conversation; you decide whether to heed it or not.",
+      "cuando_sirve": "You go through several requests in a row without delegating anything and it reminds you the search specialist exists before you burn through the context.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "trabajo-en-segundo-plano": {
+      "nombre": "Background work",
+      "que_es": "Runs long work without blocking the conversation and notifies you when it finishes.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: add \"in the background\" to your request. Setting: the number of simultaneous jobs and the watchdog times are changed in the `background_task` section of the configuration.",
+      "cuando_sirve": "You kick off the regeneration of three large documents and carry on with your part without waiting on the chat.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "elegir-el-modelo-de-un-agente": {
+      "nombre": "Choose an agent's model",
+      "que_es": "Sets a specific model or a fallback list per agent or category.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: in the agents section of your configuration, you set the agent's model field, with a backup list if the first one fails.",
+      "cuando_sirve": "You prefer a specific model for the design specialist and another as a spare part if the main one goes down.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "by default the recommended models are used."
+    },
+    "retirar-agentes-concretos": {
+      "nombre": "Remove specific agents",
+      "que_es": "You can leave out the agents you don't want.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: the `disabled_agents` option in your configuration, with the list of names you want out.",
+      "cuando_sirve": "There's a specialist your team never uses: you turn it off and the catalog stays clean.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "consultar-y-retomar-sesiones": {
+      "nombre": "View and resume sessions",
+      "que_es": "Lists, reads and searches earlier conversations.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: \"list my sessions\", \"search earlier sessions...\", \"resume Tuesday's\".",
+      "cuando_sirve": "\"On Wednesday we discussed the payment design; find that conversation and continue from there.\"",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "retomar-una-tarea-delegada": {
+      "nombre": "Resume a delegated task",
+      "que_es": "Returns to the same child conversation without starting from scratch.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: you ask it to continue that delegation; the same child conversation reopens, not a new one.",
+      "cuando_sirve": "The morning's delegation got cut off by the network and you want to pick up right where it stopped, without repeating the context.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "continuidad-de-pendientes": {
+      "nombre": "Pending-work continuity",
+      "que_es": "Picks the work back up when the conversation goes idle with items pending.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: if the session goes quiet with items pending, it picks up on its own; it does nothing if you asked it to stop or there's active work.",
+      "cuando_sirve": "You step out for 15 minutes and by the time you're back it has been completing the remaining steps.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "parar-los-bucles-automaticos": {
+      "nombre": "Stop automatic loops",
+      "que_es": "Stops automatic work and cancels whatever was left pending.",
+      "modo_de_activacion": "Visible command",
+      "como_se_usa": "Visible command: `/stop-continuation` halts all automatic work in this session (pending items, goal mode, work state).",
+      "cuando_sirve": "Goal mode keeps insisting on something you no longer want: you cut it off without closing the program.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "estado-de-trabajo-persistente": {
+      "nombre": "Persistent work state",
+      "que_es": "Saves the active plan and progress so they survive restarts.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when running a plan it saves progress and notes; you don't touch anything.",
+      "cuando_sirve": "You close the program by accident; on reopening, it knows where the plan was and you resume where it left off.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ejecutar-un-plan-guardado": {
+      "nombre": "Run a saved plan",
+      "que_es": "Resumes the plan, prepares notes, and switches to the executor.",
+      "modo_de_activacion": "Visible command",
+      "como_se_usa": "Visible command: `/ulw-execute` resumes the saved plan and hands you over to the executor in this session.",
+      "cuando_sirve": "You left the plan ready yesterday; today you resume it at the same point with a single line.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "conversaciones-laterales": {
+      "nombre": "Side conversations",
+      "que_es": "Opens a separate conversation without cluttering the main one.",
+      "modo_de_activacion": "Visible command",
+      "como_se_usa": "Visible command: `/btw <your question>` opens a separate conversation (alias `/side`); you return to the main one with double `Esc`, and `Ctrl+C` on an empty side conversation deletes only that one.",
+      "cuando_sirve": "While the agent runs, `/btw what risk does this dependency carry?` without adding noise to the main thread.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ciclo-de-vida-de-la-conversacion": {
+      "nombre": "Conversation lifecycle",
+      "que_es": "Detects start, end, inactivity, and errors to clean up and recover.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it cleans up and repairs on start, finish, or hang; you only notice because the session stays usable.",
+      "cuando_sirve": "After a program crash, you resume without dragging along remnants of a dead session.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "despertar-al-terminar-una-tarea-de-fondo": {
+      "nombre": "Wake up when a background task finishes",
+      "que_es": "Wakes the main conversation with the result.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: you do nothing; the result enters the main chat when the background task finishes.",
+      "cuando_sirve": "A long audit finishes and the report is already waiting in your main chat.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "consultar-el-progreso-del-plan": {
+      "nombre": "Check plan progress",
+      "que_es": "Shows how far the active plan has advanced from a terminal.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: command `omo boulder` (with `--json` if you prefer clean data); you check without touching the chat.",
+      "cuando_sirve": "You open another terminal tab to see how much of the plan has advanced without disturbing the chat.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "conservar-contexto-al-compactar": {
+      "nombre": "Preserve context when compacting",
+      "que_es": "When summarizing a long conversation, it keeps the important parts and the delegated history.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when summarizing, it keeps decisions and delegated history; you notice because the agent doesn't \"forget\" what was agreed.",
+      "cuando_sirve": "After two hours of work, the summary keeps the task allocation and the session's agreements.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "conservar-pendientes-al-compactar": {
+      "nombre": "Preserve pending items when compacting",
+      "que_es": "Doesn't lose the pending list when summarizing.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the step list survives the summary.",
+      "cuando_sirve": "The chat was compacted and the \"3 tasks remaining\" list is still complete with its steps.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "recuperacion-al-llegar-al-limite-de-contexto": {
+      "nombre": "Recovery when reaching the context limit",
+      "que_es": "Summarizes on its own when the model runs out of space.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it happens on its own when nearing the limit; the conversation compresses without breaking.",
+      "cuando_sirve": "An all-day session reaches the limit and keeps working with the automatic summary.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "compactacion-anticipada": {
+      "nombre": "Early compaction",
+      "que_es": "Summarizes before reaching the limit, with an adjustable threshold.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `experimental.preemptive_compaction: true` in your configuration (experimental, ships off).",
+      "cuando_sirve": "You work with very long sessions and prefer it to summarize with margin, not when it's already blocking.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "reunir-contexto-de-varias-fuentes": {
+      "nombre": "Gather context from several sources",
+      "que_es": "Collects context contributions and places them in the turn.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the contributions come together and enter the same turn; there's nothing to request.",
+      "cuando_sirve": "An analysis, a notice, and a delegated contribution arrive together and the agent reads them as one coherent turn.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "reparar-mensajes-mal-formados": {
+      "nombre": "Repair malformed messages",
+      "que_es": "Fixes unanswered calls and invalid message queues before sending.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it repairs before sending; you'll notice fewer \"unanswered call\" errors.",
+      "cuando_sirve": "A delegated task was cut off halfway: the conversation doesn't hang or break the next turn.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "restaurar-el-modo-tras-compactar": {
+      "nombre": "Restore the mode after compacting",
+      "que_es": "Re-activates the work mode you had.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: after a summary you return to the same mode; there's no need to remind the agent.",
+      "cuando_sirve": "You were in worker mode; after compacting, it keeps going without asking you anything.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "contexto-del-proyecto-al-leer-archivos": {
+      "nombre": "Project context when reading files",
+      "que_es": "Adds the project instructions and the presentation files to the read result.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when reading files, your project instructions arrive too. You keep those instructions written in the project.",
+      "cuando_sirve": "You ask to read a file and the repository's style conventions are already respected, without repeating them every time.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "bloque-de-entorno": {
+      "nombre": "Environment block",
+      "que_es": "Gives the agent context about date, language, and time zone.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: date, language, and time zone go with every turn. Setting: it can be turned off with `experimental.disable_omo_env` (experimental).",
+      "cuando_sirve": "You ask \"prepare today's report for me\" and the plan uses your real date and language without asking you.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "recortar-salidas-muy-largas": {
+      "nombre": "Trim very long outputs",
+      "que_es": "Trims huge results so they don't fill the context.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it trims out of the box. Setting: there is an additional aggressive mode with `experimental.aggressive_truncation` (off out of the box).",
+      "cuando_sirve": "The agent processed a log of thousands of lines and the context doesn't die on it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "An experimental aggressive mode exists, off., Setting: an additional aggressive mode exists with `experimental.aggressive_truncation` (off from the factory)."
+    },
+    "poda-dinamica-del-contexto": {
+      "nombre": "Dynamic context pruning",
+      "que_es": "A setting recognized by the configuration, with no active behavior documented in this preview.",
+      "modo_de_activacion": "Not exposed yet",
+      "como_se_usa": "Not exposed yet: the option exists among the experimental settings (`experimental.dynamic_context_pruning`), but in this preview there is no documented active behavior: turning the key on doesn't guarantee any effect.",
+      "cuando_sirve": "Not yet: when it exists, it will be useful for very long sessions where every old turn gets in the way. Today it's a name in the configuration, not a feature you can use.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "escritura-segura-de-archivos": {
+      "nombre": "Safe file writes",
+      "que_es": "Prevents overwriting a file you didn't read in that conversation.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: if the agent tries to write without reading first, it's blocked and has to read first.",
+      "cuando_sirve": "The agent is about to overwrite an existing file based on what it imagines: the guard stops it and makes it read.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "edicion-con-anclas-de-linea": {
+      "nombre": "Line-anchored editing",
+      "que_es": "Edits by line references that prevent stale changes.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `hashline_edit: true` in your config (off by default); after that, edits use line anchors.",
+      "cuando_sirve": "In a file another agent is touching at the same time, patches don't land on stale lines.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "revision-de-comentarios": {
+      "nombre": "Comment review",
+      "que_es": "Blocks low-quality auto-generated comments.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: the comment review utility must be installed (it ships separately); without it, this does nothing. When present, it acts automatically; exceptions are marked in the code itself (`// @allow` on a line, or the exclusion marker in the file header).",
+      "cuando_sirve": "The agent drops a vague auto-generated comment and the guard blocks it before it reaches the commit.",
+      "requisitos": "It activates if the review tool is installed; it accepts marked exceptions.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "proteccion-de-notas": {
+      "nombre": "Note protection",
+      "que_es": "Prevents overwriting notes that should only be appended to.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the agent can only append to those notes, not rewrite them.",
+      "cuando_sirve": "Your work log: the agent adds today's entry and doesn't erase the history already written.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "preferir-la-lectura-de-archivos": {
+      "nombre": "Prefer reading files",
+      "que_es": "Warns when a command reads files crudely and recommends normal reading.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: you'll see the warning in the chat when a command tries to read files in a raw way.",
+      "cuando_sirve": "The agent tries to dump a file through the terminal: the warning sends it back to normal reading, which the model understands better.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "formato-de-planes": {
+      "nombre": "Plan format",
+      "que_es": "Fixes the format of plans and warns about badly written rows.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when writing or reviewing a plan it fixes and warns about misplaced rows.",
+      "cuando_sirve": "A plan row comes out wrong by hand: it flags it before the executor breaks it down incorrectly.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ajuste-de-imagenes": {
+      "nombre": "Image resizing",
+      "que_es": "Shrinks very large images before sending them to the model.",
+      "modo_de_activacion": "Automatic with its condition",
+      "como_se_usa": "Automatic with its condition: it acts only with the services that need it; there's nothing to turn on.",
+      "cuando_sirve": "You attach a huge screenshot and it arrives already shrunk, without the service rejecting it for size.",
+      "requisitos": "It activates with certain AI services.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "control-de-redirecciones-web": {
+      "nombre": "Web redirect control",
+      "que_es": "Limits redirects when reading pages.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when reading pages, unauthorized hops are limited.",
+      "cuando_sirve": "The agent fetches a page that endlessly hops between addresses and doesn't waste its turn going in circles.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-de-escritura-no-confirmada": {
+      "nombre": "Unconfirmed write warning",
+      "que_es": "Warns if a write doesn't confirm its data.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the warning appears in the chat if a write is left unconfirmed.",
+      "cuando_sirve": "The plan is saved but the response left no record: you'll see it and the write can be repeated.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "recuperacion-de-errores-de-edicion": {
+      "nombre": "Edit error recovery",
+      "que_es": "Helps recover when an edit fails.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when an edit fails, the correct retry is guided without asking you anything.",
+      "cuando_sirve": "The patch failed because the line changed: the agent re-reads and applies it again on its own.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "recuperacion-de-argumentos-mal-formados": {
+      "nombre": "Malformed argument recovery",
+      "que_es": "The base system already normalizes arguments before running.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the host system does it; you just notice fewer absurd failures.",
+      "cuando_sirve": "The agent wrote a crooked parameter: it gets normalized and the tool runs without drama.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "registro-y-control-de-herramientas": {
+      "nombre": "Tool registration and control",
+      "que_es": "Publishes the available tools according to your config and avoids exceeding limits.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: they're published according to your config, respecting the provider's tool limit. Extra families (monitoring, team mode, line-anchored editing) add tools only if they're turned on.",
+      "cuando_sirve": "In projects with a tool limit, the catalogue adjusts automatically and no tool gets left out by accident.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ordenes-escritas-dentro-del-mensaje": {
+      "nombre": "Commands written inside the message",
+      "que_es": "Runs the commands included in your message and shows the ones available.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: type `/` in the message box and the available commands are listed; when you send them, they expand on their own in the text.",
+      "cuando_sirve": "You half-remember a handoff command: you type `/` and `/handoff` shows up in the list.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "terminal-interactiva": {
+      "nombre": "Interactive terminal",
+      "que_es": "Manages terminal sessions for commands that need interaction.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: install a terminal organizer (for example, `tmux`) and turn on the `tmux` section of your config; without both, it doesn't appear. After that, you request it in chat.",
+      "cuando_sirve": "The agent needs to leave an editor or a live process running while it keeps working in another terminal.",
+      "requisitos": "It activates if you have a program installed that keeps and arranges several terminals in one window.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "etiquetas-de-pregunta": {
+      "nombre": "Question labels",
+      "que_es": "Shortens long labels in questions to the user.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: when the agent asks you something, the option labels arrive short and readable.",
+      "cuando_sirve": "When the agent asks with long-named options, the labels arrive on one clean, readable line.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-de-tarea-sin-respuesta": {
+      "nombre": "Unanswered task warning",
+      "que_es": "Warns if a delegated task ends without a response.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it warns you in the main chat if a delegation died without answering.",
+      "cuando_sirve": "The delegation failed into the void and you find out right away, not when you ask half an hour later.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "monitoreo-de-procesos": {
+      "nombre": "Process monitoring",
+      "que_es": "Watches long-running processes and shows their status.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `monitor.enabled: true` in your config (and optionally `allowed_commands` for the allowed programs); after that, you request it in chat.",
+      "cuando_sirve": "You ask to watch the test server while you fix other bugs, and you see its output by the minute.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "busqueda-de-contenido": {
+      "nombre": "Content search",
+      "que_es": "Searches text in your project with modes and limits.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "In chat: \"search where the token is validated\"; the agent handles filtering, modes and limits on its own.",
+      "cuando_sirve": "\"Where the invoice XML is generated, but only in the payments module\": it gets to the point without reading half the repo.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "busqueda-de-archivos": {
+      "nombre": "File search",
+      "que_es": "Finds files by pattern.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: \"find the tests for the new module\"; the agent works out the pattern for you.",
+      "cuando_sirve": "You need the three config files with similar names: the agent pulls them up in an instant.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ayuda-del-editor": {
+      "nombre": "Editor assistance",
+      "que_es": "Definitions, references, symbols, and diagnostics.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: install the language support (your environment's language server) for each language you use; once it's there, you ask for it by chat like any analysis.",
+      "cuando_sirve": "\"Who is affected by renaming this function?\": editor assistance answers with exact references, not guesses.",
+      "requisitos": "It activates if you have installed the specific help for the programming language that analyses code for the editor.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "busqueda-de-ejemplos-en-proyectos-publicos": {
+      "nombre": "Search for examples in public projects",
+      "que_es": "Finds real code examples published in other projects.",
+      "modo_de_activacion": "Via chat",
+      "como_se_usa": "By chat: \"find real examples of how this library is used.\"",
+      "cuando_sirve": "Before using a new flag, you see how others solved it in other projects, and it copies a proven pattern for you.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "busqueda-por-estructura-del-codigo": {
+      "nombre": "Search by code structure",
+      "que_es": "Finds and modifies snippets by their shape and meaning, not just by words.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: it needs the specialized guide installed; if your kit doesn't include it yet (which can still happen in this preview), the feature never becomes exposed. Once you have it, you ask by chat: \"every call that matches this pattern.\"",
+      "cuando_sirve": "Renaming an API pattern repeated in 12 places without missing a single odd case.",
+      "requisitos": "It activates if you install the matching specialized guide.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "busqueda-web": {
+      "nombre": "Web search",
+      "que_es": "Searches the internet through the search service you choose.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: choose the provider in the configuration (`websearch.provider`): the default one works without a key; the alternative one requires your service key. After that, you ask for it by chat.",
+      "cuando_sirve": "\"How is this new flag used?\" It searches the web with fresh sources instead of trusting the model's memory.",
+      "requisitos": "It activates when you connect a search service.",
+      "valores_por_defecto": "Setting: choose the provider in the configuration (`websearch.provider`): the default one works without a key;"
+    },
+    "reglas-del-proyecto": {
+      "nombre": "Project rules",
+      "que_es": "Applies local rules per file or always.",
+      "modo_de_activacion": "Setting + automatic",
+      "como_se_usa": "Setting + automatic: you write the project rules in its rule files, and they kick in on their own (for the whole project or just for certain folders).",
+      "cuando_sirve": "Your repo defines \"don't use such-and-such function\": the agent respects it without you repeating it on every task.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "guias-especializadas": {
+      "nombre": "Specialized guides",
+      "que_es": "Loads specific instructions when they're needed.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the agent loads the guide when the task calls for it. If you want to force it, mention the guide by name in your message.",
+      "cuando_sirve": "\"Follow the terminal interfaces guide\": the panel review comes in with its rules already loaded.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "conexiones-incluidas-en-una-guia-especializada": {
+      "nombre": "Connections included in a specialized guide",
+      "que_es": "A specialized guide can bring its own external connection, isolated per conversation.",
+      "modo_de_activacion": "Automatic with its condition",
+      "como_se_usa": "Automatic with its condition: you don't touch anything; it only applies if the guide that comes in needs its connection. Separate credentials are managed separately.",
+      "cuando_sirve": "The guide queries its official service with the correct session, without mixing it with your general connection.",
+      "requisitos": "It activates only if the specialized guide needs it.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "compatibilidad-con-claude-code": {
+      "nombre": "Claude Code compatibility",
+      "que_es": "Reuses agents, commands, connections, and automations from Claude Code.",
+      "modo_de_activacion": "Requirement with condition",
+      "como_se_usa": "Conditional requirement: it only works if that configuration already exists in your project or team; there's nothing to migrate by hand.",
+      "cuando_sirve": "Your team already has agents and commands defined for another environment: here they keep working the same way.",
+      "requisitos": "It activates if that configuration exists in your project or team.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ordenes-integradas": {
+      "nombre": "Built-in commands",
+      "que_es": "Ready-to-use shortcuts, for example refactoring or preparing a handoff.",
+      "modo_de_activacion": "Visible command",
+      "como_se_usa": "Visible command: the product's listed shortcuts are: `/goal`, `/refactor`, `/ulw-execute`, `/stop-continuation`, `/remove-ai-slops`, `/handoff`, and `/hyperplan` (the last one requires team mode to be on). They're typed in the message box.",
+      "cuando_sirve": "You want to review, refactor with judgment, and a TDD demonstration: you ask for `/refactor` and everything calls the right tools.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "palabras-clave-que-activan-modos": {
+      "nombre": "Keywords that activate modes",
+      "que_es": "One word in your message activates a working mode.",
+      "modo_de_activacion": "Keyword",
+      "como_se_usa": "Keyword: type `ulw` (or `ultrawork`), `team`, or `hyperplan` in the message and the mode kicks in without a command. Setting: with `keyword_detector.disabled_keywords` you turn off the ones that get in your way.",
+      "cuando_sirve": "\"ulw review the pending pull requests\": everything runs in worker mode without further ceremony.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "modo-de-trabajo-por-defecto": {
+      "nombre": "Default working mode",
+      "que_es": "Activates a mode without typing keywords.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `default_mode.ultrawork: true` (or `default_mode.goal: true`) turns the mode on at the start of every conversation (it ships off).",
+      "cuando_sirve": "Your daily work almost always runs in the same mode: you type no word and it's already on.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "modo-de-pensamiento-profundo": {
+      "nombre": "Deep thinking mode",
+      "que_es": "Raises the reasoning effort when you ask for it with one word.",
+      "modo_de_activacion": "Keyword",
+      "como_se_usa": "Keyword: put `think` or `ultrathink` in your message and it raises the reasoning effort for that request.",
+      "cuando_sirve": "\"ultrathink the scheduler's concurrency bug\" before it edits anything.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ajuste-del-razonamiento-en-cada-peticion": {
+      "nombre": "Reasoning adjustment on every request",
+      "que_es": "Adjusts the reasoning level and the control information sent to the AI service.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the reasoning level and control metadata are adjusted per turn; you don't touch anything.",
+      "cuando_sirve": "Everyday requests spend less effort; hard problems go slower without you setting it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "lista-de-pendientes": {
+      "nombre": "To-do list",
+      "que_es": "Shows and updates the steps of your work.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the agent keeps the list of steps as it goes; you see it in the panel and can ask it to break the list down or reassemble it by chat.",
+      "cuando_sirve": "You ask to break down \"migrate the billing module\" and you see the concrete steps with their status in the panel.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "sistema-de-tareas-de-archivo": {
+      "nombre": "File-based task system",
+      "que_es": "Tasks with state that survive the conversation.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `new_task_system_enabled: true` in your configuration (it ships off); after that, tasks save their state outside the conversation.",
+      "cuando_sirve": "You work for weeks in the same repository and want tasks that don't die when the chat is closed.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "modo-objetivo": {
+      "nombre": "Goal mode",
+      "que_es": "You set a goal and the system keeps at it until it's met.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `goal.enabled: true` in your configuration and restart. Visible command: after that, you use it with `/goal \"your goal\"` (and `/goal`, `/goal pause`, `/goal resume`, `/goal clear`).",
+      "cuando_sirve": "You left a medium-sized goal half-done: you set it and the system doesn't give up between turns.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "modo-equipo": {
+      "nombre": "Team mode",
+      "que_es": "Several agents coordinated in parallel, with per-role permissions, a mailbox, and an isolated copy of the repository per member.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `team_mode.enabled: true` in your configuration and restart. Keyword: after that, type `team` (or use `/hyperplan` for hostile planning) and define concrete teams in your configuration's teams folder.",
+      "cuando_sirve": "\"team: explore the repository from three angles\": several agents write at the same time, each in its isolated copy and without stepping on each other.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "visualizacion-en-paneles": {
+      "nombre": "Panel visualization",
+      "que_es": "Shows each agent in its own terminal panel.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `team_mode.tmux_visualization: true` and the terminal organizer installed (for example, `tmux`); only inside team mode.",
+      "cuando_sirve": "With the team running, each member is visible in its own panel and you follow progress at a glance.",
+      "requisitos": "It activates inside team mode if you have a program that shows and arranges several terminals in one window.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "limpieza-de-copias-de-trabajo": {
+      "nombre": "Worktree cleanup",
+      "que_es": "Removes repository copies that are no longer used.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: command `omo worktree-sweep` (by default it only reports; with `--apply` it actually removes; supports `--older-than` and `--json`).",
+      "cuando_sirve": "After three weeks of branches and experiments, you clean up the already merged copies without deleting anything live.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "Terminal: command `omo worktree-sweep` (by default it only reports;"
+    },
+    "notificacion-al-terminar-o-pedir-permiso": {
+      "nombre": "Notification on completion or permission request",
+      "que_es": "Alerts you outside the chat when the agent finishes or needs something.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: enable session alerts in the `notification` section of your configuration; if you also use the host program's native alert, choose only one of the two routes to avoid double alerts.",
+      "cuando_sirve": "You go to another window with music and the system alert brings you back right when the agent asks permission to run something.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-de-fin-de-tarea-de-fondo": {
+      "nombre": "Background task completion notice",
+      "que_es": "Notifies you when a background agent finishes.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: nothing to configure; the notice appears in the main chat when it finishes.",
+      "cuando_sirve": "The background index rebuild is done and you know it without refreshing anything.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "progreso-de-tareas-en-el-panel": {
+      "nombre": "Task progress in the panel",
+      "que_es": "Shows the progress of delegated tasks.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the progress of your delegations appears in the panel. Setting: it can be turned off in your configuration, in the disabled parts section.",
+      "cuando_sirve": "You launched three delegations and you see which one is advancing and which is stuck without asking in the chat.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "sugerencia-de-edicion-nativa": {
+      "nombre": "Native editing suggestion",
+      "que_es": "Offers to switch to native editing just once.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: the notice about switching to native editing mode is shown only once; you can accept it or silence it and it won't insist again.",
+      "cuando_sirve": "It suggests native editing mode at the start; if you're not interested, you silence it and the chat goes on as usual.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-de-instalacion-antigua": {
+      "nombre": "Old installation notice",
+      "que_es": "Detects an old installation and warns you.",
+      "modo_de_activacion": "Automatic with its condition",
+      "como_se_usa": "Automatic with its condition: it acts only if it detects leftovers from an old installation; it will tell you at startup or on update. With an up-to-date installation, you won't see anything.",
+      "cuando_sirve": "You switched computers and copied the old configuration: the notice points out what's worth reviewing.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "barra-lateral": {
+      "nombre": "Sidebar",
+      "que_es": "Side panel with project and agent status.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: it comes visible from the factory. Setting: `tui.sidebar.enabled: false` hides it.",
+      "cuando_sirve": "On a small laptop you need the full width for the chat: you hide it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "integracion-con-discord-telegram-servicios-web-y-comandos-del-sistema": {
+      "nombre": "Integration with Discord, Telegram, web services, and system commands",
+      "que_es": "Sends alerts outside the chat and lets you reply from another channel, a web address, or a system command.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: in the `openclaw` section of your configuration turn on `enabled: true`, set the outbound channel and the credentials (Discord or Telegram bot token, a web address, or a system command), and restart. After that, alerts go to the channel and you can answer from it.",
+      "cuando_sirve": "You go out: the alert reaches your phone via Telegram and you reply from there without going back to the terminal.",
+      "requisitos": "It activates when you configure an external integration.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "autorizacion-de-servicios-externos": {
+      "nombre": "External service authorization",
+      "que_es": "Signs in and out of services that require it.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: `omo mcp oauth login <service> --server-url <url>` to sign in (the authorization page opens outside the chat); it may ask for a client identifier and permissions if the service needs them; `omo mcp oauth status [service]` checks the status and `omo mcp oauth logout <service> --server-url <url>` signs out.",
+      "cuando_sirve": "You connect an external service for the first time without pasting tokens by hand or touching secret files.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "servicio-alternativo-de-inteligencia-artificial": {
+      "nombre": "Alternative artificial intelligence service",
+      "que_es": "Adds an extra model catalog.",
+      "modo_de_activacion": "External requirement",
+      "como_se_usa": "External requirement: store a valid credential for the extra service; then the additional model catalog appears and you choose them like any other.",
+      "cuando_sirve": "There's a specific model your main provider doesn't have: you connect the extra service and use it when it's worth it.",
+      "requisitos": "Only if you store a valid credential.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "catalogo-y-capacidades-de-modelos": {
+      "nombre": "Model catalog and capabilities",
+      "que_es": "Refreshes the list of models and their capabilities.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: `omo refresh-model-capabilities` whenever you want. Setting: in the `model_capabilities` section of your configuration you can leave automatic refresh at startup enabled.",
+      "cuando_sirve": "They announce a new model today and you want your installation to already know its limits tomorrow.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "servicio-de-documentacion-unico": {
+      "nombre": "Single documentation service",
+      "que_es": "Maintains a single documentation connection to avoid duplicates.",
+      "modo_de_activacion": "Automatic with its condition",
+      "como_se_usa": "Automatic with its condition: the built-in documentation connection is ready from the factory and is shared only once per conversation. Setting: if you bring your own connection, you disable it in your configuration (list of disableable connections, `disabled_mcps`).",
+      "cuando_sirve": "You already had your own documentation connection: you turn off the built-in one and stop seeing duplicate answers.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "Automatic with its condition: the built-in documentation connection is ready from the factory and is shared only once per conversation."
+    },
+    "conexiones-opcionales": {
+      "nombre": "Optional connections",
+      "que_es": "Lets you connect, only if you decide to, services for repositories, databases, isolated environments, or security analysis.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: in your configuration you add only the connections you want (repositories, databases, isolated environments, security analysis) with their credentials; without configuring anything, none appears.",
+      "cuando_sirve": "You need to query your real database: you add that connection and it activates; the rest of the catalog stays untouched.",
+      "requisitos": "It only activates when you pick and configure one of those connections.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "programa-controlado-con-ordenes-escritas": {
+      "nombre": "Program controlled with written commands",
+      "que_es": "Lets you install, check, and maintain the product by typing commands in a terminal.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: the main command is `omo` followed by the subcommand (the documents also use the alternative name `oh-my-openagent`; both refer to the same program).",
+      "cuando_sirve": "You install, check, and maintain the product from a terminal, without opening the chat at all.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "diagnostico-de-salud": {
+      "nombre": "Health diagnostics",
+      "que_es": "Checks system, configuration, tools, and models.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: `omo doctor`.",
+      "cuando_sirve": "Something is off with the tools or the models: a single command tells you which part is failing.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "version-y-actualizacion": {
+      "nombre": "Version and update",
+      "que_es": "Shows the current version and whether there is a new one.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: `omo version` shows the version; `omo get-local-version` shows the installed one and checks whether there is a new one.",
+      "cuando_sirve": "Before reporting a problem, you confirm your version and whether an update that solves it already exists.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "instalacion-y-desinstalacion": {
+      "nombre": "Installation and uninstallation",
+      "que_es": "Installs, updates, reverts, and uninstalls the product.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: the official installation is the project's one-line installer (`curl -fsSL https://get.omo.dev/install.sh | bash` on Linux, macOS, or WSL; its PowerShell equivalent for Windows) or the Bun variant `bunx oh-my-openagent install`; uninstallation has its uninstall/cleanup command (`uninstall` or `cleanup`).",
+      "cuando_sirve": "You get a new computer: one line and the product is installed with everything verified; if you change your mind, it's removed cleanly.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "instalacion-para-otras-ediciones": {
+      "nombre": "Installation for other editions",
+      "que_es": "Installs the Codex edition, the native edition, or the development edition.",
+      "modo_de_activacion": "Terminal with condition",
+      "como_se_usa": "Terminal with a condition: they install with the same installer by choosing an edition or channel (the installation guide describes how to choose channel and version); some editions require explicit authorization before installing.",
+      "cuando_sirve": "On the test machine you only want the light edition and you install it by choosing that channel; the other edition doesn't come in without your permission.",
+      "requisitos": "Some require an explicit authorization.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "bucle-de-trabajo-de-codex": {
+      "nombre": "Codex work loop",
+      "que_es": "Runs the loop of the Codex edition.",
+      "modo_de_activacion": "Terminal with condition",
+      "como_se_usa": "Terminal with a condition: if that component is installed, `omo ulw-loop` passes your arguments to the continuous work loop; without the component, that command isn't available.",
+      "cuando_sirve": "You need long looped work from that edition for overnight tests: you launch it and it keeps running.",
+      "requisitos": "It activates if the component is available.",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "gestion-y-migracion-de-configuracion": {
+      "nombre": "Configuration management and migration",
+      "que_es": "Reads, merges and updates your configuration.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: on startup it reads and merges your configuration. Terminal: to move from the old format to the new one, `omo config migrate` (and `--dry-run` to preview without writing anything).",
+      "cuando_sirve": "You have the configuration from the previous installation: you consolidate it to the new format with its preview, without breaking anything.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "ejecucion-sin-interaccion": {
+      "nombre": "Execution without interaction",
+      "que_es": "Runs a task and finishes without interaction.",
+      "modo_de_activacion": "Terminal",
+      "como_se_usa": "Terminal: `omo run \"<your task>\"` (with `--agent` to pin the agent) runs, finishes and exits; the host program itself resolves it.",
+      "cuando_sirve": "In an overnight routine, you generate the day's report and the session closes by itself when it finishes.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "version-minima-del-sistema": {
+      "nombre": "Minimum system version",
+      "que_es": "Checks that the host program has the right version.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: on startup it checks the host; if it falls short, it tells you without continuing halfway.",
+      "cuando_sirve": "You updated the editor and something stopped working: the product warns you about the minimum version required at startup.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "respaldo-proactivo-de-modelo": {
+      "nombre": "Proactive model fallback",
+      "que_es": "Switches to an alternative model when one is planned.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `runtime_fallback: true` in your configuration (or an advanced object with retries and timings); it comes turned off.",
+      "cuando_sirve": "You know your plan runs out midway through a task: with the backup chain ready, the work switches models without you thinking about it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "respaldo-reactivo-ante-errores": {
+      "nombre": "Reactive fallback on errors",
+      "que_es": "Reacts to temporary artificial intelligence service errors and switches models.",
+      "modo_de_activacion": "Setting",
+      "como_se_usa": "Setting: `model_fallback: true` in your configuration; it comes turned off.",
+      "cuando_sirve": "The service runs out of quota halfway through the task: it switches to an alternative model and the task keeps going live.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "reintento-de-delegaciones": {
+      "nombre": "Delegation retry",
+      "que_es": "Retries a delegated task that failed.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: failed delegations are retried; you only notice that the work continued.",
+      "cuando_sirve": "The delegation hit a passing network error and seconds later it's moving forward again.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "vigilancia-de-agentes-inestables": {
+      "nombre": "Monitoring of unstable agents",
+      "que_es": "Detects agents that aren't progressing and recovers or stops them.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: a stuck agent is interrupted or resumes on its own; you see it as healthy activity, not eternal silence.",
+      "cuando_sirve": "An agent enters a loop with no way out: it's stopped in time without burning your whole quota.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-cuando-una-orden-no-puede-pedir-respuestas": {
+      "nombre": "Notice when a command can't ask for answers",
+      "que_es": "Prevents a version-control operation from waiting for an answer nobody can give it.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: an operation that would need to ask you in a place where nobody can answer is cut off with a warning.",
+      "cuando_sirve": "In an overnight run with no screen, a version control doesn't hang forever waiting for a question.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "permisos-por-agente": {
+      "nombre": "Per-agent permissions",
+      "que_es": "Limits what each agent can do.",
+      "modo_de_activacion": "Automatic with setting",
+      "como_se_usa": "Automatic with a setting: the ceiling of what each agent can do is defined by your permissions configuration; you fine-tune there what's left over in each role.",
+      "cuando_sirve": "The analysis-only specialist can't write to the repository: it can read everything and break nothing.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "aviso-de-nueva-version": {
+      "nombre": "New-version notice",
+      "que_es": "Checks whether there's a new version, once a day.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: at the start of the session it checks whether there's a new version, at most once a day, and shows it to you on startup. Setting: it's turned off in the updates section of your configuration (`auto_update`).",
+      "cuando_sirve": "You find out there's a new version without visiting anything; if the notice bothers you, you turn it off and that's it.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "Automatic: at session start it checks for a new version, at most once a day, and shows it to you on startup."
+    },
+    "estadisticas-anonimas-de-uso": {
+      "nombre": "Anonymous usage statistics",
+      "que_es": "Collects anonymous usage statistics to help improve the product.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: collects anonymous usage data (without the content of your conversations). Setting: it's turned off with `telemetry: false` in your configuration.",
+      "cuando_sirve": "On a team with a strict data policy: you turn it off when installing and everything else keeps working the same.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "registro-y-recibos-de-estado": {
+      "nombre": "Logging and status receipts",
+      "que_es": "Leaves a trail for diagnosing without exposing secrets.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: clean diagnostics free of secrets available when you need them.",
+      "cuando_sirve": "When reporting a failure, you attach the log without fear of leaking passwords or keys.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "carga-y-validacion-de-la-configuracion": {
+      "nombre": "Configuration loading and validation",
+      "que_es": "Reads your configuration, merges it and discards what's invalid without breaking the rest.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: you do nothing; what's invalid is discarded and what's healthy continues.",
+      "cuando_sirve": "With two configurations merged (personal and project), one misspelled key only loses that piece, not the whole session.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "registro-del-motor-de-trabajo": {
+      "nombre": "Work engine registration",
+      "que_es": "Registers the agents and starts the work engine.",
+      "modo_de_activacion": "Automatic",
+      "como_se_usa": "Automatic: nothing to do: on startup the agents are registered and the engine is ready.",
+      "cuando_sirve": "You open the program in the morning and the specialist catalogue is already operational without waiting.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    },
+    "funciones-antiguas-retiradas": {
+      "nombre": "Removed legacy functions",
+      "que_es": "Two old functions aren't carried over because they weren't part of the active product.",
+      "modo_de_activacion": "Not exposed yet",
+      "como_se_usa": "Not exposed yet: and it won't be: there's no setting or command that recovers them, because they weren't part of the active product.",
+      "cuando_sirve": "You were looking for one of those two options from the previous version and can't find it: you're not going to find it; everything else stays the same.",
+      "requisitos": "The catalogue declares no external requirement for this function; it activates automatically, via a setting, keyword, command or panel (see modo_de_activacion).",
+      "valores_por_defecto": "The catalogue declares no defaults other than the function state (recorded in `estado`)."
+    }
+  }
+}

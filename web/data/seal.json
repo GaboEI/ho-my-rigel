@@ -8,7 +8,10 @@
     "catalog.json",
     "agents.json",
     "chains.json",
-    "cli.json"
+    "cli.json",
+    "i18n/catalog.en.json",
+    "guide.json",
+    "i18n/guide.en.json"
   ],
-  "dataSha256": "42e6abeb4967a152c855aaa2fb1e9f761daee0491fcffa21203fed638a63916e"
+  "dataSha256": "3a8c934aab92cfab8c9b5604fdd71cab9845417b4eff4f74dd9d5e837b6a4d90"
 }

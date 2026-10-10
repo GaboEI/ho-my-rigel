@@ -59,7 +59,7 @@
   "install": {
     "documentedByCatalog": "curl -fsSL https://get.omo.dev/install.sh | bash ; bunx oh-my-openagent install ; uninstall/cleanup",
     "productParent": "The catalog's install/uninstall text describes the PARENT Oh My OpenCode install path.",
-    "omrReal": "Oh My Rigel's real install is the source lifecycle: `script/agent/setup.sh` then `node profiles/gabo/rigel-v2-user-install.mjs install --version 1` (or `rigel-v2 install --platform opencode`). See OH-MY-RIGEL.md."
+    "omrReal": "Oh My Rigel's real install is the source lifecycle: `script/agent/setup.sh` then `node profiles/gabo/rigel-v2-user-install.mjs install --version 1`. See OH-MY-RIGEL.md."
   },
   "warnings": [
     {
@@ -74,7 +74,7 @@
     },
     {
       "id": "omr-install-not-parent-install",
-      "text": "The catalog's install/uninstall command text corresponds to the PARENT product; Oh My Rigel installs from source via script/agent/setup.sh + rigel-v2-user-install.mjs (or `rigel-v2 install`). Preserved 1:1 from the catalog and flagged for W6/W7.",
+      "text": "The catalog's install/uninstall command text corresponds to the PARENT product; Oh My Rigel installs from source via script/agent/setup.sh + rigel-v2-user-install.mjs. Preserved 1:1 from the catalog and flagged for W6/W7.",
       "source": "OH-MY-RIGEL.md:76,84,157 ; profiles/gabo/rigel-v2-user-install.mjs:12"
     }
   ]

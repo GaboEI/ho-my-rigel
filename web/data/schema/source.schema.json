@@ -8,6 +8,7 @@
     { "type": "object", "required": ["schemaVersion", "roster", "agents"], "properties": { "schemaVersion": { "const": 1 } } },
     { "type": "object", "required": ["schemaVersion", "agents", "categories"], "properties": { "schemaVersion": { "const": 1 } } },
     { "type": "object", "required": ["schemaVersion", "owners", "warnings"], "properties": { "schemaVersion": { "const": 1 } } },
+    { "type": "object", "required": ["schemaVersion", "source", "agents", "skills", "commands"], "properties": { "schemaVersion": { "const": 1 } } },
     { "type": "object", "required": ["schemaVersion", "productVersion", "dataSha256"], "properties": { "schemaVersion": { "const": 1 } } }
   ],
   "$defs": {
@@ -226,8 +227,56 @@
         "baselineCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "algorithm": { "const": "sha256" },
         "canonical": { "const": "sorted-keys-json" },
-        "sealedFiles": { "const": ["catalog.json", "agents.json", "chains.json", "cli.json"] },
+        "sealedFiles": { "const": ["catalog.json", "agents.json", "chains.json", "cli.json", "i18n/catalog.en.json", "guide.json", "i18n/guide.en.json"] },
         "dataSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "guideAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provenance", "funcion", "cuandoUsar"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "provenance": { "enum": ["omo", "beta"] },
+        "funcion": { "type": "string", "minLength": 1 },
+        "cuandoUsar": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["primary", "subagent", "all"] }
+      }
+    },
+    "guideSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provenance", "funcion", "uso"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "provenance": { "enum": ["omo", "beta"] },
+        "funcion": { "type": "string", "minLength": 1 },
+        "uso": { "type": "string", "minLength": 1 }
+      }
+    },
+    "guideCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "surface", "name", "queHace", "queToca"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(rigel-v2|omo|slash):[a-z][a-z0-9-]*$" },
+        "surface": { "enum": ["rigel-v2", "omo", "slash"] },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "queHace": { "type": "string", "minLength": 1 },
+        "queToca": { "type": "string", "minLength": 1 }
+      }
+    },
+    "guideDoc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "source", "agents", "skills", "commands"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "source": { "type": "object" },
+        "agents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/guideAgent" } },
+        "skills": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/guideSkill" } },
+        "commands": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/guideCommand" } }
       }
     }
   }

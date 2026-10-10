@@ -176,3 +176,85 @@ enumerable figure rather than a coverage target it can verify.
 bun web/data/build-seal.mjs      # after any data edit
 bun test web/data/source.test.ts # verify schema, coverage, seal and anti-drift
 ```
+
+## W5/W6 static site
+
+Phase W5 added the publication generator under `web/site/`, and W6 completed
+the public ES/EN content over that generator. It is a dependency-free Bun static
+site, chosen after comparing Eleventy, Astro and MkDocs Material against the W5
+criteria. The generator consumes `web/data/` and does not redefine or fork the
+source.
+
+Commands from the repository root:
+
+```bash
+bun run web:check   # build and verify W3 routing, absolute SEO URLs and W4 CSS guardrails
+bun run web:build   # emit static files to web/site/dist/ (gitignored)
+bun run web:preview # build and serve a local preview at http://127.0.0.1:4173/oh-my-rigel/
+```
+
+The initial public base path is `/oh-my-rigel/`; generated links and canonical
+SEO URLs are serialized with that base path. The root generated page is a static
+language-selection gateway, not a redirect. W6 catalogue and guide prose is
+generated from the sealed ES source plus id-anchored EN overlays rather than
+placeholder W5 text; interface labels and cover framing live in `render.mjs`
+(`const UI`) and are guarded by render/check tests.
+
+### Security, performance and privacy decisions
+
+- One same-origin deferred script only (`assets/catalog.js`): it opens the
+  deep-linked `<details>` and wires the reusable copy control. No inline JS, no
+  third-party script, no `meta refresh`, no `window.location`; the only
+  navigation is an explicit link. `check.mjs` fails the build on any other
+  `<script>` tag or inline JS.
+- No third-party read-time dependency: one same-origin stylesheet, self-hosted
+  fonts, zero external subresources, no analytics, no cookies, no forms, no
+  client storage. The site is fully readable with network access denied other
+  than the origin.
+- GitHub Pages cannot set custom response headers, so no CSP/`X-Content-Type-Options`
+  header is available. The real mitigations are the single same-origin script and
+  the absence of any external resource; a `Content-Security-Policy` meta tag is
+  deferred until a dynamic surface exists (W7), where it becomes meaningful.
+- Performance: single ~22 KB CSS file; no font fetch from a third party; only the
+  latin subset of each face is shipped.
+
+### Self-hosted fonts (W4 identity)
+
+Newsreader (display/body) and IBM Plex Mono (code/labels) are self-hosted under
+`web/site/assets/fonts/` with `@font-face` rules and `rel="preload"`. Both are
+SIL OFL 1.1; the license texts and `PROVENANCE.md` (source URLs + sha256) ship
+with the fonts. `check.mjs` asserts `@font-face` exists and that the CSS contains
+no external font origin.
+
+### Bilingual overlays (W3 mechanism, W6 coverage)
+
+`web/data/i18n/catalog.en.json` and `web/data/i18n/guide.en.json` are the
+id-anchored EN overlays over the W2/W6 source. The catalog overlay covers all 14
+areas and every rendered field for the 107 functions; the guide overlay covers
+the agent, skill and command prose rendered by the public guide. Both overlays
+are listed in the seal (`SEALED_FILES`) so an unsealed edit fails the W2 suite;
+`source.test.ts` asserts they are id-anchored and carry only translatable fields.
+
+### Interaction components (W5)
+
+- Reusable copy control: every command/value block and the agent prompt use one component where a
+  two-sheets icon sits inside the same bordered row, right-aligned, with no visible label and no
+  external button. Success swaps to a check icon and announces Copiado/Copied through a live
+  region. Failure swaps to an error icon, marks the row with the error border and shows the same
+  message as visible text inside the row, so the feedback never depends on colour alone; both
+  states clear themselves. `assets/catalog.js` wires it and the exact text lives in `data-copy`.
+- Two-route install at the start of the Install section: an agent-prompt block whose text is the
+  canonical English prompt from `OH-MY-RIGEL.md` (byte-identical on ES and EN, pinned by
+  `web/site/render.test.ts` and `check.mjs`) and a manual route with the real guide commands and an
+  explicit working directory.
+- Catalogue open state is distinguishable without relying on colour or the `+/-` glyph alone, and
+  single-item definition rows never render empty grid tracks. Both are fail-closed in `check.mjs`.
+- Contrast: `web/site/contrast.test.ts` resolves the palette tokens for both themes and enforces
+  WCAG >= 4.5:1 text and >= 3:1 focus/indicator, including the visited state and both button states.
+
+### GitHub Actions boundary (W7 publishes)
+
+`.github/workflows/web-public.yml` builds and checks on PR/push to `v2-mirror`
+and only uploads a Pages artifact (no `actions/deploy-pages`). The remote Actions
+run is verified in the publication phase (W7); W5 records the static local
+proof and does not claim a live green run.

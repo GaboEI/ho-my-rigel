@@ -47,6 +47,12 @@ parallel: shared configuration, data, cache, plugin, or goal state can
 contaminate V1. If you cannot identify the active OpenCode version and every
 state path it uses, stop before installing Rigel.
 
+> **Scope note:** the OmO functionality ported to OpenCode V2 is confirmed. This
+> preview installation additionally includes an external **beta** layer of agents
+> (including a Judge) and skills from `profiles/gabo`, which is still being
+> polished. Keep that extra layer distinct from the confirmed OmO set; it is not a
+> finished product surface.
+
 ### Agent-first route
 
 Paste this prompt into Codex, OpenCode V2, or another coding agent:
