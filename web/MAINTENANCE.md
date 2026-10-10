@@ -2,7 +2,7 @@
 
 This policy keeps the published Oh My Rigel web guide synchronized with the repository and with the OpenCode V2 preview it documents.
 
-Published site: <https://gaboei.github.io/oh-my-rigel/>
+Published site: <https://omr.gabodev.dev/>
 
 ## Responsible Owner
 

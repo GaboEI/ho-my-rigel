@@ -30,7 +30,7 @@ const server = createServer(async (req, res) => {
   let file = resolvePath(url.pathname)
   if (!file) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" })
-    res.end("Outside /oh-my-rigel/ preview basePath")
+    res.end(`Outside ${basePath} preview basePath`)
     return
   }
   try {

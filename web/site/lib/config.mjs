@@ -1,6 +1,6 @@
 export const SITE = {
-  basePath: process.env.OMR_WEB_BASE_PATH ?? "/oh-my-rigel/",
-  origin: process.env.OMR_WEB_ORIGIN ?? "https://gaboei.github.io",
+  basePath: process.env.OMR_WEB_BASE_PATH ?? "/",
+  origin: process.env.OMR_WEB_ORIGIN ?? "https://omr.gabodev.dev",
   outDir: new URL("../dist/", import.meta.url),
   sourceDir: new URL("../../data/", import.meta.url),
 }

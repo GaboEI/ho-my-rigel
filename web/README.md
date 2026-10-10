@@ -5,7 +5,7 @@ generated from these files; product data is never written by hand into pages.
 This directory is established by phase W2 and consumed by W5 (generator), W6
 (content) and W7 (publication gates).
 
-The published guide is <https://gaboei.github.io/oh-my-rigel/>. Ongoing web
+The published guide is <https://omr.gabodev.dev/>. Ongoing web
 maintenance follows [MAINTENANCE.md](MAINTENANCE.md).
 
 ## Format and location decision
@@ -193,15 +193,17 @@ Commands from the repository root:
 ```bash
 bun run web:check   # build and verify W3 routing, absolute SEO URLs and W4 CSS guardrails
 bun run web:build   # emit static files to web/site/dist/ (gitignored)
-bun run web:preview # build and serve a local preview at http://127.0.0.1:4173/oh-my-rigel/
+bun run web:preview # build and serve a local preview at http://127.0.0.1:4173/
 ```
 
-The initial public base path is `/oh-my-rigel/`; generated links and canonical
-SEO URLs are serialized with that base path. The root generated page is a static
-language-selection gateway, not a redirect. W6 catalogue and guide prose is
-generated from the sealed ES source plus id-anchored EN overlays rather than
-placeholder W5 text; interface labels and cover framing live in `render.mjs`
-(`const UI`) and are guarded by render/check tests.
+The public base path is the domain root `/` on `https://omr.gabodev.dev/`;
+generated links and canonical SEO URLs are serialized with that root path. The
+root generated page is a static language-selection gateway, not a redirect. The
+former GitHub Pages project URL may still exist as a repository Pages origin, but
+this repository does not promise or implement a redirect from it. W6 catalogue and
+guide prose is generated from the sealed ES source plus id-anchored EN overlays
+rather than placeholder W5 text; interface labels and cover framing live in
+`render.mjs` (`const UI`) and are guarded by render/check tests.
 
 ### Security, performance and privacy decisions
 
@@ -261,4 +263,4 @@ are listed in the seal (`SEALED_FILES`) so an unsealed edit fails the W2 suite;
 and uploads a Pages artifact. Deployment to GitHub Pages is gated by manual
 `workflow_dispatch` with explicit publish confirmation on `v2-mirror`; ordinary
 PR or push runs do not deploy. The published guide is live at
-`https://gaboei.github.io/oh-my-rigel/`.
+`https://omr.gabodev.dev/`.

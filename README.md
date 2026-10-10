@@ -2,7 +2,7 @@
 
 Oh My Rigel is a community fork of [Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent) that brings the OmO agent harness to the OpenCode V2 plugin runtime.
 
-The public web guide is published at [gaboei.github.io/oh-my-rigel](https://gaboei.github.io/oh-my-rigel/).
+The public web guide is published at [omr.gabodev.dev](https://omr.gabodev.dev/).
 
 ## What It Provides
 
