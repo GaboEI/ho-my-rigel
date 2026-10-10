@@ -264,7 +264,7 @@ for (const file of htmlFiles) {
   assert(!/http-equiv=["']refresh/i.test(html), `${route} contains meta refresh`)
   assert(!/window\.location/i.test(html), `${route} contains window.location`)
   for (const tag of html.match(/<script\b[^>]*>/gi) || []) {
-    assert(tag.includes('src="/oh-my-rigel/assets/catalog.js"') && tag.includes("defer"), `${route} has a disallowed script: ${tag}`)
+    assert(tag.includes(`src="${publicPath("/assets/catalog.js")}"`) && tag.includes("defer"), `${route} has a disallowed script: ${tag}`)
   }
   const cmdCount = (html.match(/class="cmd"/g) || []).length
   const copyCount = (html.match(/class="copy"/g) || []).length
@@ -442,7 +442,7 @@ assert(esCatalogHtml.includes("Agentes y delegación"), "ES catalogue lost the s
 // critical URLs the site promises must be present. A rogue third-party link (tracer, CDN,
 // analytics) or a downgraded http origin fails the build naming the page and the exact URL.
 const EXTERNAL_ORIGIN_ALLOWLIST = new Set([
-  "gaboei.github.io", // the site's own GitHub Pages origin (absolute canonical/hreflang URLs)
+  "omr.gabodev.dev", // the site's own custom domain origin (absolute canonical/hreflang URLs)
   "github.com", // repository and issues
   "opencode.ai", // the host product's official V2 documentation
 ])
