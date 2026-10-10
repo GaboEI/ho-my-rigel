@@ -23,6 +23,26 @@ Use the canonical installation instructions in [OH-MY-RIGEL.md](OH-MY-RIGEL.md#i
 
 Do not use the upstream OmO install command to install Rigel. It installs the parent product, not this V2 preview.
 
+## Quick start
+
+Rigel installs from source for OpenCode V2; there is no public one-line installer. Start here:
+
+- Web install guide: <https://omr.gabodev.dev/#install>
+- Source install steps: [OH-MY-RIGEL.md → Install and run the V2 preview](OH-MY-RIGEL.md#install-and-run-the-v2-preview)
+
+Prerequisites: OpenCode V2, a POSIX shell, Git, Bun, and Node.js, with no active OpenCode V1 installation running in parallel (see [Compatibility](#compatibility)).
+
+Prepare the source checkout the guide describes:
+
+```bash
+git clone --branch v2-mirror --single-branch https://github.com/GaboEI/oh-my-rigel.git
+cd oh-my-rigel
+script/agent/setup.sh
+node profiles/gabo/validate-profile.mjs
+```
+
+Then continue with the remaining install steps in [OH-MY-RIGEL.md](OH-MY-RIGEL.md#install-and-run-the-v2-preview).
+
 ## Contribute
 
 Useful contributions include keeping confirmed OmO surfaces working as OpenCode V2 evolves, adding observable regression tests, reviewing upstream OmO changes for compatible value, reproducing host or beta-layer limitations, and improving public documentation.

@@ -15,6 +15,8 @@ const UPSTREAM_INSTALLER = "get.omo.dev/install.sh"
 const UPSTREAM_REPO = "github.com/code-yeongyu/oh-my-openagent"
 const OMR_SITE = "https://omr.gabodev.dev/"
 const OMR_REPO = "github.com/GaboEI/oh-my-rigel"
+const README_INSTALL_WEB = "https://omr.gabodev.dev/#install"
+const README_INSTALL_SOURCE = "OH-MY-RIGEL.md#install-and-run-the-v2-preview"
 
 type Docs = Record<string, string>
 const readEntryDocs = (): Docs => Object.fromEntries(ENTRY_DOCS.map((rel) => [rel, readFileSync(join(REPO, rel), "utf8")]))
@@ -25,6 +27,15 @@ describe("#given the public entry documentation #when its identity references ar
   test("#given the root README #when the official site is read #then it is the Oh My Rigel custom domain", () => {
     // given / when / then
     expect(readEntryDocs()["README.md"]).toContain(OMR_SITE)
+  })
+
+  test("#given the root README #when the install entry is read #then it routes a newcomer to the real install guide and source steps", () => {
+    // given
+    const readme = readEntryDocs()["README.md"]
+
+    // when / then
+    expect(readme).toContain(README_INSTALL_WEB)
+    expect(readme).toContain(README_INSTALL_SOURCE)
   })
 
   test("#given the entry docs #when the install commands are read #then the upstream OmO installer is never offered for Oh My Rigel", () => {
