@@ -207,19 +207,27 @@ rather than placeholder W5 text; interface labels and cover framing live in
 
 ### Security, performance and privacy decisions
 
-- One same-origin deferred script only (`assets/catalog.js`): it opens the
-  deep-linked `<details>` and wires the reusable copy control. No inline JS, no
-  third-party script, no `meta refresh`, no `window.location`; the only
+- One same-origin deferred script (`assets/catalog.js`): it opens the
+  deep-linked `<details>`, wires the reusable copy control and the header theme
+  picker. The only other script is one static, attribute-free inline snippet
+  pinned byte-for-byte by `check.mjs` (`THEME_INIT`): it applies the saved
+  Claro/Oscuro choice before first paint so navigation never flashes the wrong
+  theme. No third-party script, no `meta refresh`, no `window.location`; the only
   navigation is an explicit link. `check.mjs` fails the build on any other
   `<script>` tag or inline JS.
 - No third-party read-time dependency: one same-origin stylesheet, self-hosted
-  fonts, zero external subresources, no analytics, no cookies, no forms, no
-  client storage. The site is fully readable with network access denied other
-  than the origin.
-- GitHub Pages cannot set custom response headers, so no CSP/`X-Content-Type-Options`
-  header is available. The real mitigations are the single same-origin script and
-  the absence of any external resource; a `Content-Security-Policy` meta tag is
-  deferred until a dynamic surface exists (W7), where it becomes meaningful.
+  fonts, zero external subresources, no analytics, no cookies, no forms. The only
+  client storage is one key (`omr-theme`) holding the visitor's Claro/Oscuro
+  choice, read and written inside `try`/`catch` so a denied or full
+  `localStorage` leaves the site working and defaulting to Sistema. The site is
+  fully readable with network access denied other than the origin.
+- GitHub Pages cannot set custom response headers, so no
+  `X-Content-Type-Options` header is available. The real mitigations are the two
+  same-origin resources (the stylesheet and `assets/catalog.js`) and the absence
+  of any external subresource. The theme init is inline, so a
+  `Content-Security-Policy` now has a meaningful surface: it can allow that one
+  snippet by its `sha256` hash instead of `unsafe-inline`, and `check.mjs` pins
+  the snippet so the hash stays stable.
 - Performance: single ~22 KB CSS file; no font fetch from a third party; only the
   latin subset of each face is shipped.
 
@@ -248,6 +256,15 @@ are listed in the seal (`SEALED_FILES`) so an unsealed edit fails the W2 suite;
   region. Failure swaps to an error icon, marks the row with the error border and shows the same
   message as visible text inside the row, so the feedback never depends on colour alone; both
   states clear themselves. `assets/catalog.js` wires it and the exact text lives in `data-copy`.
+- Header theme picker: a compact control (current-mode icon + caret) opening a menu with Sistema,
+  Claro and Oscuro, on every localized page and localized ES/EN. It reads and writes the
+  `omr-theme` key, defaults to Sistema via `prefers-color-scheme`, uses only the existing Gruvbox
+  tokens, and its icon transition is gated on `prefers-reduced-motion`.
+- Header navigation: a minimal technical navbar (brand, six centered sections, utility controls).
+  Links carry no permanent underline; the active section (derived from the real route, including
+  nested routes) gets a 2px accent underline. Below 1024px the sections collapse into an
+  accessible menu (hamburger, `aria-expanded`/`aria-controls`, Escape to close) that also exposes
+  GitHub; the theme picker and language selector stay in the bar.
 - Two-route install at the start of the Install section: an agent-prompt block whose text is the
   canonical English prompt from `OH-MY-RIGEL.md` (byte-identical on ES and EN, pinned by
   `web/site/render.test.ts` and `check.mjs`) and a manual route with the real guide commands and an

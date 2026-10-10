@@ -14,7 +14,25 @@ const GITHUB_SVG = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true" foc
 const COPY_ICON = `<svg class="copy__icon copy__icon--copy" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M5.7 5.7V2.4A1.4 1.4 0 0 1 7.1 1h6.5A1.4 1.4 0 0 1 15 2.4v6.5a1.4 1.4 0 0 1-1.4 1.4h-3.3"/><rect fill="none" stroke="currentColor" stroke-width="1.4" x="1" y="5.7" width="9.3" height="9.3" rx="1.4"/></svg>`
 const CHECK_ICON = `<svg class="copy__icon copy__icon--done" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2.6 8.6 6.4 12.4 13.4 4"/></svg>`
 const ERROR_ICON = `<svg class="copy__icon copy__icon--error" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4.4 4.4 11.6 11.6M11.6 4.4 4.4 11.6"/></svg>`
-const MENU_SVG = `<svg class="nav-toggle__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M2 4h12M2 8h12M2 12h12"/></svg>`
+const MENU_SVG = `<svg class="nav-toggle__icon nav-toggle__icon--menu" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M2 4h12M2 8h12M2 12h12"/></svg>`
+const CLOSE_SVG = `<svg class="nav-toggle__icon nav-toggle__icon--close" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3.6 3.6 12.4 12.4M12.4 3.6 3.6 12.4"/></svg>`
+const SUN_SVG = `<svg class="theme-picker__icon--light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.1" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 2.7v2.5M12 18.8v2.5M2.7 12h2.5M18.8 12h2.5M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"/></svg>`
+const MOON_SVG = `<svg class="theme-picker__icon--dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.2 14.6A8.6 8.6 0 1 1 9.6 3.8a6.9 6.9 0 0 0 10.6 10.8z"/></svg>`
+const SYSTEM_SVG = `<svg class="theme-picker__icon--system" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.1" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M12 3.9a8.1 8.1 0 0 1 0 16.2z"/></svg>`
+const CARET_SVG = `<svg class="theme-picker__caret" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M2.5 4.5 6 8l3.5-3.5"/></svg>`
+
+// Pre-paint theme init. It runs in <head> before the stylesheet, so a saved Claro/Oscuro choice
+// is applied before first paint (no flash of the wrong theme). Static and identical on every page,
+// read once from localStorage inside try/catch (storage may be denied); an absent attribute means
+// Sistema. Kept as a constant so check.mjs can pin the exact text and a CSP can allow it by sha256.
+export const THEME_INIT = `(function(){try{var v=localStorage.getItem("omr-theme");if(v==="light"||v==="dark"){document.documentElement.setAttribute("data-theme",v)}}catch(e){}})()`
+
+// The theme control's user-facing copy, single-sourced so the renderer, the gate (check.mjs) and
+// the suite (theme.test.ts) agree on the ES/EN labels instead of restating them.
+export const THEME_COPY = {
+  es: { system: "Sistema", light: "Claro", dark: "Oscuro", options: "Sistema, claro u oscuro" },
+  en: { system: "System", light: "Light", dark: "Dark", options: "System, light or dark" },
+}
 
 // Canonical agent-first install prompt published in OH-MY-RIGEL.md ("Install and run the V2
 // preview" -> "Agent-first route"). Kept in ENGLISH so the ES and EN pages are byte-identical.
@@ -128,7 +146,7 @@ const UI = {
     name: "Español",
     short: "ES",
     skip: "Saltar al contenido",
-    navLabel: "Acceso rápido",
+    navLabel: "Navegación principal",
     menu: "Menú",
     langLabel: "Selector de idioma",
     activeLang: "idioma actual",
@@ -161,7 +179,7 @@ const UI = {
     installLead: "Instala desde la ruta fuente del repositorio.",
     betaNote: "La funcionalidad de OmO en OpenCode V2 está completa y confirmada. La instalación añade además una capa externa BETA de agentes (incluido un Juez) y skills del perfil, que se pulirá más adelante.",
     configureLead: "La configuración es declarativa y por capas.",
-    agentsSkillsCommands: "Agentes, skill y comandos",
+    agentsSkillsCommands: "Recursos",
     agentsBody: "Agentes: el equipo que planifica, delega y ejecuta tareas. Los agentes OmO del inventario llevan un modelo por defecto y una cadena de respaldo (fallback) cuando se declaran; ese es el detalle de qué IA los ejecuta.",
     skillsBody: "Skill: instrucciones especializadas que amplían cómo trabaja el agente en tareas concretas, sin cambiar el núcleo del producto.",
     commandsBody: "Comandos: acciones invocables para flujos concretos; se ejecutan cuando los necesitas. Cada ficha de la guía detalla qué hace y qué toca.",
@@ -269,7 +287,7 @@ const UI = {
     name: "English",
     short: "EN",
     skip: "Skip to content",
-    navLabel: "Quick access",
+    navLabel: "Main navigation",
     menu: "Menu",
     langLabel: "Language selector",
     activeLang: "current language",
@@ -302,7 +320,7 @@ const UI = {
     installLead: "Install from the repository source route.",
     betaNote: "The OmO functionality on OpenCode V2 is complete and confirmed. The installation additionally includes an external BETA layer of agents (including a Judge) and skills from the profile, to be polished later.",
     configureLead: "Configuration is declarative and layered.",
-    agentsSkillsCommands: "Agents, skills and commands",
+    agentsSkillsCommands: "Resources",
     agentsBody: "Agents: the team that plans, delegates and runs tasks. The OmO agents in the inventory carry a default model and a fallback chain when they are declared; that is the detail of which AI runs them.",
     skillsBody: "Skills: specialized instructions that extend how the agent works on specific tasks, without changing the product's core.",
     commandsBody: "Commands: invocable actions for concrete flows; you run them when you need them. Each guide card details what it does and what it touches.",
@@ -408,14 +426,16 @@ const UI = {
   },
 }
 
-// Anchors into the single-page cover (quick access), not separate top-level pages.
+// Anchors into the single-page cover (quick access), not separate top-level pages. The third
+// element maps an item to the route section it represents, so the active state is derived from
+// the real path (including nested routes) instead of a hardcoded first item.
 const NAV = [
-  ["benefits", "#benefits"],
-  ["relationship", "#relationship"],
-  ["install", "#install"],
-  ["configure", "#configure"],
-  ["agentsSkillsCommands", "#agentes-skill-comandos"],
-  ["lifecycle", "#lifecycle"],
+  ["benefits", "#benefits", "catalog"],
+  ["relationship", "#relationship", null],
+  ["install", "#install", null],
+  ["configure", "#configure", null],
+  ["agentsSkillsCommands", "#agentes-skill-comandos", "agents"],
+  ["lifecycle", "#lifecycle", null],
 ]
 
 // User-facing state vocabulary. Migration state ("v2") is never shown in the UI.
@@ -468,16 +488,28 @@ function sectionFor(pathWithoutLang) {
 }
 
 function languageSelector(lang, logicalPath) {
+  const t = UI[lang]
   const currentRest = stripLang(logicalPath)
-  return `<nav class="language" aria-label="${attr(UI[lang].langLabel)}">
-    ${LANGS.map((code) => {
-      const current = code === lang
-      const label = UI[code].short
-      const full = UI[code].name
-      const href = publicPath(langLogicalPath(code, currentRest))
-      return `<a class="language__link${current ? " is-active" : ""}" href="${attr(href)}" lang="${code}" hreflang="${code}" aria-label="${attr(full)}"${current ? ' aria-current="true"' : ""}>${label}${current ? ` <span class="visually-hidden">(${UI[lang].activeLang})</span>` : ""}</a>`
-    }).join("\n")}
-  </nav>`
+  const item = (code) => {
+    const current = code === lang
+    const href = publicPath(langLogicalPath(code, currentRest))
+    return `<li role="none"><a class="lang-picker__option${current ? " is-active" : ""}" href="${attr(href)}" lang="${code}" hreflang="${code}" aria-label="${attr(UI[code].name)}"${current ? ' aria-current="true"' : ""}>${htmlEscape(UI[code].name)}${current ? ` <span class="visually-hidden">(${htmlEscape(t.activeLang)})</span>` : ""}</a></li>`
+  }
+  return `<div class="lang-picker" data-lang-picker>
+    <button class="lang-picker__button" type="button" data-lang-menu-button aria-haspopup="true" aria-expanded="false" aria-controls="lang-menu" aria-label="${attr(t.langLabel)}">${htmlEscape(UI[lang].short)}</button>
+    <ul class="lang-picker__menu" id="lang-menu" data-lang-menu hidden>${LANGS.map(item).join("")}</ul>
+  </div>`
+}
+
+function themePicker(lang) {
+  const t = THEME_COPY[lang]
+  const option = (value, text) => `<li role="none"><button class="theme-picker__option" type="button" data-theme-option="${value}" aria-pressed="false">${htmlEscape(text)}</button></li>`
+  return `<div class="theme-picker" data-theme-switch>
+    <button class="theme-picker__button" type="button" data-theme-menu-button aria-haspopup="true" aria-expanded="false" aria-controls="theme-menu" aria-label="${attr(t.options)}">
+      <span class="theme-picker__icon" aria-hidden="true">${SUN_SVG}${MOON_SVG}${SYSTEM_SVG}</span>${CARET_SVG}
+    </button>
+    <ul class="theme-picker__menu" id="theme-menu" data-theme-menu hidden>${option("system", t.system)}${option("light", t.light)}${option("dark", t.dark)}</ul>
+  </div>`
 }
 
 function siteHeader(lang, logicalPath) {
@@ -489,17 +521,19 @@ function siteHeader(lang, logicalPath) {
       <a class="brand" href="${attr(publicPath(langLogicalPath(lang, "/")))}" aria-label="Oh My Rigel (${t.home})">
         <span class="brand__mark" aria-hidden="true">${STAR_SVG}</span><span class="brand__name">OMR</span>
       </a>
-      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">${MENU_SVG}<span>${htmlEscape(t.menu)}</span></button>
       <nav class="top-nav" id="site-nav" aria-label="${attr(t.navLabel)}">
-        ${NAV.map(([key, hash, labelKey]) => {
-          const active = key === currentSection
-          return `<a href="${attr(anchorPath(lang, hash))}"${active ? ' aria-current="true" class="is-active"' : ""}>${t[labelKey ?? key]}</a>`
+        ${NAV.map(([key, hash, section]) => {
+          const active = section !== null && section === currentSection
+          return `<a href="${attr(anchorPath(lang, hash))}"${active ? ' class="is-active" aria-current="page"' : ""}>${t[key]}</a>`
         }).join("\n")}
+        <a class="github-link" href="${GITHUB_URL}" aria-label="${attr(t.githubLabel)}" rel="external noopener">${GITHUB_SVG}<span>GitHub</span></a>
       </nav>
       <div class="header-actions">
+        ${themePicker(lang)}
         ${languageSelector(lang, logicalPath)}
-        <a class="github-link" href="${GITHUB_URL}" aria-label="${attr(UI[lang].githubLabel)}" rel="external noopener">${GITHUB_SVG}<span>GitHub</span></a>
+        <a class="github-link" href="${GITHUB_URL}" aria-label="${attr(UI[lang].githubLabel)}" rel="external noopener">${GITHUB_SVG}</a>
       </div>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="${attr(t.menu)}">${MENU_SVG}${CLOSE_SVG}</button>
     </div>
   </header>`
 }
@@ -537,6 +571,7 @@ function pageHead({ lang, logicalPath, title, description }) {
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="${attr(publicPath("/assets/favicon-16.svg"))}">
   <link rel="preload" href="${attr(publicPath("/assets/fonts/newsreader-latin-var.woff2"))}" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="${attr(publicPath("/assets/fonts/plex-mono-400-latin.woff2"))}" as="font" type="font/woff2" crossorigin>
+  <script>${THEME_INIT}</script>
   <link rel="stylesheet" href="${attr(publicPath("/assets/styles.css"))}">
   <script src="${attr(publicPath("/assets/catalog.js"))}" defer></script>`
 }
@@ -1065,6 +1100,7 @@ export function notFoundPage(source) {
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="${attr(publicPath("/assets/favicon-32.svg"))}">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="${attr(publicPath("/assets/favicon-16.svg"))}">
+  <script>${THEME_INIT}</script>
   <link rel="stylesheet" href="${attr(publicPath("/assets/styles.css"))}">
 </head>
 <body>

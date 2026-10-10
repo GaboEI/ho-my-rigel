@@ -246,3 +246,45 @@ describe("#given the cover what-is block #when read #then it positions OMR, keep
     }
   })
 })
+
+describe("#given the header navigation #when the route is read #then only the matching section is active", () => {
+  test("#given the cover #when scanned #then no nav item is marked active (never a hardcoded first item)", () => {
+    // given / when / then
+    for (const lang of ["es", "en"] as const) {
+      expect(HOME[lang].includes('class="is-active" aria-current="page"')).toBe(false)
+    }
+  })
+
+  test("#given the catalogue #when scanned #then Catálogo is the active section", () => {
+    // given / when / then
+    expect(CATALOG.en).toContain('href="/en/#benefits" class="is-active" aria-current="page"')
+  })
+
+  test("#given the nested guide #when scanned #then Recursos is the active section", () => {
+    // given / when / then
+    for (const lang of ["es", "en"] as const) {
+      expect(GUIDE[lang]).toContain(`href="/${lang}/#agentes-skill-comandos" class="is-active" aria-current="page"`)
+    }
+  })
+
+  test("#given each language page #when the nav is counted #then it carries the six localized sections", () => {
+    // given
+    const labels = {
+      es: ["Catálogo", "Proyecto", "Instalar", "Configurar", "Recursos", "Ciclo de vida"],
+      en: ["Catalogue", "Project", "Install", "Configure", "Resources", "Lifecycle"],
+    }
+    // when / then
+    for (const lang of ["es", "en"] as const) {
+      expect((HOME[lang].match(/class="top-nav"/g) || []).length).toBe(1)
+      for (const label of labels[lang]) expect(HOME[lang]).toContain(`>${label}</a>`)
+    }
+  })
+
+  test("#given the nav toggle #when rendered #then it carries the hamburger and close icons", () => {
+    // given / when / then
+    for (const lang of ["es", "en"] as const) {
+      expect(HOME[lang]).toContain('class="nav-toggle__icon nav-toggle__icon--menu"')
+      expect(HOME[lang]).toContain('class="nav-toggle__icon nav-toggle__icon--close"')
+    }
+  })
+})
