@@ -5,6 +5,9 @@ generated from these files; product data is never written by hand into pages.
 This directory is established by phase W2 and consumed by W5 (generator), W6
 (content) and W7 (publication gates).
 
+The published guide is <https://gaboei.github.io/oh-my-rigel/>. Ongoing web
+maintenance follows [MAINTENANCE.md](MAINTENANCE.md).
+
 ## Format and location decision
 
 **Format: JSON plus a JSON Schema.** Criteria: this repo already keeps all
@@ -255,6 +258,7 @@ are listed in the seal (`SEALED_FILES`) so an unsealed edit fails the W2 suite;
 ### GitHub Actions boundary (W7 publishes)
 
 `.github/workflows/web-public.yml` builds and checks on PR/push to `v2-mirror`
-and only uploads a Pages artifact (no `actions/deploy-pages`). The remote Actions
-run is verified in the publication phase (W7); W5 records the static local
-proof and does not claim a live green run.
+and uploads a Pages artifact. Deployment to GitHub Pages is gated by manual
+`workflow_dispatch` with explicit publish confirmation on `v2-mirror`; ordinary
+PR or push runs do not deploy. The published guide is live at
+`https://gaboei.github.io/oh-my-rigel/`.

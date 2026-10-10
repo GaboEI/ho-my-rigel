@@ -6,32 +6,36 @@ bringing the OmO feature set to the OpenCode V2 plugin runtime. Rigel targets
 OpenCode V2 exclusively. It is not a fork or distribution of OpenCode, which
 remains an independent dependency.
 
-## Feature-completeness before expansion
+## Confirmed OmO set before expansion
 
-The first goal is the complete OmO experience on V2. The migration should
-preserve agents, delegation, skills, permissions, tools, context handling, and
-continuity rather than reducing those surfaces to make the port easier.
+The confirmed OmO set on OpenCode V2 is the product baseline. Ongoing work
+preserves agents, delegation, skills, permissions, tools, context handling, and
+continuity as OpenCode V2 and upstream OmO change.
 
-Rigel-specific improvements are welcome after the project has a compatible
-base supported by repeatable tests and observable behavior. Until then, a
-feature that has no demonstrated V2 equivalent is a migration gap, not an
-optional simplification.
+Rigel-specific improvements are welcome only when they do not blur that
+baseline. A future upstream change, host API change, or newly reported
+regression must be classified against the confirmed set before it is treated as
+an enhancement.
 
-## V2 preview status
+## V2 scope and status
 
-The repository contains an active V2 developer preview. Current work includes
-native V2 agent registration, orchestration and delegation paths, permission
-handling, model routing, and prompt or context integration. These capabilities
-are useful foundations, but they do not establish feature-completeness on V2.
+The OmO functionality ported to OpenCode V2 is the confirmed product set. The
+public web inventory is backed by repository source data and gates that check
+coverage, prose, commands, links, and publication consistency. Those web gates do
+not prove exhaustive runtime equivalence for every behavior. The confirmed set
+includes the public OmO surfaces documented by the web guide for agents,
+delegation, skills, permissions, tools, model routing, context handling, and
+continuity.
 
-The preview has material limits:
+The source installation still has material limits:
 
-- The complete set of OmO agents, tools, hooks, skills, configuration, context,
-  and continuity behavior has not been demonstrated on V2.
-- Some behavior is still being ported or needs broader integration testing.
+- It additionally includes an external beta layer of agents and skills from
+  `profiles/gabo`, including a Judge agent, which remains separate from the
+  confirmed OmO set.
 - OpenCode V2 and its plugin API continue to evolve, so verified integrations
   may need adaptation as the host changes.
-- The preview is not ready for production use.
+- This is a source preview for an evolving OpenCode V2 host, not a production
+  support promise.
 - The source installation currently requires a POSIX shell, Git, Bun, Node.js,
   and an OpenCode configuration stored as JSON.
 
@@ -192,13 +196,13 @@ instead of trying a different config or running a second OpenCode installation.
 
 ## How to contribute
 
-Contributors can help without treating the preview as finished:
+Contributors can help maintain the confirmed OmO set while keeping the beta
+profile layer and evolving OpenCode V2 host integration distinct:
 
-- Port an OmO agent, tool, hook, skill, permission, or continuity surface to
-  the V2 plugin API.
-- Add tests for observable behavior on OpenCode V2.
+- Add regression tests for observable behavior on OpenCode V2.
 - Exercise an existing V2 surface and report reproducible successes, failures,
   or host API changes.
+- Review upstream OmO changes for compatible value before importing them.
 - Review integrations for lost context, weakened permissions, or behavior that
   only appears to work because a module loads.
 - Improve public documentation, examples, and migration notes while keeping
@@ -212,11 +216,12 @@ repository-wide setup and pull request expectations.
 
 ## Developer reading path
 
-1. Read this page for the product goal, preview status, and installation paths.
+1. Read this page for the product goal, V2 scope, and installation paths.
 2. Read [FORK.md](FORK.md) for the fork boundary and license constraints.
 3. Read [CONTRIBUTING.md](CONTRIBUTING.md) before preparing a change.
 4. Use the upstream [OmO documentation](https://omo.dev/docs) to understand the
-   feature being ported, then verify assumptions against this repository.
+   behavior being maintained or reviewed, then verify assumptions against this
+   repository.
 
 ## Upstream, attribution, and license
 

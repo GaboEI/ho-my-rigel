@@ -85,6 +85,8 @@ Good first contribution shapes include:
   load-time success.
 - Improve public setup, status, or architecture documentation without exposing
   credentials or machine-specific details.
+- When a change affects the public web guide, follow the same-change maintenance
+  rule in [web/MAINTENANCE.md](web/MAINTENANCE.md).
 
 For migration pull requests, describe:
 
