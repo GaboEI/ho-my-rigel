@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 
 import { absoluteUrl, publicPath, SITE } from "./lib/config.mjs"
 import { buildSite } from "./build.mjs"
-import { AGENT_PROMPT, GUIDE_LEAD, GITHUB_ISSUES_URL } from "./lib/render.mjs"
+import { AGENT_PROMPT, GUIDE_LEAD, GITHUB_ISSUES_URL, THEME_COPY, THEME_INIT } from "./lib/render.mjs"
 
 const outPath = fileURLToPath(SITE.outDir)
 
@@ -109,7 +109,7 @@ assert(routes.length === 32 && routeManifest.routes.length === 32, `published ro
 
 const rootHtml = await readFile(join(outPath, "index.html"), "utf8")
 assert(rootHtml.includes('id="benefits"') && rootHtml.includes('id="install"'), "root does not render the English cover journey")
-assert(rootHtml.includes('class="language"'), "root is missing the language selector")
+assert(rootHtml.includes("data-lang-picker"), "root is missing the language selector")
 assert(rootHtml.includes(`rel="canonical" href="${absoluteUrl("/en/")}"`), "root canonical must be the EN page")
 
 // W6 fail-closed structure gate: every area and every function must carry a visible summary
@@ -266,8 +266,17 @@ for (const file of htmlFiles) {
   const route = routeFromFile(file)
   assert(!/http-equiv=["']refresh/i.test(html), `${route} contains meta refresh`)
   assert(!/window\.location/i.test(html), `${route} contains window.location`)
-  for (const tag of html.match(/<script\b[^>]*>/gi) || []) {
-    assert(tag.includes(`src="${publicPath("/assets/catalog.js")}"`) && tag.includes("defer"), `${route} has a disallowed script: ${tag}`)
+  // Scripts: exactly two allowed forms. The same-origin deferred `catalog.js`, and the single
+  // inline pre-paint theme init whose text must equal THEME_INIT byte-for-byte (so a CSP can pin
+  // it by hash and any injected inline JS fails the build).
+  for (const script of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const attrs = script[1]
+    if (attrs.includes(`src="${publicPath("/assets/catalog.js")}"`)) {
+      assert(/\bdefer\b/.test(attrs), `${route} catalog.js must be deferred: ${script[0]}`)
+    } else {
+      assert(attrs.trim() === "", `${route} inline theme init must carry no attributes`)
+      assert(script[2] === THEME_INIT, `${route} has a disallowed or altered inline script`)
+    }
   }
   const cmdCount = (html.match(/class="cmd"/g) || []).length
   const copyCount = (html.match(/class="copy"/g) || []).length
@@ -306,9 +315,37 @@ for (const file of htmlFiles) {
     assert(/<a class="github-link"[^>]*aria-label="[^"]+"/.test(html), `${route} missing accessible GitHub link`)
     assert(html.includes('href="https://github.com/GaboEI/oh-my-rigel/tree/v2-mirror"'), `${route} GitHub link must target v2-mirror`)
     assert(html.includes('aria-label="Español"') && html.includes('aria-label="English"'), `${route} language selector must expose ES/EN with accessible names`)
+    // Language picker: one compact control showing the active language, opening an overlay menu
+    // (never pushing the page) with both languages; the header GitHub link is icon-only.
+    assert((html.match(/data-lang-picker/g) || []).length === 1, `${route} must render exactly one language picker`)
+    assert(/<button class="lang-picker__button"[^>]*data-lang-menu-button[^>]*aria-haspopup="true"[^>]*aria-expanded="false"[^>]*aria-controls="lang-menu"[^>]*aria-label="[^"]+"/.test(html), `${route} language picker button needs aria state`)
+    assert(html.includes('class="lang-picker__menu" id="lang-menu" data-lang-menu hidden'), `${route} language picker menu must be hidden by default`)
+    const headerActionsHtml = html.match(/class="header-actions"[\s\S]*?<\/header>/)?.[0] ?? ""
+    assert(/<a class="github-link"[^>]*><svg/.test(headerActionsHtml) && !headerActionsHtml.includes(">GitHub</span>"), `${route} header GitHub must be icon-only (the label lives in the mobile menu)`)
+    // Theme picker: one compact control (current-mode icon + caret) opening a menu with the three
+    // modes in the route's language, in the header actions, with no visible "Tema"/"Theme" label.
+    const themeLang = route.startsWith("/es/") ? "es" : "en"
+    const themeCopy = THEME_COPY[themeLang]
+    assert((html.match(/data-theme-switch/g) || []).length === 1, `${route} must render exactly one theme picker`)
+    assert(/<button class="theme-picker__button"[^>]*data-theme-menu-button[^>]*aria-haspopup="true"[^>]*aria-expanded="false"[^>]*aria-controls="theme-menu"/.test(html), `${route} theme picker button needs aria-haspopup/expanded/controls`)
+    assert(html.includes('class="theme-picker__menu" id="theme-menu" data-theme-menu hidden'), `${route} theme picker menu must be hidden by default`)
+    for (const value of ["system", "light", "dark"]) {
+      assert(new RegExp(`data-theme-option="${value}"[^>]*>${themeCopy[value]}</button>`).test(html), `${route} theme option ${value} must be localized`)
+    }
+    assert(/class="header-actions"[\s\S]*?class="theme-picker"/.test(html), `${route} theme picker must live in the header actions`)
+    assert(!/class="theme-picker__label"/.test(html), `${route} theme picker must not render a visible text label`)
     assert((html.match(/class="top-nav"/g) || []).length === 1, `${route} must render exactly one navigation (no duplicate)`)
     assert(html.includes('id="site-nav"'), `${route} nav needs the id the toggle controls`)
-    assert(/<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="site-nav"/.test(html), `${route} missing the accessible nav toggle`)
+    assert(/<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="site-nav"[^>]*aria-label="[^"]+"/.test(html), `${route} missing the accessible nav toggle`)
+    assert(html.includes('class="nav-toggle__icon nav-toggle__icon--menu"') && html.includes('class="nav-toggle__icon nav-toggle__icon--close"'), `${route} nav toggle needs the hamburger and close icons`)
+    // Active state derives from the real route (and its nested routes), never a hardcoded first item.
+    const pathNoLang = route.replace(/^\/(es|en)(?=\/|$)/, "") || "/"
+    const expectedHash = pathNoLang.startsWith("/catalogo/") ? "benefits" : pathNoLang.startsWith("/agentes-y-modelos/") ? "agentes-skill-comandos" : null
+    const activeCount = (html.match(/class="is-active" aria-current="page"/g) || []).length
+    assert(activeCount === (expectedHash ? 1 : 0), `${route} must mark exactly the route's section active (found ${activeCount})`)
+    if (expectedHash) {
+      assert(html.includes(`href="${publicPath(`/${themeLang}/`)}#${expectedHash}" class="is-active" aria-current="page"`), `${route} the active nav link must be the route's section`)
+    }
     const footerHtml = html.match(/<footer class="site-footer">([\s\S]*?)<\/footer>/)?.[1] ?? ""
     assert(footerHtml.includes("/agentes-y-modelos/"), `${route} footer must keep the Agents link`)
     assert(footerHtml.includes("github.com/GaboEI/oh-my-rigel"), `${route} footer must carry the GitHub link`)
@@ -378,7 +415,9 @@ assert(!css.includes("repeat(3, 1fr)"), "CSS forces a fixed 3-column grid that r
 assert(/\.summary-grid,\s*\.fact-list\s*\{[^}]*repeat\(auto-fit/.test(css), "fact-list/summary-grid must use an auto-fit grid so empty tracks collapse")
 assert(/\.activation-line\b/.test(css), "missing .activation-line styles")
 // WCAG 2.2 target size: the language selector links must be at least 24px wide.
-assert(/\.language__link\s*\{[^}]*min-inline-size:\s*(?:2[4-9]|[3-9][0-9])px/.test(css), "language selector targets must be at least 24px wide (WCAG 2.2 target size)")
+assert(/\.lang-picker__button\s*\{[^}]*min-block-size:\s*2\.25rem/.test(css), "language picker keeps a compact desktop target")
+assert(/\.lang-picker__button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/.test(css), "language picker needs a visible focus ring")
+assert(/\.lang-picker__menu\s*\{[^}]*position:\s*absolute/.test(css), "language menu must be an overlay (never pushes the page)")
 // WCAG 1.4.10 reflow: the catalogue summary grid must use a shrinkable content track so the page
 // reflows at 320 CSS px (and at 200% zoom on a 390 px phone) instead of scrolling horizontally.
 assert(/\.ficha > summary\s*\{[^}]*minmax\(0,\s*1fr\)/.test(css), "ficha summary must use a shrinkable track (minmax(0,1fr)) for reflow")
@@ -395,7 +434,7 @@ assert(/background/.test(guideOpenSummaryRule[1]), "open guide item needs a dist
 assert(/\.guide-item\[open\]\s+\.guide-item__name\s*\{[^}]*font-weight/.test(css), "open guide item title needs a heavier weight (not glyph/colour-only)")
 // Swiss/editorial direction (Gabo): these structural markers are the visual contract and must persist.
 assert(/\.panel > h2[^{]*\{[^}]*border-inline-start/.test(css), "section H2 must carry the accent bar (hierarchy)")
-assert(/scroll-margin-top:\s*4\.5rem/.test(css), "anchored sections must set scroll-margin-top (deep-link orientation)")
+assert(/scroll-margin-top:\s*6rem/.test(css), "anchored sections must set scroll-margin-top (deep-link orientation below the sticky header)")
 assert(/\.cmd\s*\{[^}]*border-inline-start:\s*3px solid var\(--info\)/.test(css), "command blocks must carry the dev-tool info left border")
 // Copy failure must be visible without colour alone (audit fix): the control swaps to a
 // distinct error icon, the command row carries the error border, and the live status text
@@ -421,12 +460,31 @@ assert(navRule, "missing base .top-nav rule")
 assert(/flex-wrap:\s*wrap/.test(navRule[1]), "wide nav must wrap rather than clip")
 assert(!/overflow-x/.test(navRule[1]), "nav must not hide shortcuts behind a horizontal scroll strip")
 assert(!/flex-wrap:\s*nowrap/.test(navRule[1]), "nav must not force a single clipped line")
+// Desktop grouping: the brand and the nav are one left group (nav margin, not centred) and the
+// utilities are pushed right by an auto margin, so the flexible gap lives only between the groups.
+assert(!/justify-content:\s*center/.test(navRule[1]), "desktop nav must not be artificially centred")
+assert(/flex-basis:\s*100%/.test(navRule[1]), "desktop nav must own its own full-width row below the brand")
+assert(/\.header-actions\s*\{[^}]*margin-inline-start:\s*auto/.test(css), "utility controls stay pushed to the right of the header")
 // Narrow screens use a compact accessible control: a real button toggles the SAME nav (no
 // duplicate navigation), hidden by default and revealed by `.is-open` (Gabo 2026-10-09).
 assert(/\.nav-toggle\s*\{[^}]*display:\s*none/.test(css), "nav toggle must be hidden by default on wide screens")
-assert(/@media\s*\(max-width:\s*759px\)/.test(css), "missing the narrow-screen navigation media query")
-assert(/\.top-nav\s*\{\s*display:\s*none\s*;?\s*\}/.test(css), "narrow nav must be hidden until the toggle opens it")
+assert(/@media\s*\(max-width:\s*1023px\)/.test(css), "missing the narrow-screen navigation media query")
+// The mobile menu is an absolute overlay below the header (it must never push the content) with a
+// hamburger/close icon swap.
+// The header never scrolls away: sticky at the top, above the content, so the mobile overlay
+// stays attached to it while the page moves underneath.
+assert(/\.site-header\s*\{[^}]*position:\s*sticky/.test(css) && /\.site-header\s*\{[^}]*inset-block-start:\s*0/.test(css), "header must be sticky at the top of the viewport")
+assert(/\.site-header\s*\{[^}]*z-index:\s*40/.test(css), "sticky header must paint above the page content")
+assert(/\.top-nav\s*\{[^}]*display:\s*none/.test(css), "narrow nav must be hidden until the toggle opens it")
+assert(/\.top-nav\s*\{[^}]*position:\s*absolute/.test(css) && /\.top-nav\s*\{[^}]*inset-block-start:\s*100%/.test(css), "mobile nav must be an absolute overlay below the header")
 assert(/\.top-nav\.is-open\s*\{[^}]*display:\s*flex/.test(css), "open nav must become visible")
+assert(/\.nav-toggle\[aria-expanded="true"\]\s+\.nav-toggle__icon--close\s*\{[^}]*display:\s*inline-block/.test(css), "an open menu must swap the hamburger for the close icon")
+// Nav links carry no permanent underline; the active one gets a 2px accent underline, and the
+// theme picker keeps a 44px target with a visible focus ring (Gabo minimal technical navbar).
+assert(/\.top-nav a:is\(:link, :visited\)\s*\{[^}]*text-decoration:\s*none/.test(css), "inactive nav links must not be permanently underlined")
+assert(/\.top-nav a\.is-active\s*\{[^}]*text-decoration:\s*underline[^}]*text-decoration-color:\s*var\(--accent\)[^}]*text-decoration-thickness:\s*2px/.test(css), "the active nav link needs a 2px accent underline")
+assert(/\.theme-picker__button\s*\{[^}]*min-block-size:\s*2\.25rem/.test(css), "theme picker keeps a compact desktop target (44px on touch)")
+assert(/\.theme-picker__button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/.test(css), "theme picker button needs a visible focus ring")
 assert(!/fonts\.(googleapis|gstatic)\.com/.test(css), "CSS references an external font origin")
 assert(!/@import/.test(css), "CSS uses @import (external fetch risk)")
 for (const file of ["newsreader-latin-var.woff2", "plex-mono-400-latin.woff2", "plex-mono-500-latin.woff2", "plex-mono-600-latin.woff2", "OFL-Newsreader.txt", "OFL-IBM-Plex-Mono.txt"]) {
