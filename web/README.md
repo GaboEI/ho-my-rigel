@@ -198,20 +198,35 @@ bun run web:preview # build and serve a local preview at http://127.0.0.1:4173/
 
 The public base path is the domain root `/` on `https://omr.gabodev.dev/`;
 generated links and canonical SEO URLs are serialized with that root path. The
-root generated page is a static language-selection gateway, not a redirect. The
-former GitHub Pages project URL may still exist as a repository Pages origin, but
-this repository does not promise or implement a redirect from it. W6 catalogue and
-guide prose is generated from the sealed ES source plus id-anchored EN overlays
-rather than placeholder W5 text; interface labels and cover framing live in
-`render.mjs` (`const UI`) and are guarded by render/check tests.
+root generated page is a static language-selection gateway, not a redirect. W6
+catalogue and guide prose is generated from the sealed ES source plus id-anchored
+EN overlays rather than placeholder W5 text; interface labels and cover framing
+live in `render.mjs` (`const UI`) and are guarded by render/check tests.
+
+### Legacy `/oh-my-rigel/` path compatibility
+
+The site moved from the GitHub Pages project base path `/oh-my-rigel/` to the
+custom-domain root. GitHub Pages is static and cannot emit an HTTP 301/302 for a
+path inside the site, so no server redirect is claimed. Instead the build ships
+one real 200 document at every known legacy route (`/oh-my-rigel/`,
+`/oh-my-rigel/es/…`, `/oh-my-rigel/en/…`, including each agent page). Each
+document declares the root URL as its canonical, redirects the reader with a
+no-JS `meta refresh`, carries a visible fallback link, and is `noindex`. The
+legacy prefix is deliberately **not** a catch-all: an unknown legacy path has no
+file, so GitHub Pages and the local preview still serve `404.html` with a real
+404. `check.mjs` fails the build if a stub is missing, points at the wrong URL,
+is indexable, loses its fallback link, or if a `meta refresh` leaks onto a real
+page (`web/site/base-path.test.ts` pins the same contract).
 
 ### Security, performance and privacy decisions
 
 - One same-origin deferred script only (`assets/catalog.js`): it opens the
   deep-linked `<details>` and wires the reusable copy control. No inline JS, no
-  third-party script, no `meta refresh`, no `window.location`; the only
-  navigation is an explicit link. `check.mjs` fails the build on any other
-  `<script>` tag or inline JS.
+  third-party script, no `window.location`; the only navigation is an explicit
+  link. The single authorized `meta refresh` is the no-JS legacy `/oh-my-rigel/`
+  redirect document, which is `noindex` and scoped to the legacy prefix only;
+  `check.mjs` fails the build on any other `<script>` tag, inline JS, or a
+  `meta refresh` on a real page.
 - No third-party read-time dependency: one same-origin stylesheet, self-hosted
   fonts, zero external subresources, no analytics, no cookies, no forms, no
   client storage. The site is fully readable with network access denied other

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import { absoluteUrl, SITE } from "./lib/config.mjs"
 import { loadSource } from "./lib/data.mjs"
 import { loadOverlays, localizeSource } from "./lib/i18n.mjs"
-import { agentPage, agentsPage, catalogPage, guidePage, homePage, notFoundPage } from "./lib/render.mjs"
+import { agentPage, agentsPage, catalogPage, guidePage, homePage, legacyRedirectPage, notFoundPage } from "./lib/render.mjs"
 
 const outPath = fileURLToPath(SITE.outDir)
 
@@ -45,7 +45,15 @@ export async function buildSite() {
       routes.push(`/${lang}/agentes-y-modelos/${agent.id}/`)
     }
   }
-  await write("route-manifest.json", `${JSON.stringify({ schemaVersion: 1, basePath: SITE.basePath, origin: SITE.origin, seal: source.seal, routes: routes.sort() }, null, 2)}\n`)
+  const contentRoutes = routes.filter((route) => route !== "/404.html")
+  const legacyRedirects = []
+  for (const route of contentRoutes) {
+    const from = `/oh-my-rigel${route}`
+    const to = absoluteUrl(route)
+    await write(`${from.slice(1)}index.html`, legacyRedirectPage(to))
+    legacyRedirects.push({ from, to })
+  }
+  await write("route-manifest.json", `${JSON.stringify({ schemaVersion: 1, basePath: SITE.basePath, origin: SITE.origin, seal: source.seal, routes: routes.sort(), legacyRedirects }, null, 2)}\n`)
   await write("CNAME", `${new URL(SITE.origin).hostname}\n`)
   const sitemapRoutes = routes.filter((route) => route !== "/404.html")
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapRoutes.map((route) => `  <url><loc>${absoluteUrl(route)}</loc></url>`).join("\n")}\n</urlset>\n`
