@@ -111,6 +111,18 @@ export const MODEL_OVERRIDE_EXAMPLE = `// ~/.omo/omo.jsonc
   }
 }`
 
+// Primary-model example for the OpenCode config file. Uses the verified V2 top-level `model`
+// field and the official schema URL, with no personal data. Source: opencode.ai/v2/docs/config.
+const OPENCODE_MODEL_EXAMPLE = `{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5"
+}`
+
+// Model ids used by the copyable examples above are pinned to OpenCode V2's authoritative catalog
+// (models.dev, per opencode.ai/v2/docs/providers) in web/site/example-models.json. check.mjs fails
+// when a copyable example cites a model absent from that catalog snapshot. The product's fallback
+// chains are a separate surface and are never treated as a model catalog.
+
 const UI = {
   es: {
     name: "Español",
@@ -724,6 +736,44 @@ function guideDefaultsSection(lang, source) {
   </section>`
 }
 
+// Providers and the primary model are OpenCode surfaces; Oh My Rigel only overlays agent and
+// category tuning. Every command and key rendered here is a verified OpenCode V2 surface
+// (docs: /v2/docs/cli/providers, /v2/docs/cli/commands, /v2/docs/config). The older
+// `opencode providers list|login|logout` names do not exist in V2 and must never render.
+function guideProvidersSection(lang) {
+  const es = lang === "es"
+  const t = UI[lang]
+  const block = (heading, body, commands) => `<h3>${htmlEscape(heading)}</h3><p>${htmlEscape(body)}</p>${commands.map((command) => copyableBlock(lang, command, t.copyCommand)).join("")}`
+  const steps = es
+    ? [
+      block("Ver el catálogo de modelos", "OpenCode aporta el catálogo. Este comando lista todos los modelos disponibles.", ["opencode models"]),
+      block("Elegir el modelo principal", "En la TUI, /models elige el modelo principal. En opencode.jsonc, el campo model de nivel superior fija el principal del proyecto. La clave small_model de V1 no es nativa en V2: se normaliza al modelo del agente title (agents.title.model).", ["/models", OPENCODE_MODEL_EXAMPLE]),
+      block("Conectar un proveedor", "/connect en la TUI lista las integraciones disponibles; opencode auth login hace lo mismo sin abrir la TUI, y el método se elige en el propio flujo.", ["/connect", "opencode auth login"]),
+      block("Listar las cuentas conectadas", "Muestra las cuentas guardadas y su estado; las conexiones por variable de entorno aparecen con su tipo.", ["opencode auth list"]),
+      block("Desconectar un proveedor", "Quita una cuenta guardada. Las conexiones por variable de entorno no son cuentas: se quitan al retirar la variable.", ["opencode auth logout"]),
+    ]
+    : [
+      block("List the model catalog", "OpenCode provides the catalog. This command lists every model available.", ["opencode models"]),
+      block("Choose the primary model", "In the TUI, /models chooses the primary model. In opencode.jsonc, the top-level model field sets the project's primary model. The V1 small_model key is not native in V2: it is normalized to the title agent's model (agents.title.model).", ["/models", OPENCODE_MODEL_EXAMPLE]),
+      block("Connect a provider", "/connect in the TUI lists the available integrations; opencode auth login does the same without the TUI, and the method is chosen in the flow.", ["/connect", "opencode auth login"]),
+      block("List connected accounts", "Shows the saved accounts and their state; environment connections appear with their type.", ["opencode auth list"]),
+      block("Disconnect a provider", "Removes a saved account. Environment connections are not accounts: they are removed by unsetting the variable.", ["opencode auth logout"]),
+    ]
+  const title = es ? "Proveedores y modelo principal" : "Providers and primary model"
+  const lead = es
+    ? "Elegir el modelo principal y conectar proveedores es cosa de OpenCode, no de Oh My Rigel: OpenCode guarda las cuentas y las credenciales, y Oh My Rigel solo superpone el modelo y la cadena de un agente o categoría."
+    : "Choosing the primary model and connecting providers is OpenCode's job, not Oh My Rigel's: OpenCode stores the accounts and credentials, and Oh My Rigel only overlays an agent's or category's model and chain."
+  const boundary = es
+    ? "Las credenciales viven en la base de datos de OpenCode, no en el archivo de Oh My Rigel. Para ajustar el modelo o la cadena de un agente o categoría, edita el bloque [opencode] en ~/.omo/omo.jsonc (usuario) o .omo/omo.jsonc (proyecto)."
+    : "Credentials live in OpenCode's database, not in the Oh My Rigel file. To tune an agent's or category's model or chain, edit the [opencode] block in ~/.omo/omo.jsonc (user) or .omo/omo.jsonc (project)."
+  return `<section class="guide-group" id="proveedores">
+    <h2>${htmlEscape(title)}</h2>
+    <p class="guide-group__summary">${htmlEscape(lead)}</p>
+    ${steps.join("\n")}
+    <p class="beta-note">${htmlEscape(boundary)}</p>
+  </section>`
+}
+
 function agentConfigSection(lang, source) {
   const t = UI[lang]
   const guideHref = publicPath(langLogicalPath(lang, "/agentes-y-modelos/guia-modelos/"))
@@ -980,6 +1030,7 @@ export function guidePage(lang, source) {
     <p class="beta-note">${htmlEscape(t.guideLayerNote)}</p>
   </section>
   ${guideDefaultsSection(lang, source)}
+  ${guideProvidersSection(lang)}
   <section class="guide-group" id="agentes">
     <h2>${htmlEscape(t.agents)}</h2>
     <p class="guide-group__summary">${htmlEscape(t.guideAgentsSummary)}</p>

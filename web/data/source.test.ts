@@ -497,6 +497,14 @@ describe("#given the W3 i18n overlay #when validated #then it is id-anchored, tr
     }
   })
 
+  test("#given each translated function #when its fields are read #then it carries only the translatable whitelist (no product-state field leaks)", () => {
+    // given / when / then
+    const allowed = ["como_se_usa", "cuando_sirve", "modo_de_activacion", "nombre", "que_es", "requisitos", "valores_por_defecto"]
+    for (const [id, entry] of Object.entries(overlay.functions)) {
+      expect([id, Object.keys(entry).sort()]).toEqual([id, allowed])
+    }
+  })
+
   test("#given the overlay #when sealed #then it is listed in sealedFiles and covered by the hash", () => {
     // given / when / then
     expect(SEALED_FILES).toContain("i18n/catalog.en.json")

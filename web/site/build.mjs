@@ -2,7 +2,7 @@ import { mkdir, rm, writeFile, copyFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { SITE } from "./lib/config.mjs"
+import { absoluteUrl, SITE } from "./lib/config.mjs"
 import { loadSource } from "./lib/data.mjs"
 import { loadOverlays, localizeSource } from "./lib/i18n.mjs"
 import { agentPage, agentsPage, catalogPage, guidePage, homePage, notFoundPage } from "./lib/render.mjs"
@@ -46,6 +46,10 @@ export async function buildSite() {
     }
   }
   await write("route-manifest.json", `${JSON.stringify({ schemaVersion: 1, basePath: SITE.basePath, origin: SITE.origin, seal: source.seal, routes: routes.sort() }, null, 2)}\n`)
+  const sitemapRoutes = routes.filter((route) => route !== "/404.html")
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapRoutes.map((route) => `  <url><loc>${absoluteUrl(route)}</loc></url>`).join("\n")}\n</urlset>\n`
+  await write("sitemap.xml", sitemap)
+  await write("robots.txt", `User-agent: *\nAllow: /\nSitemap: ${absoluteUrl("/sitemap.xml")}\n`)
   return { outPath, routes: routes.length }
 }
 

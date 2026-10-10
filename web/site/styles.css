@@ -120,6 +120,7 @@ h2 { font-size: clamp(1.35rem, 1rem + 1.1vw, 2rem); line-height: 1.2; font-weigh
 .top-nav a:is(:link, :visited), .language__link:is(:link, :visited), .github-link:is(:link, :visited) { align-items: center; color: var(--fg-muted); display: inline-flex; flex: 0 0 auto; gap: 0.4rem; min-block-size: 44px; padding: 0.3rem 0; text-decoration-thickness: 1px; white-space: nowrap; }
 .top-nav a:is(:link, :visited) { font-style: italic; }
 .top-nav .is-active, .language__link.is-active { color: var(--fg); text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
+.language__link { justify-content: center; min-inline-size: 24px; }
 .page-shell { margin: 0 auto; max-inline-size: 68rem; padding: 1.5rem 1rem 2.5rem; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: 0.35rem; list-style: none; margin: 0 0 2rem; padding: 0; }
 .breadcrumbs li:not(:last-child)::after { color: var(--fg-label); content: "/"; margin-inline-start: 0.35rem; }
@@ -349,4 +350,34 @@ code { padding: 0.1rem 0.34rem; }
   padding-inline: 0.6rem;
   position: static;
   white-space: normal;
+}
+
+/* WCAG 1.4.10 reflow: let tracks shrink (minmax(0,1fr)) and break long strings only when they
+   would overflow, so 320 CSS px and 200% zoom on a 390 px phone do not scroll horizontally. */
+.ficha > summary { grid-template-columns: minmax(0, 1fr) auto auto; }
+.guide-item > summary { grid-template-columns: minmax(0, 1fr) auto; }
+.hero, .fichas, .guide-items, .benefits { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 759px) {
+  .site-header__inner { grid-template-columns: minmax(0, 1fr) auto; }
+}
+.panel > p, .hero > p, .detail > p, .catalog-area > p, .guide-group > p,
+h1, h2, h3, h4, .heading__text,
+.ficha__name, .ficha__one, .ficha__body p, .ficha__body h3, .activation-line__value,
+.guide-item__one, .guide-item__body p, .benefit h3, .benefit p, .row-list a span, .row-list a small,
+.breadcrumbs a, .notices li, .steps li, .lifecycle-list li, dd, dt { overflow-wrap: break-word; }
+/* The hero lead breaks only on word boundaries; its longest word still fits the narrowest width. */
+.hero .lead { overflow-wrap: normal; }
+
+/* Legibility floor: no user-facing text below 16px (the smallest previously reached 12px). Hierarchy
+   is carried by weight, case and letter-spacing instead of size, so labels still read as labels. */
+.eyebrow, .meta, dt, .activation-line__label, .row-list small, .ficha__one,
+.agent-prompt .cmd__code code, .prompt-note, .cwd, .cwd__label, .lifecycle-list__label,
+.setting-block__label, .setting, .agent-default__tag, .guide-group > h3, .guide-item__badge,
+.guide-item__prov, .guide-item__one, .guide-item__body h4, .cmd__status, .nav-toggle { font-size: 1rem; }
+/* At very narrow widths the catalogue/guide summary stacks so the state badge cannot force a
+   horizontal scroll; the badge and the +/- marker flow under the title instead of beside it. */
+@media (max-width: 420px) {
+  .hero { padding: 1rem; }
+  .ficha > summary, .guide-item > summary { grid-template-columns: 1fr; }
+  .ficha__state, .ficha > summary::after { grid-column: auto; grid-row: auto; justify-self: start; }
 }

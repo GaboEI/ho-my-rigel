@@ -100,6 +100,9 @@ assert(JSON.stringify([...esRoutes].sort()) === JSON.stringify([...enRoutes].sor
 assert(!routes.includes("/es/empezar/") && !routes.includes("/en/empezar/"), "the orphan /empezar/ stub must not be published")
 const routeManifest = JSON.parse(await readFile(join(outPath, "route-manifest.json"), "utf8"))
 assert(!routeManifest.routes.some((route) => route.includes("/empezar/")), "route-manifest must not list the removed /empezar/ stub")
+// Publication artifact invariant: the build must emit exactly the expected 32 routes (the uploaded
+// Pages artifact), so an accidental extra or dropped page fails the gate instead of shipping.
+assert(routes.length === 32 && routeManifest.routes.length === 32, `published route set must be the expected 32 routes (found ${routes.length} html / ${routeManifest.routes.length} manifest)`)
 
 const rootHtml = await readFile(join(outPath, "index.html"), "utf8")
 assert(rootHtml.includes('id="benefits"') && rootHtml.includes('id="install"'), "root does not render the English cover journey")
@@ -371,6 +374,11 @@ assert(footerRule && !/border-block-start/.test(footerRule[1]), "footer must not
 assert(!css.includes("repeat(3, 1fr)"), "CSS forces a fixed 3-column grid that renders empty cells for single-item lists")
 assert(/\.summary-grid,\s*\.fact-list\s*\{[^}]*repeat\(auto-fit/.test(css), "fact-list/summary-grid must use an auto-fit grid so empty tracks collapse")
 assert(/\.activation-line\b/.test(css), "missing .activation-line styles")
+// WCAG 2.2 target size: the language selector links must be at least 24px wide.
+assert(/\.language__link\s*\{[^}]*min-inline-size:\s*(?:2[4-9]|[3-9][0-9])px/.test(css), "language selector targets must be at least 24px wide (WCAG 2.2 target size)")
+// WCAG 1.4.10 reflow: the catalogue summary grid must use a shrinkable content track so the page
+// reflows at 320 CSS px (and at 200% zoom on a 390 px phone) instead of scrolling horizontally.
+assert(/\.ficha > summary\s*\{[^}]*minmax\(0,\s*1fr\)/.test(css), "ficha summary must use a shrinkable track (minmax(0,1fr)) for reflow")
 const openSummaryRule = css.match(/\.ficha\[open\]\s*>\s*summary\s*\{([^}]*)\}/)
 assert(openSummaryRule, "missing .ficha[open] > summary rule (open state must be styled)")
 assert(/border-inline-start/.test(openSummaryRule[1]), "open ficha summary needs a structural left border (not colour-only)")
@@ -429,4 +437,155 @@ assert(enCatalogHtml.includes("Agents and delegation"), "EN catalogue did not ap
 assert(!enCatalogHtml.includes("Agentes y delegación"), "EN catalogue leaked the ES area name")
 assert(esCatalogHtml.includes("Agentes y delegación"), "ES catalogue lost the source area name")
 
-console.log(`PASS web/site/check.mjs (${htmlFiles.length} HTML files, ${routes.length} routes)`)
+// W7 gate 6 (external half): every documented external link must stay critical, secure and
+// approved. Each absolute href must be https, its host must be on the frozen allowlist, and the
+// critical URLs the site promises must be present. A rogue third-party link (tracer, CDN,
+// analytics) or a downgraded http origin fails the build naming the page and the exact URL.
+const EXTERNAL_ORIGIN_ALLOWLIST = new Set([
+  "gaboei.github.io", // the site's own GitHub Pages origin (absolute canonical/hreflang URLs)
+  "github.com", // repository and issues
+  "opencode.ai", // the host product's official V2 documentation
+])
+const REQUIRED_EXTERNAL_URLS = [
+  "https://github.com/GaboEI/oh-my-rigel/tree/v2-mirror",
+  "https://github.com/GaboEI/oh-my-rigel/issues",
+  "https://opencode.ai/v2/docs/migrate-v1/",
+]
+const seenExternal = new Set()
+for (const file of htmlFiles) {
+  const html = await readFile(file, "utf8")
+  const route = routeFromFile(file)
+  for (const href of attrs(html, "href")) {
+    if (href.startsWith("#") || href.startsWith("mailto:")) continue
+    if (!/^https?:\/\//.test(href)) continue
+    let url
+    try {
+      url = new URL(href)
+    } catch {
+      assert(false, `${route} has a malformed external URL: ${href}`)
+      continue
+    }
+    assert(url.protocol === "https:", `${route} external link must be https (downgraded): ${href}`)
+    assert(EXTERNAL_ORIGIN_ALLOWLIST.has(url.host), `${route} external link origin is not approved: ${href}`)
+    seenExternal.add(`${url.origin}${url.pathname}`)
+  }
+}
+for (const required of REQUIRED_EXTERNAL_URLS) {
+  const url = new URL(required)
+  assert(seenExternal.has(`${url.origin}${url.pathname}`), `required external link is missing from the published site: ${required}`)
+}
+
+// W7 SEO: the publication ships robots.txt and a sitemap.xml that lists every published route
+// (except the noindex 404) with absolute URLs. Fail-closed so an SEO regression cannot ship.
+const robots = await readFile(join(outPath, "robots.txt"), "utf8")
+assert(/Sitemap:\s*https:\/\/\S+/.test(robots), "robots.txt must point to an absolute sitemap URL")
+const sitemap = await readFile(join(outPath, "sitemap.xml"), "utf8")
+const sitemapLocs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+assert(sitemapLocs.length > 0, "sitemap.xml must list at least one URL")
+for (const loc of sitemapLocs) assert(loc.startsWith("https://"), `sitemap.xml <loc> must be absolute: ${loc}`)
+for (const route of routeManifest.routes.filter((route) => route !== "/404.html")) {
+  const expected = absoluteUrl(route)
+  assert(sitemapLocs.includes(expected), `sitemap.xml is missing published route: ${expected}`)
+}
+
+// W7 gates 5/11: no invented command may be SHOWN to a reader. EVERY line of every command-bearing
+// block (copy payloads, <pre><code> blocks, <span class="command"> labels) is scanned, not just the
+// first line of a block; a line whose first token is an unrecognized command fails the build with
+// the page and the token. The agent-first prompt is a prose block and is skipped by identity; JSON,
+// comment and path lines are structural, not commands. `rigel setup` is allowed only as the
+// DECLARED-ABSENT command on a page that states its absence; the host `opencode` CLI resolves only
+// to its real V2 surfaces (models, auth, service, debug and the TUI's /connect, /models).
+const cli = JSON.parse(await readFile(new URL("../data/cli.json", import.meta.url), "utf8"))
+const omoCommands = new Set()
+for (const c of cli.owners.omo.commands) {
+  omoCommands.add(c.name)
+  for (const alias of c.aliases ?? []) omoCommands.add(alias)
+}
+const rigelCommands = new Set()
+for (const c of cli.owners["rigel-v2"].commands) {
+  rigelCommands.add(c.name)
+  for (const alias of c.aliases ?? []) rigelCommands.add(alias)
+}
+const slashCommands = new Set(cli.owners.slash.commands)
+const OPENCODE_COMMANDS = new Set(["--version", "--help", "models", "auth", "service", "debug", "run", "serve"])
+const OPENCODE_TUI_COMMANDS = new Set(["connect", "models"])
+const SHELL_UTILITIES = new Set(["curl", "git", "cd", "export", "test", "node", "bun", "bunx", "npm", "pnpm", "yarn", "echo", "chmod", "mkdir", "ls", "cat", "sudo", "rm", "cp", "mv", "source", "set", "printf"])
+const DECLARED_ABSENT_COMMANDS = new Set(["rigel setup"])
+const FORBIDDEN_COMMAND_PATTERNS = [/\bopencode providers\b/]
+function isStructuralLine(first) {
+  return first === "" || /^[{}\[\]"#<>$@*~]/.test(first) || first === "/" || first.startsWith("//") || first.startsWith("-") || first.startsWith("(") || /^\d+\.$/.test(first)
+}
+function isShellPath(first) {
+  if (first === "get.omo.dev/install.sh") return true
+  return /^(?:\.{0,2}\/)?(?:script|profiles)\/[^\s]+\.(?:mjs|sh|js|ts|json)$/.test(first)
+}
+function unescapeHtml(value) {
+  return value.replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&")
+}
+function renderedBlocks(html) {
+  const blocks = []
+  for (const value of attrs(html, "data-copy")) blocks.push(unescapeHtml(value))
+  for (const match of html.matchAll(/<span class="command">([^<]+)<\/span>/g)) blocks.push(unescapeHtml(match[1]))
+  for (const match of html.matchAll(/<pre><code>([\s\S]*?)<\/code><\/pre>/g)) blocks.push(unescapeHtml(match[1]))
+  return blocks
+}
+for (const file of htmlFiles) {
+  const html = await readFile(file, "utf8")
+  const route = routeFromFile(file)
+  for (const forbidden of FORBIDDEN_COMMAND_PATTERNS) {
+    assert(!forbidden.test(html), `${route} renders a command that does not exist in OpenCode V2: ${forbidden}`)
+  }
+  const hasAbsenceNotice = html.includes("rigel setup") && /no existe|does not exist yet/.test(html)
+  for (const block of renderedBlocks(html)) {
+    if (block === AGENT_PROMPT) continue
+    for (const line of block.split("\n").map((value) => value.trim()).filter((value) => value.length > 0)) {
+      const [first, second = ""] = line.split(/\s+/)
+      const pair = `${first} ${second}`
+      if (isStructuralLine(first) || isShellPath(first)) continue
+      if (SHELL_UTILITIES.has(first)) continue
+      if (DECLARED_ABSENT_COMMANDS.has(pair)) {
+        assert(hasAbsenceNotice, `${route} shows the declared-absent command "${pair}" without its absence notice`)
+      } else if (first === "omo" || first === "oh-my-openagent") {
+        assert(omoCommands.has(second), `${route} shows an invented command: ${pair}`)
+      } else if (first === "rigel-v2") {
+        assert(rigelCommands.has(second), `${route} shows an invented rigel-v2 command: ${pair}`)
+      } else if (/^\/[a-z][a-z0-9-]*$/.test(first)) {
+        assert(slashCommands.has(first.slice(1)) || OPENCODE_TUI_COMMANDS.has(first.slice(1)), `${route} shows an invented slash command: ${first}`)
+      } else if (first === "opencode") {
+        assert(second === "" || OPENCODE_COMMANDS.has(second), `${route} shows an undocumented opencode command: ${pair}`)
+      } else {
+        assert(false, `${route} shows an unrecognized command token: ${first}`)
+      }
+    }
+  }
+}
+
+// W7 gates 11/12: the guide must document the real OpenCode provider and model path, and must
+// never present the V2-nonexistent `opencode providers list|login|logout` names. This is blocking,
+// so an omission fails CI instead of sailing through.
+const REQUIRED_OPENCODE_SURFACES = ["opencode models", "/models", "/connect", "opencode auth login", "opencode auth list", "opencode auth logout", "agents.title.model"]
+for (const lang of ["es", "en"]) {
+  const guide = await readFile(join(outPath, lang, "agentes-y-modelos", "guia-modelos", "index.html"), "utf8")
+  for (const surface of REQUIRED_OPENCODE_SURFACES) {
+    assert(guide.includes(surface), `${lang}/agentes-y-modelos/guia-modelos/ omits the real OpenCode surface: ${surface}`)
+  }
+  assert(guide.includes('id="proveedores"'), `${lang}/agentes-y-modelos/guia-modelos/ is missing the providers and primary-model section`)
+}
+
+// W7 gate 10: a copyable example may cite only models that exist in OpenCode V2's authoritative
+// catalog (models.dev, per opencode.ai/v2/docs/providers), pinned in web/site/example-models.json.
+// A model a document merely mentions, or one that appears only in the product's fallback chains, is
+// NOT proof of a catalog entry and fails the build.
+const exampleCatalog = JSON.parse(await readFile(new URL("example-models.json", import.meta.url), "utf8"))
+const catalogModels = new Set(exampleCatalog.models)
+for (const file of htmlFiles) {
+  const html = await readFile(file, "utf8")
+  const route = routeFromFile(file)
+  for (const block of renderedBlocks(html)) {
+    for (const match of block.matchAll(/"([a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9.-]*)"/g)) {
+      assert(catalogModels.has(match[1]), `${route} example cites a model absent from the OpenCode V2 catalog (models.dev): ${match[1]}`)
+    }
+  }
+}
+
+console.log(`PASS web/site/check.mjs (${htmlFiles.length} HTML files, ${routes.length} routes, ${seenExternal.size} external URLs)`)

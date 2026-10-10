@@ -15,6 +15,28 @@ describe("#given the web publication workflow #when its test gate is inspected #
     expect(/branches:\s*\[v2-mirror\]/.test(WORKFLOW)).toBe(true)
   })
 
+  // Fail-closed trigger: the published web truth is re-derived from web/**, packages/**, profiles/**,
+  // package.json and the workflow itself, so ANY change on v2-mirror must run this gate. A `paths`
+  // filter would let inventory changes skip it, so its absence is a contract, not a coincidence.
+  test("#given the workflow #when its triggers are read #then there is no paths filter on pull_request or push", () => {
+    // given / when / then
+    expect(/^\s*paths:/m.test(WORKFLOW)).toBe(false)
+    expect((WORKFLOW.match(/branches:\s*\[v2-mirror\]/g) || []).length).toBe(2)
+  })
+
+  test("#given the workflow #when permissions are read #then they stay minimal (contents: read)", () => {
+    // given / when / then
+    expect(/permissions:\s*\n\s*contents:\s*read/.test(WORKFLOW)).toBe(true)
+  })
+
+  test("#given the workflow #when the artifact job is read #then it builds the site and uploads a Pages artifact but never deploys", () => {
+    // given / when / then
+    expect(/run:\s*bun run web:check\s*$/m.test(WORKFLOW)).toBe(true)
+    expect(/run:\s*bun run web:build\s*$/m.test(WORKFLOW)).toBe(true)
+    expect(/uses:\s*actions\/upload-pages-artifact@/.test(WORKFLOW)).toBe(true)
+    expect(/uses:\s*actions\/deploy-pages/.test(WORKFLOW)).toBe(false)
+  })
+
   test("#given the CI steps #when they are read #then the full web suite runs (contrast + render + source), not only source.test.ts", () => {
     // given / when / then
     expect(/run:\s*bun test web\/\s*$/m.test(WORKFLOW)).toBe(true)

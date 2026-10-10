@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "https://models.dev/api.json",
+  "note": "OpenCode V2 resolves its provider and model catalog from models.dev (opencode.ai/v2/docs/providers). This file pins the model ids a copyable example may cite. `fetchedAt` and `catalogSha256` record the catalog snapshot taken when the ids were pinned (provenance only; NOT recomputed or verified by any script, and the live catalog changes over time). Verify the ids against the live catalog with `bun web/site/verify-example-models.mjs` (network lane).",
+  "fetchedAt": "2026-10-10",
+  "catalogSha256": "15ec6eb64dd43421c0ab97f670e499552e6d63d67f362233055d5cf31f595d56",
+  "models": [
+    "google/gemini-3.6-flash",
+    "anthropic/claude-opus-5-5",
+    "anthropic/claude-sonnet-4-5"
+  ]
+}

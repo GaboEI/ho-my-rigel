@@ -1,18 +1,13 @@
 name: Web Public Scaffold
 
 on:
+  # No `paths` filter on purpose (fail-closed): the published web truth is re-derived from web/**,
+  # packages/**, profiles/**, package.json and this workflow itself, so ANY change on v2-mirror must
+  # run the web gate rather than silently skipping it.
   pull_request:
     branches: [v2-mirror]
-    paths:
-      - "web/**"
-      - "package.json"
-      - ".github/workflows/web-public.yml"
   push:
     branches: [v2-mirror]
-    paths:
-      - "web/**"
-      - "package.json"
-      - ".github/workflows/web-public.yml"
   workflow_dispatch:
 
 concurrency:
