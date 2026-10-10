@@ -29,12 +29,54 @@ describe("#given the web publication workflow #when its test gate is inspected #
     expect(/permissions:\s*\n\s*contents:\s*read/.test(WORKFLOW)).toBe(true)
   })
 
-  test("#given the workflow #when the artifact job is read #then it builds the site and uploads a Pages artifact but never deploys", () => {
+  // Fail-closed publication contract: push only builds/uploads an artifact; the live site is
+  // updated ONLY by a manual workflow_dispatch of v2-mirror with publish=true, after the gate passed,
+  // and only that job carries the Pages write + OIDC permissions.
+  const jobBlock = (name: string) => WORKFLOW.match(new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z0-9-]*:\\n|$)`))?.[1] ?? ""
+  const dryRunJob = jobBlock("pages-artifact-dry-run")
+  const deployJob = jobBlock("deploy-pages")
+
+  test("#given the push path #when the artifact job is read #then it builds, uploads an artifact and never deploys", () => {
     // given / when / then
-    expect(/run:\s*bun run web:check\s*$/m.test(WORKFLOW)).toBe(true)
-    expect(/run:\s*bun run web:build\s*$/m.test(WORKFLOW)).toBe(true)
-    expect(/uses:\s*actions\/upload-pages-artifact@/.test(WORKFLOW)).toBe(true)
-    expect(/uses:\s*actions\/deploy-pages/.test(WORKFLOW)).toBe(false)
+    expect(dryRunJob).not.toBe("")
+    expect(/run:\s*bun run web:build\s*$/m.test(dryRunJob)).toBe(true)
+    expect(/uses:\s*actions\/upload-pages-artifact@/.test(dryRunJob)).toBe(true)
+    expect(/deploy-pages/.test(dryRunJob)).toBe(false)
+    expect(/pages:\s*write/.test(dryRunJob)).toBe(false)
+    expect(/id-token:\s*write/.test(dryRunJob)).toBe(false)
+  })
+
+  test("#given the dispatch input #when it is read #then publish defaults to false", () => {
+    // given / when / then
+    expect(/workflow_dispatch:/.test(WORKFLOW)).toBe(true)
+    expect(/^\s+publish:/m.test(WORKFLOW)).toBe(true)
+    expect(/default:\s*false/.test(WORKFLOW)).toBe(true)
+  })
+
+  test("#given the deploy job #when its guard is read #then it only runs on a manual dispatch of v2-mirror with publish=true, after the gate", () => {
+    // given / when / then
+    expect(deployJob).not.toBe("")
+    expect(/github\.event_name == 'workflow_dispatch'/.test(deployJob)).toBe(true)
+    expect(/github\.ref == 'refs\/heads\/v2-mirror'/.test(deployJob)).toBe(true)
+    expect(/github\.event\.inputs\.publish == 'true'/.test(deployJob)).toBe(true)
+    expect(/needs:\s*build-checks/.test(deployJob)).toBe(true)
+  })
+
+  test("#given the deploy job #when permissions and environment are read #then Pages write + OIDC live only here and the github-pages environment exposes the URL", () => {
+    // given / when / then
+    expect(/pages:\s*write/.test(deployJob)).toBe(true)
+    expect(/id-token:\s*write/.test(deployJob)).toBe(true)
+    expect(/name:\s*github-pages/.test(deployJob)).toBe(true)
+    expect(/url:\s*\$\{\{\s*steps\.deployment\.outputs\.page_url\s*\}\}/.test(deployJob)).toBe(true)
+    expect(/uses:\s*actions\/deploy-pages@/.test(deployJob)).toBe(true)
+  })
+
+  test("#given the whole workflow #when privileged usage is counted #then deploy-pages, pages:write and id-token:write appear exactly once, inside the gated job", () => {
+    // given / when / then
+    expect((WORKFLOW.match(/uses:\s*actions\/deploy-pages@/g) || []).length).toBe(1)
+    expect(deployJob.includes("actions/deploy-pages@")).toBe(true)
+    expect((WORKFLOW.match(/pages:\s*write/g) || []).length).toBe(1)
+    expect((WORKFLOW.match(/id-token:\s*write/g) || []).length).toBe(1)
   })
 
   test("#given the CI steps #when they are read #then the full web suite runs (contrast + render + source), not only source.test.ts", () => {

@@ -8,7 +8,14 @@ on:
     branches: [v2-mirror]
   push:
     branches: [v2-mirror]
+  # Manual, explicit publication. The `publish` input is the human confirmation; without it the
+  # workflow only builds and checks (and, on push, uploads an artifact). Nothing deploys by accident.
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Deploy to GitHub Pages (honored only on ref v2-mirror with build green)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,6 +27,8 @@ permissions:
 jobs:
   build-checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -46,13 +55,17 @@ jobs:
             - Verifies the web gates (W2 source, WCAG contrast, i18n render).
             - Builds the W5 static scaffold.
             - Checks basePath routing, absolute SEO URLs, no auto-redirects, and W4 CSS guardrails.
-          JOB_SUMMARY_NEXT: Start with the first W2 data or web:check failure. Deployment is intentionally not enabled in W5.
+          JOB_SUMMARY_NEXT: Start with the first W2 data or web:check failure. Deployment only happens from a manual dispatch with publish=true.
         run: GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" bash .github/scripts/write-job-summary.sh
 
+  # Push to v2-mirror: build + upload the Pages artifact, but NEVER deploy. This keeps a published
+  # artifact ready for a human to release, without touching the live site.
   pages-artifact-dry-run:
     if: github.event_name == 'push' && github.ref == 'refs/heads/v2-mirror'
     needs: build-checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -71,6 +84,48 @@ jobs:
         with:
           path: web/site/dist
 
-      - name: W5 deployment boundary
+      - name: Deployment boundary
         run: |
-          printf '%s\n' 'W5 intentionally stops after artifact upload. Add actions/deploy-pages in W7 after publication gates pass.'
+          printf '%s\n' 'Artifact uploaded only. The live site is updated ONLY by a manual workflow_dispatch with publish=true on v2-mirror.'
+
+  # Manual, gated publication. Runs ONLY on a manual dispatch of ref v2-mirror with publish=true and
+  # after the build/check gate passed (needs: build-checks). It holds the Pages write + OIDC
+  # permissions and targets the github-pages environment; its URL is exposed as the job output.
+  deploy-pages:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/v2-mirror' &&
+      github.event.inputs.publish == 'true'
+    needs: build-checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build static scaffold
+        run: bun run web:build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/site/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
